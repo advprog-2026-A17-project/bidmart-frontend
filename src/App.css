@@ -71,45 +71,191 @@ h1 {
 .status-WON { background-color: #3182ce; }
 .status-UNSOLD { background-color: #718096; }
 
-.interaction-section {
+/* Catalogue & Search */
+.search-form {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+  margin-bottom: 20px;
+  align-items: flex-end;
 }
 
-.price {
-  font-weight: 700;
-  color: #2b6cb0;
-  font-size: 1.2rem;
-  min-width: 100px;
-  text-align: right;
+.search-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  color: #4a5568;
+  gap: 4px;
 }
 
-.bid-input {
-  width: 90px;
+.form-input {
   padding: 8px;
   border: 1px solid #cbd5e0;
   border-radius: 6px;
+  font-size: 0.9rem;
+  min-width: 140px;
 }
 
-.bid-button {
-  background-color: #3182ce;
+.search-button {
+  background-color: #2b6cb0;
   color: white;
   border: none;
   border-radius: 6px;
-  padding: 8px 16px;
+  padding: 8px 18px;
   font-weight: bold;
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
-.bid-button:hover:not(:disabled) {
-  background-color: #2b6cb0;
+.search-button:hover {
+  background-color: #2c5282;
 }
 
-.bid-button:disabled {
+/* Catalogue item status badges */
+.status-AVAILABLE { background-color: #48bb78; }
+.status-SOLD { background-color: #3182ce; }
+.status-CANCELLED { background-color: #e53e3e; }
+
+/* Wallet */
+.wallet-balance-section {
+  text-align: center;
+  padding: 20px 0 10px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 20px;
+}
+
+.wallet-balance {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #276749;
+}
+
+.wallet-balance-label {
+  font-size: 0.85rem;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wallet-actions {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+}
+
+.wallet-action-card {
+  flex: 1;
+  min-width: 200px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 15px;
+  background: #f7fafc;
+}
+
+.wallet-action-card h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: #2d3748;
+}
+
+.wallet-action-card .action-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.topup-button {
+  background-color: #276749;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.topup-button:hover:not(:disabled) {
+  background-color: #22543d;
+}
+
+.topup-button:disabled {
   background-color: #a0aec0;
   cursor: not-allowed;
+}
+
+.withdraw-button {
+  background-color: #c53030;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.withdraw-button:hover:not(:disabled) {
+  background-color: #9b2c2c;
+}
+
+.withdraw-button:disabled {
+  background-color: #a0aec0;
+  cursor: not-allowed;
+}
+
+/* Transaction history */
+.transaction-history h2 {
+  font-size: 1rem;
+  color: #2d3748;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.transaction-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f4f8;
+  font-size: 0.9rem;
+}
+
+.transaction-type {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  padding: 3px 7px;
+  border-radius: 4px;
+  color: white;
+}
+
+.type-TOP_UP { background-color: #276749; }
+.type-BID { background-color: #ed8936; }
+.type-WITHDRAW { background-color: #c53030; }
+.type-WITHDRAWAL { background-color: #c53030; }
+.type-REFUND { background-color: #3182ce; }
+
+.transaction-amount {
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.transaction-date {
+  color: #718096;
+  font-size: 0.8rem;
+}
+
+/* Toast success */
+.toast-success {
+  color: #276749;
+  background-color: #c6f6d5;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-weight: bold;
 }
 
 .toast-error {
