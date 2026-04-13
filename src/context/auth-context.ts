@@ -7,14 +7,26 @@ export interface AuthUser {
     roles: { id: string; name: string }[];
 }
 
+export interface AuthLoginResult {
+    accessToken: string;
+    refreshToken: string;
+    tokenType: string;
+    expiresIn: number;
+    user: AuthUser;
+}
+
 export interface AuthContextType {
     user: AuthUser | null;
-    login: (user: AuthUser) => void;
+    accessToken: string | null;
+    refreshToken: string | null;
+    login: (payload: AuthLoginResult) => void;
     logout: () => void;
 }
 
 export const AuthContext = createContext<AuthContextType>({
     user: null,
+    accessToken: null,
+    refreshToken: null,
     login: () => {},
     logout: () => {},
 });
