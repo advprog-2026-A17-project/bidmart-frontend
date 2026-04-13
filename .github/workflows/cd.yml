@@ -39,4 +39,5 @@ jobs:
           echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com
           docker build --build-arg VITE_API_BASE_URL="${FRONTEND_API_BASE_URL}" -t registry.heroku.com/${APP_NAME}/web .
           docker push registry.heroku.com/${APP_NAME}/web
+          heroku stack:set container --app "${APP_NAME}"
           heroku container:release web --app "${APP_NAME}"
