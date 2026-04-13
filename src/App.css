@@ -1,42 +1,278 @@
-#root {
-  max-width: 1280px;
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f4f7f6;
+  margin: 0;
+  padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.dashboard-container {
+  background: #ffffff;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 750px;
   margin: 0 auto;
-  padding: 2rem;
+}
+
+h1 {
+  color: #1a202c;
   text-align: center;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 15px;
+  margin-top: 0;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.auction-list {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.auction-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 15px;
+  padding: 20px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: box-shadow 0.2s;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.auction-item:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-.card {
-  padding: 2em;
+.item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
-.read-the-docs {
-  color: #888;
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: white;
+  text-transform: uppercase;
+}
+
+.status-ACTIVE { background-color: #48bb78; }
+.status-EXTENDED { background-color: #ed8936; }
+.status-CLOSED { background-color: #e53e3e; }
+.status-DRAFT { background-color: #a0aec0; }
+.status-WON { background-color: #3182ce; }
+.status-UNSOLD { background-color: #718096; }
+
+/* Catalogue & Search */
+.search-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+  align-items: flex-end;
+}
+
+.search-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  color: #4a5568;
+  gap: 4px;
+}
+
+.form-input {
+  padding: 8px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  min-width: 140px;
+}
+
+.search-button {
+  background-color: #2b6cb0;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.search-button:hover {
+  background-color: #2c5282;
+}
+
+/* Catalogue item status badges */
+.status-AVAILABLE { background-color: #48bb78; }
+.status-SOLD { background-color: #3182ce; }
+.status-CANCELLED { background-color: #e53e3e; }
+
+/* Wallet */
+.wallet-balance-section {
+  text-align: center;
+  padding: 20px 0 10px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 20px;
+}
+
+.wallet-balance {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #276749;
+}
+
+.wallet-balance-label {
+  font-size: 0.85rem;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wallet-actions {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+}
+
+.wallet-action-card {
+  flex: 1;
+  min-width: 200px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 15px;
+  background: #f7fafc;
+}
+
+.wallet-action-card h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: #2d3748;
+}
+
+.wallet-action-card .action-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.topup-button {
+  background-color: #276749;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.topup-button:hover:not(:disabled) {
+  background-color: #22543d;
+}
+
+.topup-button:disabled {
+  background-color: #a0aec0;
+  cursor: not-allowed;
+}
+
+.withdraw-button {
+  background-color: #c53030;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.withdraw-button:hover:not(:disabled) {
+  background-color: #9b2c2c;
+}
+
+.withdraw-button:disabled {
+  background-color: #a0aec0;
+  cursor: not-allowed;
+}
+
+/* Transaction history */
+.transaction-history h2 {
+  font-size: 1rem;
+  color: #2d3748;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.transaction-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f4f8;
+  font-size: 0.9rem;
+}
+
+.transaction-type {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  padding: 3px 7px;
+  border-radius: 4px;
+  color: white;
+}
+
+.type-TOP_UP { background-color: #276749; }
+.type-BID { background-color: #ed8936; }
+.type-WITHDRAW { background-color: #c53030; }
+.type-WITHDRAWAL { background-color: #c53030; }
+.type-REFUND { background-color: #3182ce; }
+
+.transaction-amount {
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.transaction-date {
+  color: #718096;
+  font-size: 0.8rem;
+}
+
+/* Toast success */
+.toast-success {
+  color: #276749;
+  background-color: #c6f6d5;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-weight: bold;
+}
+
+.toast-error {
+  color: #c53030;
+  background-color: #fed7d7;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-weight: bold;
+}
+
+.text-muted {
+  color: #718096;
+}
+
+.loading-state, .empty-state {
+  text-align: center;
+  color: #718096;
+  padding: 20px;
 }
