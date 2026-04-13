@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
-import type { AuthUser } from '../../../context/AuthContext';
+import type { AuthUser } from '../../../context/auth-context';
 
 type Tab = 'login' | 'register';
 

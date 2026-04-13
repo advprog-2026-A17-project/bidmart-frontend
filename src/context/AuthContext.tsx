@@ -1,23 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-
-export interface AuthUser {
-    id: string;
-    email: string;
-    enabled: boolean;
-    roles: { id: string; name: string }[];
-}
-
-interface AuthContextType {
-    user: AuthUser | null;
-    login: (user: AuthUser) => void;
-    logout: () => void;
-}
-
-export const AuthContext = createContext<AuthContextType>({
-    user: null,
-    login: () => {},
-    logout: () => {},
-});
+import React, { useState, useEffect } from 'react';
+import { AuthContext, type AuthUser } from './auth-context';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser | null>(() => {

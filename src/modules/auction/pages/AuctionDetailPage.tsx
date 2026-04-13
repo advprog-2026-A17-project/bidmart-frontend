@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 
 interface Auction {
@@ -16,6 +16,13 @@ interface Auction {
 
 const DUMMY_BIDDER_ID = "123e4567-e89b-12d3-a456-426614174000";
 
+const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    return 'Unknown error';
+};
+
 const AuctionDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const [auctions, setAuctions] = useState<Auction[]>([]);
@@ -23,7 +30,7 @@ const AuctionDetailPage: React.FC = () => {
     const [bidInputs, setBidInputs] = useState<{ [key: string]: number }>({});
     const [loading, setLoading] = useState<boolean>(true);
 
-    const fetchAuctions = async () => {
+    const fetchAuctions = useCallback(async () => {
         try {
             setError(null);
             const response = await fetch('/api/v1/auctions');
@@ -47,17 +54,17 @@ const AuctionDetailPage: React.FC = () => {
             });
 
             setBidInputs(prev => ({ ...initialInputs, ...prev }));
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Fetch execution failed:', err);
             setError('Failed to connect to backend API via Vite proxy.');
         } finally {
             setLoading(false);
         }
-    };
+    }, [id]);
 
     useEffect(() => {
         fetchAuctions();
-    }, [id]);
+    }, [fetchAuctions]);
 
     const handleBidChange = (auctionId: string, value: string) => {
         setBidInputs(prev => ({ ...prev, [auctionId]: parseFloat(value) }));
@@ -87,9 +94,9 @@ const AuctionDetailPage: React.FC = () => {
             setError(null);
 
             await fetchAuctions();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Bidding failed:', err);
-            setError(`Transaction Failed: ${err.message}`);
+            setError(`Transaction Failed: ${getErrorMessage(err)}`);
         }
     };
 
