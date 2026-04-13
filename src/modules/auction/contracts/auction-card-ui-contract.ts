@@ -1,4 +1,4 @@
-import { buildAuctionCardMeta } from '../pages/AuctionDetailPage';
+import { buildAuctionCardMeta } from '../utils/auction-card-meta';
 
 const sampleAuction = {
     id: 'auction-1',
