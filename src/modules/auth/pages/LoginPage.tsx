@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
-import type { AuthUser } from '../../../context/auth-context';
+import type { AuthLoginResult } from '../../../context/auth-context';
 
 type Tab = 'login' | 'register';
 
@@ -52,8 +52,8 @@ const LoginPage: React.FC = () => {
                 return;
             }
 
-            const user: AuthUser = await response.json();
-            login(user);
+            const loginResult: AuthLoginResult = await response.json();
+            login(loginResult);
             navigate('/');
         } catch (err: unknown) {
             setError('Failed to connect to Auth Service via API Gateway.');
@@ -81,7 +81,7 @@ const LoginPage: React.FC = () => {
                 return;
             }
 
-            setSuccess('Account created! You can now log in.');
+            setSuccess('Account created. Please verify your email before logging in.');
             setTab('login');
             setPassword('');
         } catch (err: unknown) {
@@ -219,4 +219,3 @@ const LoginPage: React.FC = () => {
 };
 
 export default LoginPage;
-
