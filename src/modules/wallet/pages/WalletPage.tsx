@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiUrl } from '../../../config/api';
 
 interface Wallet {
     id: string;
@@ -36,7 +37,7 @@ const WalletPage: React.FC = () => {
         setError(null);
         setWalletNotFound(false);
         try {
-            const response = await fetch(`/api/v1/wallet/${DUMMY_USER_ID}`);
+            const response = await fetch(apiUrl(`/api/v1/wallet/${DUMMY_USER_ID}`));
             if (response.status === 404 || response.status === 500) {
                 setWalletNotFound(true);
                 return;
@@ -60,7 +61,7 @@ const WalletPage: React.FC = () => {
         setActionLoading(true);
         setError(null);
         try {
-            const response = await fetch('/api/v1/wallet/add', {
+            const response = await fetch(apiUrl('/api/v1/wallet/add'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: DUMMY_USER_ID }),
@@ -98,7 +99,7 @@ const WalletPage: React.FC = () => {
         setError(null);
         try {
             const response = await fetch(
-                `/api/v1/wallet/${DUMMY_USER_ID}/top-up?amount=${amount}`,
+                apiUrl(`/api/v1/wallet/${DUMMY_USER_ID}/top-up?amount=${amount}`),
                 { method: 'POST' }
             );
             if (!response.ok) {
@@ -126,7 +127,7 @@ const WalletPage: React.FC = () => {
         setError(null);
         try {
             const response = await fetch(
-                `/api/v1/wallet/${DUMMY_USER_ID}/withdraw?amount=${amount}`,
+                apiUrl(`/api/v1/wallet/${DUMMY_USER_ID}/withdraw?amount=${amount}`),
                 { method: 'POST' }
             );
             if (!response.ok) {
@@ -262,4 +263,3 @@ const WalletPage: React.FC = () => {
 };
 
 export default WalletPage;
-
