@@ -1,25 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-<<<<<<< Updated upstream
-
-interface Auction {
-    id: string;
-    listingId: string;
-    sellerId: string;
-    startingPrice: number;
-    reservePrice: number;
-    currentHighestBid: number | null;
-    minimumIncrement: number;
-    status: string;
-    startTime: string;
-    endTime: string;
-}
-=======
 import { buildAuctionCardMeta, type Auction } from '../utils/auction-card-meta';
 import { apiUrl } from '../../../config/api';
->>>>>>> Stashed changes
 
 const DUMMY_BIDDER_ID = "123e4567-e89b-12d3-a456-426614174000";
+const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 
 const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) {
@@ -27,7 +12,6 @@ const getErrorMessage = (error: unknown): string => {
     }
     return 'Unknown error';
 };
-
 const AuctionDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const [auctions, setAuctions] = useState<Auction[]>([]);
@@ -108,6 +92,10 @@ const AuctionDetailPage: React.FC = () => {
     return (
         <div className="dashboard-container">
             <h1>{id && id !== 'demo' ? 'Auction Detail Room' : 'Live Auctions Dashboard'}</h1>
+            <div className="auction-toolbar">
+                <span>Total: {auctions.length}</span>
+                <span>Open: {auctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)).length}</span>
+            </div>
 
             {error && <div className="toast-error">{error}</div>}
 
@@ -117,9 +105,7 @@ const AuctionDetailPage: React.FC = () => {
                 <ul className="auction-list">
                     {auctions.length > 0 ? (
                         auctions.map(auction => {
-                            const isClosed = auction.status === 'CLOSED';
-                            const currentHighest = auction.currentHighestBid !== null ? auction.currentHighestBid : auction.startingPrice;
-                            const minNextBid = currentHighest + auction.minimumIncrement;
+                            const cardMeta = buildAuctionCardMeta(auction);
 
                             return (
                                 <li key={auction.id} className="auction-item">
@@ -128,7 +114,10 @@ const AuctionDetailPage: React.FC = () => {
                                         <small className="text-muted">Auction ID: {auction.id}</small>
                                         <div>
                                             <span className={`status-badge status-${auction.status}`}>
-                                                {auction.status}
+                                                {cardMeta.statusLabel}
+                                            </span>
+                                            <span className={`auction-time-left ${cardMeta.isClosed ? 'auction-time-left-closed' : ''}`}>
+                                                {cardMeta.timeLeftLabel}
                                             </span>
                                         </div>
                                         <small className="text-muted">
@@ -136,22 +125,22 @@ const AuctionDetailPage: React.FC = () => {
                                         </small>
                                     </div>
                                     <div className="interaction-section">
-                                        <span className="price">${currentHighest.toFixed(2)}</span>
+                                        <span className="price">${cardMeta.currentHighest.toFixed(2)}</span>
                                         <input
                                             type="number"
                                             className="bid-input"
-                                            value={bidInputs[auction.id] || minNextBid}
+                                            value={bidInputs[auction.id] || cardMeta.minNextBid}
                                             step={auction.minimumIncrement}
-                                            min={minNextBid}
-                                            disabled={isClosed}
+                                            min={cardMeta.minNextBid}
+                                            disabled={cardMeta.isClosed}
                                             onChange={(e) => handleBidChange(auction.id, e.target.value)}
                                         />
                                         <button
                                             className="bid-button"
                                             onClick={() => placeBid(auction.id)}
-                                            disabled={isClosed}
+                                            disabled={cardMeta.isClosed}
                                         >
-                                            Place Bid
+                                            {cardMeta.isClosed ? 'Closed' : 'Place Bid'}
                                         </button>
                                     </div>
                                 </li>
