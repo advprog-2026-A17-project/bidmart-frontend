@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
-import type { AuthUser } from '../../../context/auth-context';
+import type { AuthLoginResult } from '../../../context/auth-context';
+import { apiUrl } from '../../../config/api';
 
 type Tab = 'login' | 'register';
 
@@ -37,7 +38,7 @@ const LoginPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch('/api/v1/auth/login', {
+            const response = await fetch(apiUrl('/api/v1/auth/login'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
@@ -52,8 +53,8 @@ const LoginPage: React.FC = () => {
                 return;
             }
 
-            const user: AuthUser = await response.json();
-            login(user);
+            const loginResult: AuthLoginResult = await response.json();
+            login(loginResult);
             navigate('/');
         } catch (err: unknown) {
             setError('Failed to connect to Auth Service via API Gateway.');
@@ -69,7 +70,7 @@ const LoginPage: React.FC = () => {
         setError(null);
         setSuccess(null);
         try {
-            const response = await fetch('/api/v1/auth/register', {
+            const response = await fetch(apiUrl('/api/v1/auth/register'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password, role }),
@@ -81,7 +82,7 @@ const LoginPage: React.FC = () => {
                 return;
             }
 
-            setSuccess('Account created! You can now log in.');
+            setSuccess('Account created. Please verify your email before logging in.');
             setTab('login');
             setPassword('');
         } catch (err: unknown) {
@@ -219,4 +220,3 @@ const LoginPage: React.FC = () => {
 };
 
 export default LoginPage;
-
