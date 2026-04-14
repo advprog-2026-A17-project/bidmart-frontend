@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
 import type { AuthLoginResult } from '../../../context/auth-context';
+import { apiUrl } from '../../../config/api';
 
 type Tab = 'login' | 'register';
 
@@ -37,7 +38,7 @@ const LoginPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch('/api/v1/auth/login', {
+            const response = await fetch(apiUrl('/api/v1/auth/login'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
@@ -69,7 +70,7 @@ const LoginPage: React.FC = () => {
         setError(null);
         setSuccess(null);
         try {
-            const response = await fetch('/api/v1/auth/register', {
+            const response = await fetch(apiUrl('/api/v1/auth/register'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password, role }),
