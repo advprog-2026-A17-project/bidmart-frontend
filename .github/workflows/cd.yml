@@ -28,7 +28,7 @@ jobs:
       - name: Install Heroku CLI
         run: curl https://cli-assets.heroku.com/install.sh | sh
 
-      - name: Deploy container
+      - name: Deploy with Heroku buildpack
         run: |
           APP_NAME="${HEROKU_APP_NAME:-bidmart-frontend}"
           if [ -z "$HEROKU_API_KEY" ]; then
@@ -36,8 +36,13 @@ jobs:
             exit 1
           fi
 
-          echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com
-          docker build --build-arg VITE_API_BASE_URL="${FRONTEND_API_BASE_URL}" -t registry.heroku.com/${APP_NAME}/web .
-          docker push registry.heroku.com/${APP_NAME}/web
-          heroku stack:set container --app "${APP_NAME}"
-          heroku container:release web --app "${APP_NAME}"
+          heroku stack:set heroku-22 --app "${APP_NAME}"
+          heroku buildpacks:clear --app "${APP_NAME}"
+          heroku buildpacks:add heroku/nodejs --app "${APP_NAME}"
+
+          if [ -n "${FRONTEND_API_BASE_URL}" ]; then
+            heroku config:set --app "${APP_NAME}" VITE_API_BASE_URL="${FRONTEND_API_BASE_URL}"
+          fi
+
+          git remote add heroku "https://heroku:${HEROKU_API_KEY}@git.heroku.com/${APP_NAME}.git"
+          git push heroku HEAD:main --force
