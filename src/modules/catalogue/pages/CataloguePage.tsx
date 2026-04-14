@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../../../config/api';
 
 interface CatalogueItem {
     id: number;
@@ -41,7 +42,7 @@ const CataloguePage: React.FC = () => {
         if (params.minPrice) query.append('minPrice', params.minPrice);
         if (params.maxPrice) query.append('maxPrice', params.maxPrice);
 
-        const url = `/api/v1/catalogue/listings/search${query.toString() ? '?' + query.toString() : ''}`;
+        const url = apiUrl(`/api/v1/catalogue/listings/search${query.toString() ? '?' + query.toString() : ''}`);
 
         try {
             const response = await fetch(url);
@@ -171,4 +172,3 @@ const CataloguePage: React.FC = () => {
 };
 
 export default CataloguePage;
-
