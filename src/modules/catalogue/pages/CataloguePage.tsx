@@ -8,6 +8,7 @@ interface CatalogueItem {
     startingPrice: number;
     currentPrice: number;
     imageUrl: string | null;
+    category?: string;
     status: string;
     endTime: string;
     hasBids: boolean;
@@ -125,37 +126,34 @@ const CataloguePage: React.FC = () => {
             {loading ? (
                 <div className="loading-state">Loading catalogue from API Gateway...</div>
             ) : (
-                <ul className="auction-list">
+                <ul className="catalog-grid">
                     {items.length > 0 ? (
                         items.map((item) => (
-                            <li key={item.id} className="auction-item">
-                                <div className="item-details">
+                            <li key={item.id} className="catalog-card">
+                                {item.imageUrl ? (
+                                    <img src={item.imageUrl} alt={item.title} className="catalog-image" />
+                                ) : (
+                                    <div className="catalog-image catalog-image-fallback">No Image</div>
+                                )}
+                                <div className="catalog-meta">
+                                    {item.category && <span className="category-badge">{item.category}</span>}
                                     <strong>{item.title}</strong>
-                                    <small className="text-muted">ID: {item.id}</small>
-                                    {item.description && (
-                                        <span style={{ fontSize: '0.9rem', color: '#4a5568' }}>
-                                            {item.description}
-                                        </span>
-                                    )}
-                                    <div>
+                                    <small className="text-muted">Listing ID: {item.id}</small>
+                                    {item.description && <span className="catalog-description">{item.description}</span>}
+                                    <div className="catalog-status-row">
                                         <span className={`status-badge status-${item.status}`}>
                                             {item.status}
                                         </span>
                                         {item.hasBids && (
-                                            <span className="status-badge"
-                                                style={{ background: '#ed8936', marginLeft: 6 }}>
+                                            <span className="status-badge status-HAS_BIDS">
                                                 Has Bids
                                             </span>
                                         )}
                                     </div>
-                                    {item.endTime && (
-                                        <small className="text-muted">
-                                            Ends: {new Date(item.endTime).toLocaleString()}
-                                        </small>
-                                    )}
+                                    {item.endTime && <small className="text-muted">Ends: {new Date(item.endTime).toLocaleString()}</small>}
                                 </div>
-                                <div className="interaction-section" style={{ flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                                <div className="catalog-pricing">
+                                    <span className="text-muted catalog-starting-price">
                                         Starting: ${item.startingPrice?.toFixed(2)}
                                     </span>
                                     <span className="price">${item.currentPrice?.toFixed(2)}</span>
