@@ -1,11 +1,74 @@
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f4f7f6;
+  background: linear-gradient(180deg, #edf2f7 0%, #f7fafc 100%);
   margin: 0;
   padding: 40px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.app-main {
+  padding: 20px;
+}
+
+.app-nav {
+  padding: 1rem;
+  background: linear-gradient(90deg, #1e40af 0%, #2b6cb0 100%);
+  color: white;
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  border-radius: 10px;
+  box-shadow: 0 6px 14px rgba(43, 108, 176, 0.2);
+  margin: 16px 16px 0;
+}
+
+.app-brand {
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.app-nav-link {
+  color: white;
+  text-decoration: none;
+  font-size: 0.92rem;
+  opacity: 0.95;
+}
+
+.app-nav-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.app-nav-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-user-pill {
+  font-size: 0.85rem;
+  opacity: 0.95;
+}
+
+.app-role-pill {
+  margin-left: 6px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+}
+
+.app-logout-button {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: white;
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 0.85rem;
 }
 
 .dashboard-container {
@@ -177,6 +240,83 @@ h1 {
 .status-AVAILABLE { background-color: #48bb78; }
 .status-SOLD { background-color: #3182ce; }
 .status-CANCELLED { background-color: #e53e3e; }
+.status-HAS_BIDS { background-color: #dd6b20; }
+
+.catalog-grid {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.catalog-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.catalog-image {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.catalog-image-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #edf2f7;
+  color: #718096;
+  font-size: 0.85rem;
+}
+
+.catalog-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.category-badge {
+  width: fit-content;
+  background: #2b6cb0;
+  color: white;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+}
+
+.catalog-description {
+  font-size: 0.9rem;
+  color: #4a5568;
+}
+
+.catalog-status-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.catalog-pricing {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.catalog-starting-price {
+  font-size: 0.75rem;
+}
 
 /* Wallet */
 .wallet-balance-section {
