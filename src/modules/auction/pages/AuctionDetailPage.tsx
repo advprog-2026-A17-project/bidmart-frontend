@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { apiUrl } from '../../../config/api';
 
 interface Auction {
     id: string;
@@ -33,7 +34,7 @@ const AuctionDetailPage: React.FC = () => {
     const fetchAuctions = useCallback(async () => {
         try {
             setError(null);
-            const response = await fetch('/api/v1/auctions');
+            const response = await fetch(apiUrl('/api/v1/auctions'));
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -56,7 +57,7 @@ const AuctionDetailPage: React.FC = () => {
             setBidInputs(prev => ({ ...initialInputs, ...prev }));
         } catch (err: unknown) {
             console.error('Fetch execution failed:', err);
-            setError('Failed to connect to backend API via Vite proxy.');
+            setError('Failed to connect to backend API.');
         } finally {
             setLoading(false);
         }
@@ -80,7 +81,7 @@ const AuctionDetailPage: React.FC = () => {
         };
 
         try {
-            const response = await fetch(`/api/v1/auctions/${auctionId}/bids`, {
+            const response = await fetch(apiUrl(`/api/v1/auctions/${auctionId}/bids`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
