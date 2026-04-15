@@ -17,31 +17,31 @@ const Navbar = () => {
     };
 
     return (
-        <nav style={{ padding: '1rem', background: '#2b6cb0', color: 'white', display: 'flex', gap: '15px', alignItems: 'center' }}>
-            <strong>BidMart</strong>
-            <Link to="/" style={{ color: 'white', textDecoration: 'none' }}>Home (Catalogue)</Link>
-            <Link to="/auctions/demo" style={{ color: 'white', textDecoration: 'none' }}>Live Auction</Link>
-            <Link to="/wallet" style={{ color: 'white', textDecoration: 'none' }}>Wallet</Link>
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <nav className="app-nav">
+            <strong className="app-brand">BidMart</strong>
+            <Link to="/" className="app-nav-link">Home (Catalogue)</Link>
+            <Link to="/auctions/demo" className="app-nav-link">Live Auction</Link>
+            <Link to="/wallet" className="app-nav-link">Wallet</Link>
+            <div className="app-nav-right">
                 {user ? (
                     <>
-                        <span style={{ fontSize: '0.85rem', opacity: 0.9 }}>
+                        <span className="app-user-pill">
                             {user.email}
                             {user.roles?.length > 0 && (
-                                <span style={{ marginLeft: 6, background: 'rgba(255,255,255,0.25)', borderRadius: 4, padding: '2px 6px', fontSize: '0.75rem' }}>
+                                <span className="app-role-pill">
                                     {user.roles[0].name}
                                 </span>
                             )}
                         </span>
                         <button
                             onClick={handleLogout}
-                            style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', color: 'white', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontSize: '0.85rem' }}
+                            className="app-logout-button"
                         >
                             Logout
                         </button>
                     </>
                 ) : (
-                    <Link to="/login" style={{ color: 'white', textDecoration: 'none' }}>Login</Link>
+                    <Link to="/login" className="app-nav-link">Login</Link>
                 )}
             </div>
         </nav>
@@ -54,7 +54,7 @@ function App() {
             <Router>
                 <div className="app-container">
                     <Navbar />
-                    <main style={{ padding: '20px' }}>
+                    <main className="app-main">
                         <Routes>
                             <Route path="/" element={<CataloguePage />} />
                             <Route path="/login" element={<LoginPage />} />
