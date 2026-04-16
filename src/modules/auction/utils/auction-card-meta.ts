@@ -1,15 +1,4 @@
-export interface Auction {
-    id: string;
-    listingId: string;
-    sellerId: string;
-    startingPrice: number;
-    reservePrice: number;
-    currentHighestBid: number | null;
-    minimumIncrement: number;
-    status: string;
-    startTime: string;
-    endTime: string;
-}
+import type { Auction } from '../contracts/auction-card-ui-contract';
 
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 
@@ -33,3 +22,5 @@ export const buildAuctionCardMeta = (auction: Auction) => {
         timeLeftLabel
     };
 };
+
+export type { Auction };

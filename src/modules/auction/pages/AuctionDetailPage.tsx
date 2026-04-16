@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { buildAuctionCardMeta, type Auction } from '../utils/auction-card-meta';
+import { parseAuctionsResponse } from '../utils/parse-auctions-response';
 import { apiUrl } from '../../../config/api';
 
 const DUMMY_BIDDER_ID = "123e4567-e89b-12d3-a456-426614174000";
@@ -28,7 +29,8 @@ const AuctionDetailPage: React.FC = () => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            let data: Auction[] = await response.json();
+            const responsePayload: unknown = await response.json();
+            let data: Auction[] = parseAuctionsResponse(responsePayload);
 
             if (id && id !== 'demo') {
                 data = data.filter(auction => auction.id === id);
@@ -45,7 +47,7 @@ const AuctionDetailPage: React.FC = () => {
             setBidInputs(prev => ({ ...initialInputs, ...prev }));
         } catch (err: unknown) {
             console.error('Fetch execution failed:', err);
-            setError('Failed to connect to backend API.');
+            setError(`Failed to load auctions: ${getErrorMessage(err)}`);
         } finally {
             setLoading(false);
         }
