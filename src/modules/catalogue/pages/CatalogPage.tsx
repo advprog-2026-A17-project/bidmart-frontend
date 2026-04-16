@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import CreateListing from './CreateListing';
+import { useAuth } from '../../../context/useAuth';
 
 export interface Item {
     id: string;
@@ -14,6 +15,9 @@ export interface Item {
 }
 
 const CatalogPage: React.FC = () => {
+    const { user, accessToken } = useAuth();
+    const isSeller = user?.roles?.some(r => r.name === 'SELLER');
+
     const [listings, setListings] = useState<Item[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -43,7 +47,10 @@ const CatalogPage: React.FC = () => {
                 }
             }
 
-            const response = await fetch(url);
+            const headers: HeadersInit = {};
+            if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+            const response = await fetch(url, { headers });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const data = await response.json();
@@ -65,8 +72,12 @@ const CatalogPage: React.FC = () => {
         if (!window.confirm("Apakah Anda yakin ingin menghapus produk lelang ini?")) return;
 
         try {
+            const headers: HeadersInit = {};
+            if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
             const response = await fetch(`http://localhost:8000/api/v1/catalogue/listings/${id}`, {
                 method: 'DELETE',
+                headers
             });
 
             if (!response.ok) throw new Error('Gagal menghapus produk');
@@ -151,10 +162,12 @@ const CatalogPage: React.FC = () => {
                 <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center' }}>
                         <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>Semua Lelang</h2>
-                        <button className="btn btn-primary" onClick={() => { setSelectedItem(null); setView('form'); }} style={{ padding: '12px 24px', fontSize: '1.1rem' }}>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Tambah Produk
-                        </button>
+                        {isSeller && (
+                            <button className="btn btn-primary" onClick={() => { setSelectedItem(null); setView('form'); }} style={{ padding: '12px 24px', fontSize: '1.1rem' }}>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                Tambah Produk
+                            </button>
+                        )}
                     </div>
 
                     {/* Filter Section */}
@@ -276,16 +289,18 @@ const CatalogPage: React.FC = () => {
                                         
                                         <div style={{ flexGrow: 1 }}></div>
 
-                                        <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
-                                            <button className="btn btn-warning" onClick={() => { setSelectedItem(item); setView('form'); }} style={{ flex: 1 }}>
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '5px' }}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                                                Edit
-                                            </button>
-                                            <button className="btn btn-danger" onClick={() => handleDelete(item.id)} style={{ flex: 1 }}>
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '5px' }}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                                Hapus
-                                            </button>
-                                        </div>
+                                        {isSeller && (
+                                            <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+                                                <button className="btn btn-warning" onClick={() => { setSelectedItem(item); setView('form'); }} style={{ flex: 1 }}>
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '5px' }}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                                    Edit
+                                                </button>
+                                                <button className="btn btn-danger" onClick={() => handleDelete(item.id)} style={{ flex: 1 }}>
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '5px' }}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                                    Hapus
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             ))}

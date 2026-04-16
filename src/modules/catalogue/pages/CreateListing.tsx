@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../../context/useAuth';
 
 interface Props {
     itemToEdit?: any | null; 
@@ -15,6 +16,8 @@ const CreateListing: React.FC<Props> = ({ itemToEdit, onSuccess, onCancel }) => 
         endTime: '',
         category: 'Elektronik',
     });
+
+    const { user, accessToken } = useAuth();
 
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
@@ -51,7 +54,7 @@ const CreateListing: React.FC<Props> = ({ itemToEdit, onSuccess, onCancel }) => 
             currentPrice: itemToEdit ? itemToEdit.currentPrice : parseFloat(formData.startingPrice),
             endTime: formData.endTime.length === 16 ? formData.endTime + ':00' : formData.endTime,
             status: 'ACTIVE',
-            sellerId: 'jovanus-123',
+            sellerId: user?.id || 'unknown',
             category: formData.category
         };
 
@@ -61,10 +64,13 @@ const CreateListing: React.FC<Props> = ({ itemToEdit, onSuccess, onCancel }) => 
                 : `http://localhost:8000/api/v1/catalogue/listings`;
 
             const method = itemToEdit ? 'PUT' : 'POST';
+            
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
             const response = await fetch(url, {
                 method: method,
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: JSON.stringify(payload)
             });
 
