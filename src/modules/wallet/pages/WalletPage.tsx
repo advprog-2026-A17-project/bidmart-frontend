@@ -31,6 +31,8 @@ const WalletPage: React.FC = () => {
     const [walletNotFound, setWalletNotFound] = useState<boolean>(false);
     const [topUpAmount, setTopUpAmount] = useState<string>('');
     const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+    const [showBalance, setShowBalance] = useState(true);
+    const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw'>('overview');
 
     const fetchWallet = useCallback(async () => {
         setLoading(true);
@@ -146,11 +148,11 @@ const WalletPage: React.FC = () => {
     };
 
     return (
-        <div className="dashboard-container">
-            <h1>My Wallet</h1>
-            <p className="text-muted" style={{ textAlign: 'center', marginTop: '-10px', marginBottom: '15px' }}>
-                User ID: <strong>{DUMMY_USER_ID}</strong>
-            </p>
+        <div className="page-wrap">
+            <section className="page-head">
+                <h1>Wallet</h1>
+                <p>Manage your BidMart account balance</p>
+            </section>
 
             {error && <div className="toast-error">{error}</div>}
             {success && <div className="toast-success">{success}</div>}
@@ -158,38 +160,54 @@ const WalletPage: React.FC = () => {
             {loading ? (
                 <div className="loading-state">Loading wallet from API Gateway...</div>
             ) : walletNotFound ? (
-                <div style={{ textAlign: 'center', padding: '30px' }}>
+                <div className="panel center-content">
                     <p className="text-muted">No wallet found for user <strong>{DUMMY_USER_ID}</strong>.</p>
                     <button
-                        className="topup-button"
+                        className="primary-button"
                         onClick={createWallet}
                         disabled={actionLoading}
-                        style={{ marginTop: 10 }}
                     >
                         {actionLoading ? 'Creating...' : 'Create Wallet'}
                     </button>
                 </div>
             ) : (
                 <>
-                    {/* Balance section */}
-                    <div className="wallet-balance-section">
-                        <div className="wallet-balance-label">Available Balance</div>
-                        <div className="wallet-balance">
-                            ${wallet ? Number(wallet.activeBalance).toFixed(2) : '0.00'}
-                        </div>
-                        {wallet && Number(wallet.heldBalance) > 0 && (
-                            <div className="text-muted" style={{ fontSize: '0.85rem', marginTop: 4 }}>
-                                On hold (active bids): ${Number(wallet.heldBalance).toFixed(2)}
+                    <div className="wallet-summary-grid">
+                        <div className="wallet-summary-card wallet-main">
+                            <div className="wallet-summary-top">
+                                <span>Total Balance</span>
+                                <button className="link-button" onClick={() => setShowBalance((value) => !value)}>
+                                    {showBalance ? 'Hide' : 'Show'}
+                                </button>
                             </div>
-                        )}
+                            <strong>
+                                {showBalance ? `$${wallet ? Number(wallet.activeBalance).toFixed(2) : '0.00'}` : '••••••'}
+                            </strong>
+                            <small>Account verified and active</small>
+                        </div>
+                        <div className="wallet-summary-card">
+                            <span>Held Balance</span>
+                            <strong>${wallet ? Number(wallet.heldBalance).toFixed(2) : '0.00'}</strong>
+                            <small>Reserved for active bids</small>
+                        </div>
+                        <div className="wallet-summary-card">
+                            <span>User ID</span>
+                            <strong>{DUMMY_USER_ID}</strong>
+                            <small>Gateway profile</small>
+                        </div>
                     </div>
 
-                    {/* Actions */}
-                    <div className="wallet-actions">
-                        {/* Top Up */}
-                        <div className="wallet-action-card">
-                            <h3>💰 Top Up</h3>
-                            <div className="action-row">
+                    <div className="wallet-actions panel">
+                        <button className="primary-button" onClick={() => setActiveTab('deposit')}>Add Funds</button>
+                        <button className="secondary-button" onClick={() => setActiveTab('withdraw')}>Withdraw</button>
+                        <button className="secondary-button" onClick={() => setActiveTab('overview')}>Transactions</button>
+                    </div>
+
+                    {activeTab === 'deposit' && (
+                        <div className="panel section-stack">
+                            <h3>Add Funds</h3>
+                            <label className="field">
+                                Amount
                                 <input
                                     className="form-input"
                                     type="number"
@@ -198,22 +216,19 @@ const WalletPage: React.FC = () => {
                                     min={0}
                                     step="0.01"
                                     onChange={(e) => setTopUpAmount(e.target.value)}
-                                    style={{ flex: 1 }}
                                 />
-                                <button
-                                    className="topup-button"
-                                    onClick={handleTopUp}
-                                    disabled={actionLoading}
-                                >
-                                    Top Up
-                                </button>
-                            </div>
+                            </label>
+                            <button className="primary-button" onClick={handleTopUp} disabled={actionLoading}>
+                                {actionLoading ? 'Processing...' : 'Top Up'}
+                            </button>
                         </div>
+                    )}
 
-                        {/* Withdraw */}
-                        <div className="wallet-action-card">
-                            <h3>💸 Withdraw</h3>
-                            <div className="action-row">
+                    {activeTab === 'withdraw' && (
+                        <div className="panel section-stack">
+                            <h3>Withdraw Funds</h3>
+                            <label className="field">
+                                Amount
                                 <input
                                     className="form-input"
                                     type="number"
@@ -222,40 +237,36 @@ const WalletPage: React.FC = () => {
                                     min={0}
                                     step="0.01"
                                     onChange={(e) => setWithdrawAmount(e.target.value)}
-                                    style={{ flex: 1 }}
                                 />
-                                <button
-                                    className="withdraw-button"
-                                    onClick={handleWithdraw}
-                                    disabled={actionLoading}
-                                >
-                                    Withdraw
-                                </button>
-                            </div>
+                            </label>
+                            <button className="primary-button" onClick={handleWithdraw} disabled={actionLoading}>
+                                {actionLoading ? 'Processing...' : 'Withdraw'}
+                            </button>
                         </div>
-                    </div>
+                    )}
 
-                    {/* Transaction History */}
-                    <div className="transaction-history">
-                        <h2>Transaction History</h2>
-                        {history.length > 0 ? (
-                            history.map((tx) => (
-                                <div key={tx.id} className="transaction-item">
-                                    <span className={`transaction-type type-${tx.type}`}>
-                                        {tx.type.replace('_', ' ')}
-                                    </span>
-                                    <span className="transaction-amount">
-                                        ${Number(tx.amount).toFixed(2)}
-                                    </span>
-                                    <span className="transaction-date">
-                                        {new Date(tx.timestamp).toLocaleString()}
-                                    </span>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="empty-state">No transactions yet.</div>
-                        )}
-                    </div>
+                    {activeTab === 'overview' && (
+                        <div className="panel">
+                            <h3>Transaction History</h3>
+                            {history.length > 0 ? (
+                                history.map((tx) => (
+                                    <div key={tx.id} className="transaction-item">
+                                        <span className={`transaction-type type-${tx.type}`}>
+                                            {tx.type.replace('_', ' ')}
+                                        </span>
+                                        <span className="transaction-amount">
+                                            ${Number(tx.amount).toFixed(2)}
+                                        </span>
+                                        <span className="transaction-date">
+                                            {new Date(tx.timestamp).toLocaleString()}
+                                        </span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="empty-state">No transactions yet.</div>
+                            )}
+                        </div>
+                    )}
                 </>
             )}
         </div>

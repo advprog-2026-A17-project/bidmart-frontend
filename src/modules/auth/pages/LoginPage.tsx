@@ -19,6 +19,7 @@ const LoginPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
 
     const resetForm = () => {
         setEmail('');
@@ -94,127 +95,116 @@ const LoginPage: React.FC = () => {
     };
 
     return (
-        <div className="dashboard-container" style={{ maxWidth: 420 }}>
-            <h1 style={{ marginBottom: 0 }}>BidMart</h1>
-            <p className="text-muted" style={{ textAlign: 'center', marginTop: 4, marginBottom: 20 }}>
-                Your marketplace for live auctions
-            </p>
+        <div className="auth-wrap">
+            <div className="auth-card">
+                <div className="auth-logo-wrap">
+                    <div className="app-logo">BM</div>
+                    <h1>BidMart</h1>
+                    <p>Win amazing items at great prices</p>
+                </div>
 
-            {/* Tabs */}
-            <div style={{ display: 'flex', borderBottom: '2px solid #e2e8f0', marginBottom: 24 }}>
-                {(['login', 'register'] as Tab[]).map((t) => (
-                    <button
-                        key={t}
-                        onClick={() => handleTabSwitch(t)}
-                        style={{
-                            flex: 1,
-                            padding: '10px',
-                            border: 'none',
-                            background: 'none',
-                            cursor: 'pointer',
-                            fontWeight: tab === t ? 700 : 400,
-                            color: tab === t ? '#2b6cb0' : '#718096',
-                            borderBottom: tab === t ? '2px solid #2b6cb0' : '2px solid transparent',
-                            marginBottom: -2,
-                            textTransform: 'capitalize',
-                            fontSize: '0.95rem',
-                        }}
-                    >
-                        {t}
-                    </button>
-                ))}
+                <div className="auth-tabs">
+                    {(['login', 'register'] as Tab[]).map((t) => (
+                        <button
+                            key={t}
+                            onClick={() => handleTabSwitch(t)}
+                            className={`auth-tab ${tab === t ? 'auth-tab-active' : ''}`}
+                        >
+                            {t}
+                        </button>
+                    ))}
+                </div>
+
+                {error && <div className="toast-error">{error}</div>}
+                {success && <div className="toast-success">{success}</div>}
+
+                {tab === 'login' ? (
+                    <form onSubmit={handleLogin} className="auth-form">
+                        <label className="field">
+                            Email Address
+                            <input
+                                className="form-input"
+                                type="email"
+                                placeholder="you@example.com"
+                            value={email}
+                            required
+                            onChange={(e) => setEmail(e.target.value)}
+                            />
+                        </label>
+                        <label className="field">
+                            Password
+                            <div className="password-row">
+                                <input
+                                    className="form-input"
+                                    type={showPassword ? 'text' : 'password'}
+                                    placeholder="••••••••"
+                                    value={password}
+                                    required
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
+                                <button type="button" className="secondary-button" onClick={() => setShowPassword((v) => !v)}>
+                                    {showPassword ? 'Hide' : 'Show'}
+                                </button>
+                            </div>
+                        </label>
+                        <button className="primary-button" type="submit" disabled={loading}>
+                            {loading ? 'Logging in...' : 'Log In'}
+                        </button>
+                        <p className="text-muted auth-switch">
+                            No account?{' '}
+                            <button type="button" className="link-button" onClick={() => handleTabSwitch('register')}>
+                                Register here
+                            </button>
+                        </p>
+                    </form>
+                ) : (
+                    <form onSubmit={handleRegister} className="auth-form">
+                        <label className="field">
+                            Email
+                            <input
+                                className="form-input"
+                                type="email"
+                                placeholder="you@example.com"
+                                value={email}
+                                required
+                                onChange={(e) => setEmail(e.target.value)}
+                            />
+                        </label>
+                        <label className="field">
+                            Password
+                            <input
+                                className="form-input"
+                                type={showPassword ? 'text' : 'password'}
+                                placeholder="••••••••"
+                                value={password}
+                                required
+                                onChange={(e) => setPassword(e.target.value)}
+                            />
+                        </label>
+                        <label className="field">
+                            Role
+                            <select
+                                className="form-input"
+                                value={role}
+                                onChange={(e) => setRole(e.target.value)}
+                            >
+                                {ROLES.map((r) => (
+                                    <option key={r} value={r}>{r}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <button className="primary-button" type="submit" disabled={loading}>
+                            {loading ? 'Registering...' : 'Create Account'}
+                        </button>
+                        <p className="text-muted auth-switch">
+                            Already have an account?{' '}
+                            <button type="button" className="link-button" onClick={() => handleTabSwitch('login')}>
+                                Log in
+                            </button>
+                        </p>
+                    </form>
+                )}
             </div>
-
-            {error && <div className="toast-error">{error}</div>}
-            {success && <div className="toast-success">{success}</div>}
-
-            {tab === 'login' ? (
-                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.9rem', color: '#4a5568' }}>
-                        Email
-                        <input
-                            className="form-input"
-                            type="email"
-                            placeholder="you@example.com"
-                            value={email}
-                            required
-                            onChange={(e) => setEmail(e.target.value)}
-                        />
-                    </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.9rem', color: '#4a5568' }}>
-                        Password
-                        <input
-                            className="form-input"
-                            type="password"
-                            placeholder="••••••••"
-                            value={password}
-                            required
-                            onChange={(e) => setPassword(e.target.value)}
-                        />
-                    </label>
-                    <button className="bid-button" type="submit" disabled={loading} style={{ marginTop: 4 }}>
-                        {loading ? 'Logging in...' : 'Log In'}
-                    </button>
-                    <p className="text-muted" style={{ textAlign: 'center', fontSize: '0.85rem' }}>
-                        No account?{' '}
-                        <span
-                            style={{ color: '#2b6cb0', cursor: 'pointer', textDecoration: 'underline' }}
-                            onClick={() => handleTabSwitch('register')}
-                        >
-                            Register here
-                        </span>
-                    </p>
-                </form>
-            ) : (
-                <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.9rem', color: '#4a5568' }}>
-                        Email
-                        <input
-                            className="form-input"
-                            type="email"
-                            placeholder="you@example.com"
-                            value={email}
-                            required
-                            onChange={(e) => setEmail(e.target.value)}
-                        />
-                    </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.9rem', color: '#4a5568' }}>
-                        Password
-                        <input
-                            className="form-input"
-                            type="password"
-                            placeholder="••••••••"
-                            value={password}
-                            required
-                            onChange={(e) => setPassword(e.target.value)}
-                        />
-                    </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.9rem', color: '#4a5568' }}>
-                        Role
-                        <select
-                            className="form-input"
-                            value={role}
-                            onChange={(e) => setRole(e.target.value)}
-                        >
-                            {ROLES.map((r) => (
-                                <option key={r} value={r}>{r}</option>
-                            ))}
-                        </select>
-                    </label>
-                    <button className="bid-button" type="submit" disabled={loading} style={{ marginTop: 4 }}>
-                        {loading ? 'Registering...' : 'Create Account'}
-                    </button>
-                    <p className="text-muted" style={{ textAlign: 'center', fontSize: '0.85rem' }}>
-                        Already have an account?{' '}
-                        <span
-                            style={{ color: '#2b6cb0', cursor: 'pointer', textDecoration: 'underline' }}
-                            onClick={() => handleTabSwitch('login')}
-                        >
-                            Log in
-                        </span>
-                    </p>
-                </form>
-            )}
         </div>
     );
 };

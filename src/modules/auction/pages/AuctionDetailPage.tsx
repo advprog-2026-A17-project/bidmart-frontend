@@ -89,67 +89,81 @@ const AuctionDetailPage: React.FC = () => {
         }
     };
 
+    const selectedAuction = auctions[0];
+    const selectedMeta = selectedAuction ? buildAuctionCardMeta(selectedAuction) : null;
+    const thumbnailSeeds = selectedAuction
+        ? [selectedAuction.id, `${selectedAuction.id}-2`, `${selectedAuction.id}-3`]
+        : [];
+
     return (
-        <div className="dashboard-container">
-            <h1>{id && id !== 'demo' ? 'Auction Detail Room' : 'Live Auctions Dashboard'}</h1>
-            <div className="auction-toolbar">
-                <span>Total: {auctions.length}</span>
-                <span>Open: {auctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)).length}</span>
-            </div>
+        <div className="page-wrap">
+            <section className="page-head">
+                <h1>{id && id !== 'demo' ? 'Auction Detail' : 'Live Auctions Dashboard'}</h1>
+                <p>
+                    Total: {auctions.length} • Open:{' '}
+                    {auctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)).length}
+                </p>
+            </section>
 
             {error && <div className="toast-error">{error}</div>}
 
             {loading ? (
                 <div className="loading-state">Fetching operational data from API Gateway...</div>
+            ) : !selectedAuction || !selectedMeta ? (
+                <div className="empty-state">No matching auctions found in the data persistence layer.</div>
             ) : (
-                <ul className="auction-list">
-                    {auctions.length > 0 ? (
-                        auctions.map(auction => {
-                            const cardMeta = buildAuctionCardMeta(auction);
+                <div className="auction-layout">
+                    <section className="panel">
+                        <div className="auction-image-main">
+                            <img
+                                src={`https://picsum.photos/seed/${selectedAuction.id}/900/700`}
+                                alt={`Listing ${selectedAuction.listingId}`}
+                            />
+                        </div>
+                        <div className="auction-thumbs">
+                            {thumbnailSeeds.map((seed) => (
+                                <img key={seed} src={`https://picsum.photos/seed/${seed}/240/180`} alt="Auction" />
+                            ))}
+                        </div>
+                        <h2>Listing #{selectedAuction.listingId}</h2>
+                        <p className="text-muted">Auction ID: {selectedAuction.id}</p>
+                        <div className="catalog-status-row">
+                            <span className={`status-badge status-${selectedAuction.status}`}>{selectedMeta.statusLabel}</span>
+                            <span className={`auction-time-left ${selectedMeta.isClosed ? 'auction-time-left-closed' : ''}`}>
+                                {selectedMeta.timeLeftLabel}
+                            </span>
+                        </div>
+                        <p className="text-muted">
+                            Min increment: ${selectedAuction.minimumIncrement.toFixed(2)} • Ends:{' '}
+                            {new Date(selectedAuction.endTime).toLocaleString()}
+                        </p>
+                    </section>
 
-                            return (
-                                <li key={auction.id} className="auction-item">
-                                    <div className="item-details">
-                                        <strong>Listing ID: {auction.listingId}</strong>
-                                        <small className="text-muted">Auction ID: {auction.id}</small>
-                                        <div>
-                                            <span className={`status-badge status-${auction.status}`}>
-                                                {cardMeta.statusLabel}
-                                            </span>
-                                            <span className={`auction-time-left ${cardMeta.isClosed ? 'auction-time-left-closed' : ''}`}>
-                                                {cardMeta.timeLeftLabel}
-                                            </span>
-                                        </div>
-                                        <small className="text-muted">
-                                            Min Increment: ${auction.minimumIncrement.toFixed(2)} | Ends: {new Date(auction.endTime).toLocaleString()}
-                                        </small>
-                                    </div>
-                                    <div className="interaction-section">
-                                        <span className="price">${cardMeta.currentHighest.toFixed(2)}</span>
-                                        <input
-                                            type="number"
-                                            className="bid-input"
-                                            value={bidInputs[auction.id] || cardMeta.minNextBid}
-                                            step={auction.minimumIncrement}
-                                            min={cardMeta.minNextBid}
-                                            disabled={cardMeta.isClosed}
-                                            onChange={(e) => handleBidChange(auction.id, e.target.value)}
-                                        />
-                                        <button
-                                            className="bid-button"
-                                            onClick={() => placeBid(auction.id)}
-                                            disabled={cardMeta.isClosed}
-                                        >
-                                            {cardMeta.isClosed ? 'Closed' : 'Place Bid'}
-                                        </button>
-                                    </div>
-                                </li>
-                            );
-                        })
-                    ) : (
-                        <li className="empty-state">No matching auctions found in the data persistence layer.</li>
-                    )}
-                </ul>
+                    <aside className="panel section-stack">
+                        <h3>Place Your Bid</h3>
+                        <div className="auction-price">${selectedMeta.currentHighest.toFixed(2)}</div>
+                        <small className="text-muted">Current highest bid</small>
+                        <label className="field">
+                            Your amount
+                            <input
+                                type="number"
+                                className="form-input"
+                                value={bidInputs[selectedAuction.id] || selectedMeta.minNextBid}
+                                step={selectedAuction.minimumIncrement}
+                                min={selectedMeta.minNextBid}
+                                disabled={selectedMeta.isClosed}
+                                onChange={(e) => handleBidChange(selectedAuction.id, e.target.value)}
+                            />
+                        </label>
+                        <button
+                            className="primary-button"
+                            onClick={() => placeBid(selectedAuction.id)}
+                            disabled={selectedMeta.isClosed}
+                        >
+                            {selectedMeta.isClosed ? 'Closed' : 'Place Bid'}
+                        </button>
+                    </aside>
+                </div>
             )}
         </div>
     );
