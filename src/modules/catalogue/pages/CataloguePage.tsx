@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiUrl } from '../../../config/api';
+import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
 import { Link } from 'react-router-dom';
 
 interface CatalogueItem {
@@ -45,7 +46,7 @@ const CataloguePage: React.FC = () => {
         if (params.minPrice) query.append('minPrice', params.minPrice);
         if (params.maxPrice) query.append('maxPrice', params.maxPrice);
 
-        const url = apiUrl(`/api/v1/catalogue/listings/search${query.toString() ? '?' + query.toString() : ''}`);
+        const url = apiUrl(`${CATALOGUE_LISTINGS_SEARCH_PATH}${query.toString() ? '?' + query.toString() : ''}`);
 
         try {
             const response = await fetch(url);
