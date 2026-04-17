@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiUrl } from '../../../config/api';
 import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
+import { Link } from 'react-router-dom';
 
 interface CatalogueItem {
     id: number;
@@ -35,6 +36,7 @@ const CataloguePage: React.FC = () => {
         minPrice: '',
         maxPrice: '',
     });
+    const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
 
     const fetchItems = async (params: SearchParams) => {
         setLoading(true);
@@ -78,49 +80,75 @@ const CataloguePage: React.FC = () => {
         setAppliedParams(empty);
     };
 
-    return (
-        <div className="dashboard-container">
-            <h1>Catalogue</h1>
+    const renderTimeLeft = (endTime: string) => {
+        const diff = new Date(endTime).getTime() - Date.now();
+        if (diff <= 0) return 'Ended';
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        if (hours > 0) return `${hours}h ${mins}m left`;
+        return `${mins}m left`;
+    };
 
-            <form className="search-form" onSubmit={handleSearch}>
-                <label>
-                    Keyword
-                    <input
-                        className="form-input"
-                        type="text"
-                        placeholder="e.g. iPhone"
-                        value={searchParams.keyword}
-                        onChange={(e) => setSearchParams(p => ({ ...p, keyword: e.target.value }))}
-                    />
-                </label>
-                <label>
-                    Min Price
-                    <input
-                        className="form-input"
-                        type="number"
-                        placeholder="e.g. 10000"
-                        value={searchParams.minPrice}
-                        min={0}
-                        onChange={(e) => setSearchParams(p => ({ ...p, minPrice: e.target.value }))}
-                    />
-                </label>
-                <label>
-                    Max Price
-                    <input
-                        className="form-input"
-                        type="number"
-                        placeholder="e.g. 500000"
-                        value={searchParams.maxPrice}
-                        min={0}
-                        onChange={(e) => setSearchParams(p => ({ ...p, maxPrice: e.target.value }))}
-                    />
-                </label>
-                <button className="search-button" type="submit">Search</button>
-                <button className="search-button" type="button" onClick={handleReset}
-                    style={{ backgroundColor: '#718096' }}>
-                    Reset
-                </button>
-            </form>
+    const visibleItems = [...items].sort((a, b) => {
+        if (sortBy === 'price-asc') return a.currentPrice - b.currentPrice;
+        if (sortBy === 'price-desc') return b.currentPrice - a.currentPrice;
+        return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
+    });
+
+    return (
+        <div className="page-wrap">
+            <section className="hero">
+                <p className="hero-badge">Real-time Bidding</p>
+                <h1>Explore Auctions</h1>
+                <p>Discover active listings from every category and place bids before time runs out.</p>
+            </section>
+
+            <div className="panel">
+                <form className="search-form" onSubmit={handleSearch}>
+                    <label>
+                        Search
+                        <input
+                            className="form-input"
+                            type="text"
+                            placeholder="e.g. iPhone, gaming console"
+                            value={searchParams.keyword}
+                            onChange={(e) => setSearchParams((p) => ({ ...p, keyword: e.target.value }))}
+                        />
+                    </label>
+                    <label>
+                        Min Price
+                        <input
+                            className="form-input"
+                            type="number"
+                            placeholder="0"
+                            value={searchParams.minPrice}
+                            min={0}
+                            onChange={(e) => setSearchParams((p) => ({ ...p, minPrice: e.target.value }))}
+                        />
+                    </label>
+                    <label>
+                        Max Price
+                        <input
+                            className="form-input"
+                            type="number"
+                            placeholder="100000"
+                            value={searchParams.maxPrice}
+                            min={0}
+                            onChange={(e) => setSearchParams((p) => ({ ...p, maxPrice: e.target.value }))}
+                        />
+                    </label>
+                    <label>
+                        Sort
+                        <select className="form-input" value={sortBy} onChange={(e) => setSortBy(e.target.value as 'recent' | 'price-asc' | 'price-desc')}>
+                            <option value="recent">Ending Soon</option>
+                            <option value="price-asc">Price: Low to High</option>
+                            <option value="price-desc">Price: High to Low</option>
+                        </select>
+                    </label>
+                    <button className="primary-button" type="submit">Apply</button>
+                    <button className="secondary-button" type="button" onClick={handleReset}>Reset</button>
+                </form>
+            </div>
 
             {error && <div className="toast-error">{error}</div>}
 
@@ -128,8 +156,8 @@ const CataloguePage: React.FC = () => {
                 <div className="loading-state">Loading catalogue from API Gateway...</div>
             ) : (
                 <ul className="catalog-grid">
-                    {items.length > 0 ? (
-                        items.map((item) => (
+                    {visibleItems.length > 0 ? (
+                        visibleItems.map((item) => (
                             <li key={item.id} className="catalog-card">
                                 {item.imageUrl ? (
                                     <img src={item.imageUrl} alt={item.title} className="catalog-image" />
@@ -137,27 +165,22 @@ const CataloguePage: React.FC = () => {
                                     <div className="catalog-image catalog-image-fallback">No Image</div>
                                 )}
                                 <div className="catalog-meta">
-                                    {item.category && <span className="category-badge">{item.category}</span>}
-                                    <strong>{item.title}</strong>
-                                    <small className="text-muted">Listing ID: {item.id}</small>
-                                    {item.description && <span className="catalog-description">{item.description}</span>}
-                                    <div className="catalog-status-row">
-                                        <span className={`status-badge status-${item.status}`}>
-                                            {item.status}
-                                        </span>
-                                        {item.hasBids && (
-                                            <span className="status-badge status-HAS_BIDS">
-                                                Has Bids
-                                            </span>
-                                        )}
+                                    <div className="catalog-top-row">
+                                        {item.category && <span className="category-badge">{item.category}</span>}
+                                        <span className={`status-badge status-${item.status}`}>{item.status}</span>
                                     </div>
-                                    {item.endTime && <small className="text-muted">Ends: {new Date(item.endTime).toLocaleString()}</small>}
+                                    <strong>{item.title}</strong>
+                                    <small className="text-muted">{item.description || 'No description provided.'}</small>
+                                    <small className="text-muted">{renderTimeLeft(item.endTime)}</small>
                                 </div>
                                 <div className="catalog-pricing">
-                                    <span className="text-muted catalog-starting-price">
-                                        Starting: ${item.startingPrice?.toFixed(2)}
-                                    </span>
-                                    <span className="price">${item.currentPrice?.toFixed(2)}</span>
+                                    <div>
+                                        <span className="text-muted catalog-starting-price">Starting: ${item.startingPrice?.toFixed(2)}</span>
+                                        <span className="price">${item.currentPrice?.toFixed(2)}</span>
+                                    </div>
+                                    <Link to={`/auctions/${item.id}`} className="primary-button card-cta">
+                                        View Auction
+                                    </Link>
                                 </div>
                             </li>
                         ))
