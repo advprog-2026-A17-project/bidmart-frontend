@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
 import AuctionDetailPage from './modules/auction/pages/AuctionDetailPage';
 import CataloguePage from './modules/catalogue/pages/CataloguePage';
+import SellPage from './modules/catalogue/pages/SellPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
 import LoginPage from './modules/auth/pages/LoginPage';
 import { AuthProvider } from './context/AuthContext';
@@ -18,10 +19,16 @@ const Navbar = () => {
 
     return (
         <nav className="app-nav">
-            <strong className="app-brand">BidMart</strong>
-            <Link to="/" className="app-nav-link">Home (Catalogue)</Link>
-            <Link to="/auctions/demo" className="app-nav-link">Live Auction</Link>
-            <Link to="/wallet" className="app-nav-link">Wallet</Link>
+            <div className="app-brand-wrap">
+                <div className="app-logo">BM</div>
+                <strong className="app-brand">BidMart</strong>
+            </div>
+            <div className="app-nav-links">
+                <Link to="/" className="app-nav-link">Explore</Link>
+                <Link to="/auctions/demo" className="app-nav-link">Auction</Link>
+                <Link to="/sell" className="app-nav-link">Sell</Link>
+                <Link to="/wallet" className="app-nav-link">Wallet</Link>
+            </div>
             <div className="app-nav-right">
                 {user ? (
                     <>
@@ -41,7 +48,7 @@ const Navbar = () => {
                         </button>
                     </>
                 ) : (
-                    <Link to="/login" className="app-nav-link">Login</Link>
+                    <Link to="/login" className="app-logout-button">Sign In</Link>
                 )}
             </div>
         </nav>
@@ -52,13 +59,14 @@ function App() {
     return (
         <AuthProvider>
             <Router>
-                <div className="app-container">
+                <div className="app-shell">
                     <Navbar />
                     <main className="app-main">
                         <Routes>
                             <Route path="/" element={<CataloguePage />} />
                             <Route path="/login" element={<LoginPage />} />
                             <Route path="/auctions/:id" element={<AuctionDetailPage />} />
+                            <Route path="/sell" element={<SellPage />} />
                             <Route path="/wallet" element={<WalletPage />} />
                         </Routes>
                     </main>
