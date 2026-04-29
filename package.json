@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "node --test *.contract.test.mjs",
     "preview": "vite preview",
     "start": "serve -s dist -l ${PORT:-4173}",
     "heroku-postbuild": "npm run build"
