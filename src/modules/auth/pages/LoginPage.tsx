@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
 import type { AuthLoginResult } from '../../../context/auth-context';
 import { apiUrl } from '../../../config/api';
+import { readApiError } from '../../../config/apiClient';
 
 type Tab = 'login' | 'register';
 
@@ -20,11 +21,15 @@ const LoginPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
+    const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(null);
+    const [twoFactorCode, setTwoFactorCode] = useState('');
 
     const resetForm = () => {
         setEmail('');
         setPassword('');
         setRole('BUYER');
+        setTwoFactorChallenge(null);
+        setTwoFactorCode('');
         setError(null);
         setSuccess(null);
     };
@@ -54,11 +59,45 @@ const LoginPage: React.FC = () => {
                 return;
             }
 
-            const loginResult: AuthLoginResult = await response.json();
+            const responsePayload = await response.json() as AuthLoginResult | { challengeToken: string };
+            if ('challengeToken' in responsePayload) {
+                setTwoFactorChallenge(responsePayload.challengeToken);
+                setSuccess('Two-factor verification required.');
+                return;
+            }
+            const loginResult: AuthLoginResult = responsePayload;
             login(loginResult);
             navigate('/');
         } catch (err: unknown) {
             setError('Failed to connect to Auth Service via API Gateway.');
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleTwoFactorLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!twoFactorChallenge) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetch(apiUrl('/api/v1/auth/2fa/login-verify'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ challengeToken: twoFactorChallenge, code: twoFactorCode }),
+            });
+
+            if (!response.ok) {
+                setError(await readApiError(response, 'Two-factor verification failed'));
+                return;
+            }
+
+            const loginResult: AuthLoginResult = await response.json();
+            login(loginResult);
+            navigate('/');
+        } catch (err: unknown) {
+            setError('Failed to verify two-factor challenge via API Gateway.');
             console.error(err);
         } finally {
             setLoading(false);
@@ -118,7 +157,28 @@ const LoginPage: React.FC = () => {
                 {error && <div className="toast-error">{error}</div>}
                 {success && <div className="toast-success">{success}</div>}
 
-                {tab === 'login' ? (
+                {tab === 'login' && twoFactorChallenge ? (
+                    <form onSubmit={handleTwoFactorLogin} className="auth-form">
+                        <label className="field">
+                            Two-factor code
+                            <input
+                                className="form-input"
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="123456"
+                                value={twoFactorCode}
+                                required
+                                onChange={(e) => setTwoFactorCode(e.target.value)}
+                            />
+                        </label>
+                        <button className="primary-button" type="submit" disabled={loading}>
+                            {loading ? 'Verifying...' : 'Verify & Continue'}
+                        </button>
+                        <button type="button" className="secondary-button" onClick={() => setTwoFactorChallenge(null)}>
+                            Back
+                        </button>
+                    </form>
+                ) : tab === 'login' ? (
                     <form onSubmit={handleLogin} className="auth-form">
                         <label className="field">
                             Email Address
