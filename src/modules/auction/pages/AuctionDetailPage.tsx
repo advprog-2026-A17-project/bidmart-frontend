@@ -3,8 +3,10 @@ import { useParams } from 'react-router-dom';
 import { buildAuctionCardMeta, type Auction } from '../utils/auction-card-meta';
 import { parseAuctionsResponse } from '../utils/parse-auctions-response';
 import { apiUrl } from '../../../config/api';
+import { readApiError } from '../../../config/apiClient';
+import { useAuth } from '../../../context/useAuth';
+import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 
-const DUMMY_BIDDER_ID = "123e4567-e89b-12d3-a456-426614174000";
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 
 const getErrorMessage = (error: unknown): string => {
@@ -15,6 +17,8 @@ const getErrorMessage = (error: unknown): string => {
 };
 const AuctionDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
+    const { user } = useAuth();
+    const authenticatedFetch = useAuthenticatedFetch();
     const [auctions, setAuctions] = useState<Auction[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [bidInputs, setBidInputs] = useState<{ [key: string]: number }>({});
@@ -23,7 +27,7 @@ const AuctionDetailPage: React.FC = () => {
     const fetchAuctions = useCallback(async () => {
         try {
             setError(null);
-            const response = await fetch(apiUrl('/api/v1/auctions'));
+            const response = await authenticatedFetch(apiUrl('/api/v1/auctions'));
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -51,10 +55,12 @@ const AuctionDetailPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [id]);
+    }, [authenticatedFetch, id]);
 
     useEffect(() => {
         fetchAuctions();
+        const interval = window.setInterval(fetchAuctions, 10_000);
+        return () => window.clearInterval(interval);
     }, [fetchAuctions]);
 
     const handleBidChange = (auctionId: string, value: string) => {
@@ -64,22 +70,25 @@ const AuctionDetailPage: React.FC = () => {
     const placeBid = async (auctionId: string) => {
         const amount = bidInputs[auctionId];
         if (!amount) return;
+        if (!user) {
+            setError('Please sign in before placing a bid.');
+            return;
+        }
 
         const payload = {
-            bidderId: DUMMY_BIDDER_ID,
+            bidderId: user.id,
             bidAmount: amount
         };
 
         try {
-            const response = await fetch(apiUrl(`/api/v1/auctions/${auctionId}/bids`), {
+            const response = await authenticatedFetch(apiUrl(`/api/v1/auctions/${auctionId}/bids`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Validation failed');
+                throw new Error(await readApiError(response, 'Bid placement failed'));
             }
 
             setError(null);
@@ -88,6 +97,20 @@ const AuctionDetailPage: React.FC = () => {
         } catch (err: unknown) {
             console.error('Bidding failed:', err);
             setError(`Transaction Failed: ${getErrorMessage(err)}`);
+        }
+    };
+
+    const closeAuction = async (auctionId: string) => {
+        try {
+            const response = await authenticatedFetch(apiUrl(`/api/v1/auctions/${auctionId}/close`), {
+                method: 'POST',
+            });
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Auction close failed'));
+            }
+            await fetchAuctions();
+        } catch (err: unknown) {
+            setError(`Close failed: ${getErrorMessage(err)}`);
         }
     };
 
@@ -160,9 +183,16 @@ const AuctionDetailPage: React.FC = () => {
                         <button
                             className="primary-button"
                             onClick={() => placeBid(selectedAuction.id)}
-                            disabled={selectedMeta.isClosed}
+                            disabled={selectedMeta.isClosed || !user}
                         >
-                            {selectedMeta.isClosed ? 'Closed' : 'Place Bid'}
+                            {selectedMeta.isClosed ? 'Closed' : user ? 'Place Bid' : 'Sign in to Bid'}
+                        </button>
+                        <button
+                            className="secondary-button"
+                            onClick={() => closeAuction(selectedAuction.id)}
+                            disabled={!user || !selectedMeta.isClosed}
+                        >
+                            Close Auction
                         </button>
                     </aside>
                 </div>
