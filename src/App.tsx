@@ -4,6 +4,7 @@ import CataloguePage from './modules/catalogue/pages/CataloguePage';
 import SellPage from './modules/catalogue/pages/SellPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
 import LoginPage from './modules/auth/pages/LoginPage';
+import ProfilePage from './modules/auth/pages/ProfilePage';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
 import './App.css';
@@ -28,6 +29,7 @@ const Navbar = () => {
                 <Link to="/auctions/demo" className="app-nav-link">Auction</Link>
                 <Link to="/sell" className="app-nav-link">Sell</Link>
                 <Link to="/wallet" className="app-nav-link">Wallet</Link>
+                <Link to="/profile" className="app-nav-link">Profile</Link>
             </div>
             <div className="app-nav-right">
                 {user ? (
@@ -65,6 +67,7 @@ function App() {
                         <Routes>
                             <Route path="/" element={<CataloguePage />} />
                             <Route path="/login" element={<LoginPage />} />
+                            <Route path="/profile" element={<ProfilePage />} />
                             <Route path="/auctions/:id" element={<AuctionDetailPage />} />
                             <Route path="/sell" element={<SellPage />} />
                             <Route path="/wallet" element={<WalletPage />} />
