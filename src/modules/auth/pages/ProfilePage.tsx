@@ -99,7 +99,7 @@ const ProfilePage: React.FC = () => {
                         <div>Secret: {twoFactorSecret}</div>
                         <div>QR URL: {qrCodeUrl}</div>
                         <label className="field">
-                            Verification code
+                            <span>Verification code</span>
                             <input
                                 className="form-input"
                                 value={twoFactorCode}
