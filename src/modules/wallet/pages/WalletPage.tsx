@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { apiUrl } from '../../../config/api';
+import { readApiError, gatewayUrl } from '../../../config/apiClient';
+import { useAuth } from '../../../context/useAuth';
+import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 
 interface Wallet {
     id: string;
@@ -16,12 +18,12 @@ interface WalletTransaction {
     timestamp: string;
 }
 
-const DUMMY_USER_ID = 'user-001';
-
 const toErrorMessage = (err: unknown): string =>
     err instanceof Error ? err.message : 'Unknown error';
 
 const WalletPage: React.FC = () => {
+    const { user } = useAuth();
+    const authenticatedFetch = useAuthenticatedFetch();
     const [wallet, setWallet] = useState<Wallet | null>(null);
     const [history, setHistory] = useState<WalletTransaction[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -38,14 +40,21 @@ const WalletPage: React.FC = () => {
         setLoading(true);
         setError(null);
         setWalletNotFound(false);
+        if (!user) {
+            setWallet(null);
+            setHistory([]);
+            setLoading(false);
+            setError('Please sign in to view your wallet.');
+            return;
+        }
         try {
-            const response = await fetch(apiUrl(`/api/v1/wallet/${DUMMY_USER_ID}`));
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail`));
             if (response.status === 404 || response.status === 500) {
                 setWalletNotFound(true);
                 return;
             }
             if (!response.ok) {
-                setError(`HTTP error! status: ${response.status}`);
+                setError(await readApiError(response, 'Wallet lookup failed'));
                 return;
             }
             const data = await response.json();
@@ -57,16 +66,17 @@ const WalletPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [authenticatedFetch, user]);
 
     const createWallet = async () => {
         setActionLoading(true);
         setError(null);
+        if (!user) return;
         try {
-            const response = await fetch(apiUrl('/api/v1/wallet/add'), {
+            const response = await authenticatedFetch(gatewayUrl('/api/v1/wallet/add'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: DUMMY_USER_ID }),
+                body: JSON.stringify({ userId: user.id }),
             });
             if (!response.ok) {
                 setError(`Failed to create wallet: HTTP ${response.status}`);
@@ -99,14 +109,14 @@ const WalletPage: React.FC = () => {
         }
         setActionLoading(true);
         setError(null);
+        if (!user) return;
         try {
-            const response = await fetch(
-                apiUrl(`/api/v1/wallet/${DUMMY_USER_ID}/top-up?amount=${amount}`),
+            const response = await authenticatedFetch(
+                gatewayUrl(`/api/v1/wallet/${user.id}/top-up?amount=${amount}`),
                 { method: 'POST' }
             );
             if (!response.ok) {
-                const errData = await response.json().catch(() => ({})) as { message?: string };
-                setError(`Top-up failed: ${errData.message ?? `HTTP error! status: ${response.status}`}`);
+                setError(`Top-up failed: ${await readApiError(response, 'Top-up failed')}`);
                 return;
             }
             setTopUpAmount('');
@@ -127,14 +137,14 @@ const WalletPage: React.FC = () => {
         }
         setActionLoading(true);
         setError(null);
+        if (!user) return;
         try {
-            const response = await fetch(
-                apiUrl(`/api/v1/wallet/${DUMMY_USER_ID}/withdraw?amount=${amount}`),
+            const response = await authenticatedFetch(
+                gatewayUrl(`/api/v1/wallet/${user.id}/withdraw?amount=${amount}`),
                 { method: 'POST' }
             );
             if (!response.ok) {
-                const errData = await response.json().catch(() => ({})) as { message?: string };
-                setError(`Withdrawal failed: ${errData.message ?? `HTTP error! status: ${response.status}`}`);
+                setError(`Withdrawal failed: ${await readApiError(response, 'Withdrawal failed')}`);
                 return;
             }
             setWithdrawAmount('');
@@ -161,7 +171,7 @@ const WalletPage: React.FC = () => {
                 <div className="loading-state">Loading wallet from API Gateway...</div>
             ) : walletNotFound ? (
                 <div className="panel center-content">
-                    <p className="text-muted">No wallet found for user <strong>{DUMMY_USER_ID}</strong>.</p>
+                    <p className="text-muted">No wallet found for user <strong>{user?.id}</strong>.</p>
                     <button
                         className="primary-button"
                         onClick={createWallet}
@@ -192,7 +202,7 @@ const WalletPage: React.FC = () => {
                         </div>
                         <div className="wallet-summary-card">
                             <span>User ID</span>
-                            <strong>{DUMMY_USER_ID}</strong>
+                            <strong>{user?.id}</strong>
                             <small>Gateway profile</small>
                         </div>
                     </div>

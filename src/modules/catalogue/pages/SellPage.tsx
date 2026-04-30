@@ -1,4 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { gatewayUrl, readApiError } from '../../../config/apiClient';
+import { useAuth } from '../../../context/useAuth';
+import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 
 type Step = 'details' | 'images' | 'auction' | 'review';
 
@@ -24,15 +27,23 @@ const CONDITIONS = [
 const AUCTION_DURATIONS = [1, 3, 5, 7, 10];
 
 const SellPage: React.FC = () => {
+    const { user } = useAuth();
+    const authenticatedFetch = useAuthenticatedFetch();
     const [step, setStep] = useState<Step>('details');
     const [published, setPublished] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [createdListingId, setCreatedListingId] = useState<string | null>(null);
+    const [createdAuctionId, setCreatedAuctionId] = useState<string | null>(null);
     const [createdAt] = useState(() => Date.now());
     const [formData, setFormData] = useState({
         title: '',
         description: '',
         category: '',
+        categoryId: '',
         condition: '',
         startingBid: '',
+        reservePrice: '',
+        minimumIncrement: '1',
         duration: 7,
         images: [] as string[],
     });
@@ -60,6 +71,71 @@ const SellPage: React.FC = () => {
         }
     };
 
+    const publishListing = async () => {
+        if (!user) {
+            setError('Please sign in as a seller before publishing.');
+            return;
+        }
+        setError(null);
+        const listingResponse = await authenticatedFetch(gatewayUrl('/api/v1/catalogue/listings'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: formData.title,
+                description: formData.description,
+                category: formData.category,
+                categoryId: formData.categoryId || null,
+                condition: formData.condition,
+                sellerId: user.id,
+                startingPrice: Number(formData.startingBid),
+                imageUrl: formData.images[0] ?? null,
+            }),
+        });
+        if (!listingResponse.ok) {
+            setError(await readApiError(listingResponse, 'Listing creation failed'));
+            return;
+        }
+        const listing = await listingResponse.json() as { id: string | number };
+        const listingId = String(listing.id);
+        setCreatedListingId(listingId);
+
+        const now = Math.floor(Date.now() / 1000);
+        const auctionResponse = await authenticatedFetch(gatewayUrl('/api/v1/auctions'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                listingId,
+                sellerId: user.id,
+                startingPrice: Number(formData.startingBid),
+                reservePrice: Number(formData.reservePrice || formData.startingBid),
+                minimumIncrement: Number(formData.minimumIncrement || 1),
+                startTime: now,
+                endTime: now + formData.duration * 24 * 60 * 60,
+            }),
+        });
+        if (!auctionResponse.ok) {
+            setError(await readApiError(auctionResponse, 'Auction creation failed'));
+            return;
+        }
+        const auction = await auctionResponse.json() as { id: string };
+        setCreatedAuctionId(auction.id);
+        setPublished(true);
+    };
+
+    const cancelListing = async () => {
+        if (!createdListingId) return;
+        const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${createdListingId}/cancel`), {
+            method: 'POST',
+        });
+        if (!response.ok) {
+            setError(await readApiError(response, 'Listing cancellation failed'));
+            return;
+        }
+        setPublished(false);
+        setCreatedListingId(null);
+        setCreatedAuctionId(null);
+    };
+
     return (
         <div className="page-wrap">
             <section className="page-head">
@@ -68,6 +144,7 @@ const SellPage: React.FC = () => {
             </section>
 
             {published && <div className="toast-success">Listing published successfully.</div>}
+            {error && <div className="toast-error">{error}</div>}
 
             <div className="steps-row">
                 {steps.map((item, idx) => (
@@ -120,6 +197,15 @@ const SellPage: React.FC = () => {
                                     </option>
                                 ))}
                             </select>
+                        </label>
+                        <label className="field">
+                            <span>Category ID</span>
+                            <input
+                                className="form-input"
+                                value={formData.categoryId}
+                                onChange={(e) => setFormData((p) => ({ ...p, categoryId: e.target.value }))}
+                                placeholder="Optional category identifier"
+                            />
                         </label>
                         <div>
                             <div className="field-label">Condition</div>
@@ -177,7 +263,7 @@ const SellPage: React.FC = () => {
                     <div className="section-stack">
                         <h3>Auction Settings</h3>
                         <label className="field">
-                            Starting Bid
+                            <span>Starting Bid</span>
                             <input
                                 className="form-input"
                                 type="number"
@@ -185,6 +271,28 @@ const SellPage: React.FC = () => {
                                 value={formData.startingBid}
                                 onChange={(e) => setFormData((p) => ({ ...p, startingBid: e.target.value }))}
                                 placeholder="0.00"
+                            />
+                        </label>
+                        <label className="field">
+                            <span>Reserve Price</span>
+                            <input
+                                className="form-input"
+                                type="number"
+                                min={1}
+                                value={formData.reservePrice}
+                                onChange={(e) => setFormData((p) => ({ ...p, reservePrice: e.target.value }))}
+                                placeholder="Optional reserve"
+                            />
+                        </label>
+                        <label className="field">
+                            <span>Minimum Increment</span>
+                            <input
+                                className="form-input"
+                                type="number"
+                                min={1}
+                                value={formData.minimumIncrement}
+                                onChange={(e) => setFormData((p) => ({ ...p, minimumIncrement: e.target.value }))}
+                                placeholder="1.00"
                             />
                         </label>
                         <div>
@@ -227,15 +335,23 @@ const SellPage: React.FC = () => {
                                     'Not selected'}
                             </div>
                             <div>Starting Bid: ${formData.startingBid || '0.00'}</div>
+                            <div>Reserve Price: ${formData.reservePrice || formData.startingBid || '0.00'}</div>
                             <div>Duration: {formData.duration} days</div>
+                            {createdListingId && <div>Listing ID: {createdListingId}</div>}
+                            {createdAuctionId && <div>Auction ID: {createdAuctionId}</div>}
                         </div>
                         <button
                             type="button"
                             className="primary-button"
-                            onClick={() => setPublished(true)}
+                            onClick={publishListing}
                         >
                             Publish Listing
                         </button>
+                        {createdListingId && (
+                            <button type="button" className="secondary-button" onClick={cancelListing}>
+                                Cancel Listing
+                            </button>
+                        )}
                     </div>
                 )}
 
