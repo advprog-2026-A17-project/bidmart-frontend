@@ -199,7 +199,7 @@ const SellPage: React.FC = () => {
                             </select>
                         </label>
                         <label className="field">
-                            Category ID
+                            <span>Category ID</span>
                             <input
                                 className="form-input"
                                 value={formData.categoryId}
@@ -263,7 +263,7 @@ const SellPage: React.FC = () => {
                     <div className="section-stack">
                         <h3>Auction Settings</h3>
                         <label className="field">
-                            Starting Bid
+                            <span>Starting Bid</span>
                             <input
                                 className="form-input"
                                 type="number"
@@ -274,7 +274,7 @@ const SellPage: React.FC = () => {
                             />
                         </label>
                         <label className="field">
-                            Reserve Price
+                            <span>Reserve Price</span>
                             <input
                                 className="form-input"
                                 type="number"
@@ -285,7 +285,7 @@ const SellPage: React.FC = () => {
                             />
                         </label>
                         <label className="field">
-                            Minimum Increment
+                            <span>Minimum Increment</span>
                             <input
                                 className="form-input"
                                 type="number"

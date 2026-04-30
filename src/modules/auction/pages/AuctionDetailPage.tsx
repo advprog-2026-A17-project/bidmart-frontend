@@ -15,6 +15,23 @@ const getErrorMessage = (error: unknown): string => {
     }
     return 'Unknown error';
 };
+
+const safeAuctionPath = (auctionId: string, suffix: string): string =>
+    `/api/v1/auctions/${encodeURIComponent(auctionId)}${suffix}`;
+
+const bidButtonLabel = (isClosed: boolean, isSignedIn: boolean): string => {
+    if (isClosed) {
+        return 'Closed';
+    }
+    return isSignedIn ? 'Place Bid' : 'Sign in to Bid';
+};
+
+const detailTitle = (id?: string): string =>
+    id && id !== 'demo' ? 'Auction Detail' : 'Live Auctions Dashboard';
+
+const openAuctionCount = (auctions: Auction[]): number =>
+    auctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)).length;
+
 const AuctionDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const { user } = useAuth();
@@ -59,8 +76,8 @@ const AuctionDetailPage: React.FC = () => {
 
     useEffect(() => {
         fetchAuctions();
-        const interval = window.setInterval(fetchAuctions, 10_000);
-        return () => window.clearInterval(interval);
+        const interval = globalThis.setInterval(fetchAuctions, 10_000);
+        return () => globalThis.clearInterval(interval);
     }, [fetchAuctions]);
 
     const handleBidChange = (auctionId: string, value: string) => {
@@ -81,7 +98,7 @@ const AuctionDetailPage: React.FC = () => {
         };
 
         try {
-            const response = await authenticatedFetch(apiUrl(`/api/v1/auctions/${auctionId}/bids`), {
+            const response = await authenticatedFetch(apiUrl(safeAuctionPath(auctionId, '/bids')), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -102,7 +119,7 @@ const AuctionDetailPage: React.FC = () => {
 
     const closeAuction = async (auctionId: string) => {
         try {
-            const response = await authenticatedFetch(apiUrl(`/api/v1/auctions/${auctionId}/close`), {
+            const response = await authenticatedFetch(apiUrl(safeAuctionPath(auctionId, '/close')), {
                 method: 'POST',
             });
             if (!response.ok) {
@@ -120,83 +137,86 @@ const AuctionDetailPage: React.FC = () => {
         ? [selectedAuction.id, `${selectedAuction.id}-2`, `${selectedAuction.id}-3`]
         : [];
 
+    let content: React.ReactNode;
+    if (loading) {
+        content = <div className="loading-state">Fetching operational data from API Gateway...</div>;
+    } else if (!selectedAuction || !selectedMeta) {
+        content = <div className="empty-state">No matching auctions found in the data persistence layer.</div>;
+    } else {
+        content = (
+            <div className="auction-layout">
+                <section className="panel">
+                    <div className="auction-image-main">
+                        <img
+                            src={`https://picsum.photos/seed/${selectedAuction.id}/900/700`}
+                            alt={`Listing ${selectedAuction.listingId}`}
+                        />
+                    </div>
+                    <div className="auction-thumbs">
+                        {thumbnailSeeds.map((seed) => (
+                            <img key={seed} src={`https://picsum.photos/seed/${seed}/240/180`} alt="Auction" />
+                        ))}
+                    </div>
+                    <h2>Listing #{selectedAuction.listingId}</h2>
+                    <p className="text-muted">Auction ID: {selectedAuction.id}</p>
+                    <div className="catalog-status-row">
+                        <span className={`status-badge status-${selectedAuction.status}`}>{selectedMeta.statusLabel}</span>
+                        <span className={`auction-time-left ${selectedMeta.isClosed ? 'auction-time-left-closed' : ''}`}>
+                            {selectedMeta.timeLeftLabel}
+                        </span>
+                    </div>
+                    <p className="text-muted">
+                        Min increment: ${selectedAuction.minimumIncrement.toFixed(2)} • Ends:{' '}
+                        {new Date(selectedAuction.endTime).toLocaleString()}
+                    </p>
+                </section>
+
+                <aside className="panel section-stack">
+                    <h3>Place Your Bid</h3>
+                    <div className="auction-price">${selectedMeta.currentHighest.toFixed(2)}</div>
+                    <small className="text-muted">Current highest bid</small>
+                    <label className="field">
+                        <span>Your amount</span>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={bidInputs[selectedAuction.id] || selectedMeta.minNextBid}
+                            step={selectedAuction.minimumIncrement}
+                            min={selectedMeta.minNextBid}
+                            disabled={selectedMeta.isClosed}
+                            onChange={(e) => handleBidChange(selectedAuction.id, e.target.value)}
+                        />
+                    </label>
+                    <button
+                        className="primary-button"
+                        onClick={() => placeBid(selectedAuction.id)}
+                        disabled={selectedMeta.isClosed || !user}
+                    >
+                        {bidButtonLabel(selectedMeta.isClosed, Boolean(user))}
+                    </button>
+                    <button
+                        className="secondary-button"
+                        onClick={() => closeAuction(selectedAuction.id)}
+                        disabled={!user || !selectedMeta.isClosed}
+                    >
+                        Close Auction
+                    </button>
+                </aside>
+            </div>
+        );
+    }
+
     return (
         <div className="page-wrap">
             <section className="page-head">
-                <h1>{id && id !== 'demo' ? 'Auction Detail' : 'Live Auctions Dashboard'}</h1>
+                <h1>{detailTitle(id)}</h1>
                 <p>
-                    Total: {auctions.length} • Open:{' '}
-                    {auctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)).length}
+                    Total: {auctions.length} • Open: {openAuctionCount(auctions)}
                 </p>
             </section>
 
             {error && <div className="toast-error">{error}</div>}
-
-            {loading ? (
-                <div className="loading-state">Fetching operational data from API Gateway...</div>
-            ) : !selectedAuction || !selectedMeta ? (
-                <div className="empty-state">No matching auctions found in the data persistence layer.</div>
-            ) : (
-                <div className="auction-layout">
-                    <section className="panel">
-                        <div className="auction-image-main">
-                            <img
-                                src={`https://picsum.photos/seed/${selectedAuction.id}/900/700`}
-                                alt={`Listing ${selectedAuction.listingId}`}
-                            />
-                        </div>
-                        <div className="auction-thumbs">
-                            {thumbnailSeeds.map((seed) => (
-                                <img key={seed} src={`https://picsum.photos/seed/${seed}/240/180`} alt="Auction" />
-                            ))}
-                        </div>
-                        <h2>Listing #{selectedAuction.listingId}</h2>
-                        <p className="text-muted">Auction ID: {selectedAuction.id}</p>
-                        <div className="catalog-status-row">
-                            <span className={`status-badge status-${selectedAuction.status}`}>{selectedMeta.statusLabel}</span>
-                            <span className={`auction-time-left ${selectedMeta.isClosed ? 'auction-time-left-closed' : ''}`}>
-                                {selectedMeta.timeLeftLabel}
-                            </span>
-                        </div>
-                        <p className="text-muted">
-                            Min increment: ${selectedAuction.minimumIncrement.toFixed(2)} • Ends:{' '}
-                            {new Date(selectedAuction.endTime).toLocaleString()}
-                        </p>
-                    </section>
-
-                    <aside className="panel section-stack">
-                        <h3>Place Your Bid</h3>
-                        <div className="auction-price">${selectedMeta.currentHighest.toFixed(2)}</div>
-                        <small className="text-muted">Current highest bid</small>
-                        <label className="field">
-                            Your amount
-                            <input
-                                type="number"
-                                className="form-input"
-                                value={bidInputs[selectedAuction.id] || selectedMeta.minNextBid}
-                                step={selectedAuction.minimumIncrement}
-                                min={selectedMeta.minNextBid}
-                                disabled={selectedMeta.isClosed}
-                                onChange={(e) => handleBidChange(selectedAuction.id, e.target.value)}
-                            />
-                        </label>
-                        <button
-                            className="primary-button"
-                            onClick={() => placeBid(selectedAuction.id)}
-                            disabled={selectedMeta.isClosed || !user}
-                        >
-                            {selectedMeta.isClosed ? 'Closed' : user ? 'Place Bid' : 'Sign in to Bid'}
-                        </button>
-                        <button
-                            className="secondary-button"
-                            onClick={() => closeAuction(selectedAuction.id)}
-                            disabled={!user || !selectedMeta.isClosed}
-                        >
-                            Close Auction
-                        </button>
-                    </aside>
-                </div>
-            )}
+            {content}
         </div>
     );
 };

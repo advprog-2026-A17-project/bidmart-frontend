@@ -17,7 +17,9 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.doesNotMatch(auctionDetail, /DUMMY_BIDDER_ID/);
   assert.doesNotMatch(walletPage, /DUMMY_USER_ID|user-001/);
   assert.match(authContext, /refreshAccessToken/);
-  assert.match(authProvider, /sessionStorage/);
+  assert.doesNotMatch(authProvider, /localStorage|sessionStorage/);
+  assert.match(authProvider, /trustedApiPath/);
+  assert.match(authProvider, /useMemo/);
   assert.match(authProvider, /\/api\/v1\/auth\/refresh/);
   assert.match(auctionDetail, /useAuthenticatedFetch/);
   assert.match(walletPage, /useAuthenticatedFetch/);
