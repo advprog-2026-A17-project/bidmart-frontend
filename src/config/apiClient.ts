@@ -1,4 +1,4 @@
-import { apiUrl } from './api';
+export { apiUrl as gatewayUrl } from './api';
 
 export const readApiError = async (response: Response, fallback: string): Promise<string> => {
     const payload = await response.json().catch(() => null) as { message?: string; error?: string } | null;
@@ -13,5 +13,3 @@ export const buildJsonRequest = (accessToken: string | null, body?: unknown): Re
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 });
-
-export const gatewayUrl = apiUrl;
