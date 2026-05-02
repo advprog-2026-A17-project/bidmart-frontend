@@ -5,6 +5,7 @@ import SellPage from './modules/catalogue/pages/SellPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
 import AuthPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
+import ProfileGuard from './modules/auth/components/ProfileGuard';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
 import './App.css';
@@ -65,15 +66,17 @@ function App() {
                 <div className="app-shell">
                     <Navbar />
                     <main className="app-main">
-                        <Routes>
-                            <Route path="/" element={<CataloguePage />} />
-                            <Route path="/login" element={<AuthPage />} />
-                            <Route path="/profile" element={<ProfilePage />} />
-                            <Route path="/auctions/:id" element={<AuctionDetailPage />} />
-                            <Route path="/sell" element={<SellPage />} />
-                            <Route path="/wallet" element={<WalletPage />} />
-                            <Route path="/verify-email" element={<VerifyEmailPage />} />
-                        </Routes>
+                        <ProfileGuard>
+                            <Routes>
+                                <Route path="/" element={<CataloguePage />} />
+                                <Route path="/login" element={<AuthPage />} />
+                                <Route path="/profile" element={<ProfilePage />} />
+                                <Route path="/auctions/:id" element={<AuctionDetailPage />} />
+                                <Route path="/sell" element={<SellPage />} />
+                                <Route path="/wallet" element={<WalletPage />} />
+                                <Route path="/verify-email" element={<VerifyEmailPage />} />
+                            </Routes>
+                        </ProfileGuard>
                     </main>
                 </div>
             </Router>
