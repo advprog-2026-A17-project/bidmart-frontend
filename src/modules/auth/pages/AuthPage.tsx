@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import LoginForm from '../components/LoginForm';
 import RegisterForm from '../components/RegisterForm';
+import ForgotPasswordForm from '../components/ForgotPasswordForm';
 
-type Tab = 'login' | 'register';
+type Tab = 'login' | 'register' | 'forgot-password';
 
 const AuthPage: React.FC = () => {
     const [tab, setTab] = useState<Tab>('login');
@@ -28,10 +29,17 @@ const AuthPage: React.FC = () => {
                     ))}
                 </div>
 
-                {tab === 'login' ? (
-                    <LoginForm onSwitchTab={() => setTab('register')} />
-                ) : (
+                {tab === 'login' && (
+                    <LoginForm 
+                        onSwitchTab={() => setTab('register')} 
+                        onForgotPassword={() => setTab('forgot-password')} 
+                    />
+                )}
+                {tab === 'register' && (
                     <RegisterForm onSwitchTab={() => setTab('login')} />
+                )}
+                {tab === 'forgot-password' && (
+                    <ForgotPasswordForm onBackToLogin={() => setTab('login')} />
                 )}
             </div>
         </div>
