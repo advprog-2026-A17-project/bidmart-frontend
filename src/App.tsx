@@ -3,7 +3,7 @@ import AuctionDetailPage from './modules/auction/pages/AuctionDetailPage';
 import CataloguePage from './modules/catalogue/pages/CataloguePage';
 import SellPage from './modules/catalogue/pages/SellPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
-import LoginPage from './modules/auth/pages/LoginPage';
+import LoginPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
