@@ -6,9 +6,10 @@ import TwoFactorForm from './TwoFactorForm';
 
 interface LoginFormProps {
     onSwitchTab: () => void;
+    onForgotPassword: () => void;
 }
 
-const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab }) => {
+const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) => {
     const { login } = useAuth();
     const navigate = useNavigate();
 
@@ -69,6 +70,15 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab }) => {
             </label>
             <label className="field">
                 <span>Password</span>
+
+                <button 
+                    type="button" 
+                    className="link-button" 
+                    onClick={onForgotPassword}
+                    style={{ fontSize: '0.85rem' }}
+                >
+                    Forgot password?
+                </button>
                 <div className="password-row">
                     <input
                         className="form-input"
