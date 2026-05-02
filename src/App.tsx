@@ -3,11 +3,13 @@ import AuctionDetailPage from './modules/auction/pages/AuctionDetailPage';
 import CataloguePage from './modules/catalogue/pages/CataloguePage';
 import SellPage from './modules/catalogue/pages/SellPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
-import LoginPage from './modules/auth/pages/LoginPage';
+import AuthPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
+import ProfileGuard from './modules/auth/components/ProfileGuard';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
 import './App.css';
+import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
 
 const Navbar = () => {
     const { user, logout } = useAuth();
@@ -64,14 +66,17 @@ function App() {
                 <div className="app-shell">
                     <Navbar />
                     <main className="app-main">
-                        <Routes>
-                            <Route path="/" element={<CataloguePage />} />
-                            <Route path="/login" element={<LoginPage />} />
-                            <Route path="/profile" element={<ProfilePage />} />
-                            <Route path="/auctions/:id" element={<AuctionDetailPage />} />
-                            <Route path="/sell" element={<SellPage />} />
-                            <Route path="/wallet" element={<WalletPage />} />
-                        </Routes>
+                        <ProfileGuard>
+                            <Routes>
+                                <Route path="/" element={<CataloguePage />} />
+                                <Route path="/login" element={<AuthPage />} />
+                                <Route path="/profile" element={<ProfilePage />} />
+                                <Route path="/auctions/:id" element={<AuctionDetailPage />} />
+                                <Route path="/sell" element={<SellPage />} />
+                                <Route path="/wallet" element={<WalletPage />} />
+                                <Route path="/verify-email" element={<VerifyEmailPage />} />
+                            </Routes>
+                        </ProfileGuard>
                     </main>
                 </div>
             </Router>
