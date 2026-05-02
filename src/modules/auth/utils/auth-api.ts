@@ -73,3 +73,18 @@ export const requestRegistration = async (email: string, password: string, role:
     const errData = await response.json().catch(() => ({})) as { message?: string };
     return { kind: 'error', message: errData.message ?? `Registration failed: HTTP ${response.status}` };
 };
+
+export const requestEmailVerification = async (token: string): Promise<{ kind: 'success' } | { kind: 'error'; message: string }> => {
+    const response = await fetch(apiUrl('/api/v1/auth/verify-email'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+    });
+
+    if (response.ok) {
+        return { kind: 'success' };
+    }
+
+    const errData = await response.json().catch(() => ({})) as { message?: string };
+    return { kind: 'error', message: errData.message ?? 'Verification failed. The link may be invalid or expired.' };
+};
