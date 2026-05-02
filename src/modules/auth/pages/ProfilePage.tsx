@@ -20,32 +20,26 @@ interface UserProfileResponse {
 }
 
 const ProfilePage: React.FC = () => {
-    const { user } = useAuth();
+    const { user, logout } = useAuth() as any;
     const authenticatedFetch = useAuthenticatedFetch();
     const [sessions, setSessions] = useState<Session[]>([]);
     const [profileLoading, setProfileLoading] = useState(true);
     const [profileSaving, setProfileSaving] = useState(false);
-    
-    // State tambahan untuk mode edit
     const [isEditing, setIsEditing] = useState(false);
-    
     const [displayName, setDisplayName] = useState('');
     const [avatarUrl, setAvatarUrl] = useState('');
     const [shippingAddress, setShippingAddress] = useState('');
-    
-    // State untuk menyimpan data original agar bisa di-cancel
-    const [originalProfile, setOriginalProfile] = useState({
+        const [originalProfile, setOriginalProfile] = useState({
         displayName: '',
         avatarUrl: '',
         shippingAddress: ''
     });
-
     const [twoFactorSecret, setTwoFactorSecret] = useState<string | null>(null);
     const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
     const [twoFactorCode, setTwoFactorCode] = useState('');
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-
+    const [sessionToRevoke, setSessionToRevoke] = useState<Session | null>(null);
     const isProfileComplete = Boolean(displayName.trim()) && Boolean(shippingAddress.trim());
 
     useEffect(() => {
@@ -154,7 +148,6 @@ const ProfilePage: React.FC = () => {
             setAvatarUrl(updatedAvatar);
             setShippingAddress(updatedAddress);
             
-            // Perbarui data original setelah sukses menyimpan
             setOriginalProfile({
                 displayName: updatedName,
                 avatarUrl: updatedAvatar,
@@ -162,7 +155,7 @@ const ProfilePage: React.FC = () => {
             });
             
             setMessage('Profile updated successfully.');
-            setIsEditing(false); // Tutup mode edit setelah berhasil
+            setIsEditing(false);
         } catch (err: unknown) {
             setError('Failed to update profile.');
             console.error(err);
@@ -172,7 +165,6 @@ const ProfilePage: React.FC = () => {
     };
 
     const handleCancelEdit = () => {
-        // Kembalikan input ke data semula
         setDisplayName(originalProfile.displayName);
         setAvatarUrl(originalProfile.avatarUrl);
         setShippingAddress(originalProfile.shippingAddress);
@@ -213,16 +205,41 @@ const ProfilePage: React.FC = () => {
         setTwoFactorCode('');
     };
 
-    const revokeSession = async (tokenId: string) => {
+const executeRevokeSession = async () => {
+        if (!sessionToRevoke) return;
         setError(null);
-        const response = await authenticatedFetch(gatewayUrl(`/api/v1/auth/sessions/${tokenId}`), {
-            method: 'DELETE',
-        });
-        if (!response.ok) {
-            setError(await readApiError(response, 'Session revocation failed'));
-            return;
+        setMessage(null);
+
+        try {
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/auth/sessions/${sessionToRevoke.tokenId}`), {
+                method: 'DELETE',
+            });
+            
+            if (!response.ok) {
+                setError(await readApiError(response, 'Session revocation failed'));
+                setSessionToRevoke(null);
+                return;
+            }
+
+            const remainingSessions = sessions.filter((session) => session.tokenId !== sessionToRevoke.tokenId);
+            setSessions(remainingSessions);
+            setSessionToRevoke(null);
+            
+            if (remainingSessions.length === 0) {
+                if (typeof logout === 'function') {
+                    logout();
+                } else {
+                    localStorage.removeItem('token');
+                    sessionStorage.clear();
+                    window.location.href = '/auth';
+                }
+            } else {
+                setMessage('Session successfully revoked.');
+            }
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to revoke session.');
+            setSessionToRevoke(null);
         }
-        setSessions((current) => current.filter((session) => session.tokenId !== tokenId));
     };
 
     if (!user) {
@@ -339,12 +356,48 @@ const ProfilePage: React.FC = () => {
                     <div key={session.tokenId} className="transaction-item">
                         <span>{session.email}</span>
                         <span>{new Date(session.expiresAt).toLocaleString()}</span>
-                        <button className="secondary-button" type="button" onClick={() => revokeSession(session.tokenId)}>
+                        <button 
+                            className="secondary-button" 
+                            type="button" 
+                            onClick={() => setSessionToRevoke(session)}
+                        >
                             Revoke
                         </button>
                     </div>
                 )) : <div className="empty-state">No active sessions found.</div>}
             </div>
+
+            {/* Modal Konfirmasi Revoke Session */}
+            {sessionToRevoke && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', zIndex: 1000
+                }}>
+                    <div className="panel section-stack" style={{ background: 'white', padding: '24px', borderRadius: '8px', maxWidth: '400px', width: '90%', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                        <h3 style={{ marginTop: 0 }}>Revoke Session</h3>
+                        <p>Are you sure you want to revoke the session expiring at <strong>{new Date(sessionToRevoke.expiresAt).toLocaleString()}</strong>?</p>
+                        
+                        <div className="toast-error" style={{ margin: '12px 0', padding: '10px', fontSize: '0.9em' }}>
+                            <strong>Warning:</strong> If you revoke your currently active session, you will be logged out immediately.
+                        </div>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                            <button className="secondary-button" onClick={() => setSessionToRevoke(null)}>
+                                Cancel
+                            </button>
+                            <button 
+                                className="primary-button" 
+                                style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }} 
+                                onClick={executeRevokeSession}
+                            >
+                                Yes, Revoke
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };
