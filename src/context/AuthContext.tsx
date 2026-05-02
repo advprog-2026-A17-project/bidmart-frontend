@@ -7,11 +7,26 @@ const API_PATH_PREFIX = '/api/v1/';
 const trustedApiPath = (input: RequestInfo | URL): string => {
     const rawUrl = input instanceof Request ? input.url : input.toString();
     const parsedUrl = new URL(rawUrl, globalThis.location.origin);
-    const sameOrigin = parsedUrl.origin === globalThis.location.origin;
-    if (!sameOrigin || !parsedUrl.pathname.startsWith(API_PATH_PREFIX)) {
-        throw new Error('Only same-origin API Gateway requests are allowed');
+    
+    // Get the expected backend origin from your existing apiUrl config
+    const expectedBackendOrigin = new URL(apiUrl('/'), globalThis.location.origin).origin;
+
+    const isSameOrigin = parsedUrl.origin === globalThis.location.origin;
+    const isBackendOrigin = parsedUrl.origin === expectedBackendOrigin;
+
+    // Check if the request is going to either the frontend itself OR the API Gateway
+    if (!(isSameOrigin || isBackendOrigin) || !parsedUrl.pathname.startsWith(API_PATH_PREFIX)) {
+        throw new Error('Only trusted API Gateway requests are allowed');
     }
-    return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+
+    // If the URL is relative (same origin) but starts with /api/v1, 
+    // we force it to use the backend origin so it hits port 8000.
+    if (isSameOrigin && parsedUrl.pathname.startsWith(API_PATH_PREFIX)) {
+        return new URL(parsedUrl.pathname + parsedUrl.search, expectedBackendOrigin).toString();
+    }
+    
+    // Return the full URL so cross-origin requests actually reach port 8000
+    return parsedUrl.toString();
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
