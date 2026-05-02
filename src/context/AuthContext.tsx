@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { AuthContext, type AuthLoginResult, type AuthUser } from './auth-context';
 import { apiUrl } from '../config/api';
 
@@ -8,31 +8,45 @@ const trustedApiPath = (input: RequestInfo | URL): string => {
     const rawUrl = input instanceof Request ? input.url : input.toString();
     const parsedUrl = new URL(rawUrl, globalThis.location.origin);
     
-    // Get the expected backend origin from your existing apiUrl config
     const expectedBackendOrigin = new URL(apiUrl('/'), globalThis.location.origin).origin;
 
     const isSameOrigin = parsedUrl.origin === globalThis.location.origin;
     const isBackendOrigin = parsedUrl.origin === expectedBackendOrigin;
 
-    // Check if the request is going to either the frontend itself OR the API Gateway
     if (!(isSameOrigin || isBackendOrigin) || !parsedUrl.pathname.startsWith(API_PATH_PREFIX)) {
         throw new Error('Only trusted API Gateway requests are allowed');
     }
 
-    // If the URL is relative (same origin) but starts with /api/v1, 
-    // we force it to use the backend origin so it hits port 8000.
     if (isSameOrigin && parsedUrl.pathname.startsWith(API_PATH_PREFIX)) {
         return new URL(parsedUrl.pathname + parsedUrl.search, expectedBackendOrigin).toString();
     }
     
-    // Return the full URL so cross-origin requests actually reach port 8000
     return parsedUrl.toString();
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<AuthUser | null>(null);
-    const [accessToken, setAccessToken] = useState<string | null>(null);
-    const [refreshToken, setRefreshToken] = useState<string | null>(null);
+    const [user, setUser] = useState<AuthUser | null>(() => {
+        const saved = localStorage.getItem('auth_user');
+        return saved ? JSON.parse(saved) : null;
+    });
+    const [accessToken, setAccessToken] = useState<string | null>(() => {
+        return localStorage.getItem('access_token');
+    });
+    const [refreshToken, setRefreshToken] = useState<string | null>(() => {
+        return localStorage.getItem('refresh_token');
+    });
+
+    useEffect(() => {
+        if (user) {
+            localStorage.setItem('auth_user', JSON.stringify(user));
+            localStorage.setItem('access_token', accessToken || '');
+            localStorage.setItem('refresh_token', refreshToken || '');
+        } else {
+            localStorage.removeItem('auth_user');
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+        }
+    }, [user, accessToken, refreshToken]);
 
     const login = useCallback((payload: AuthLoginResult) => {
         setUser(payload.user);
@@ -40,11 +54,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRefreshToken(payload.refreshToken);
     }, []);
 
-    const logout = useCallback(() => {
+    const logout = useCallback(async () => {
+        if (refreshToken) {
+            try {
+                // Invalidate session on the backend before clearing local state
+                await fetch(apiUrl('/api/v1/auth/logout'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken }),
+                });
+            } catch (error) {
+                console.error('Failed to invalidate session on the backend', error);
+            }
+        }
+        
         setUser(null);
         setAccessToken(null);
         setRefreshToken(null);
-    }, []);
+    }, [refreshToken]);
 
     const refreshAccessToken = useCallback(async (): Promise<string | null> => {
         if (!refreshToken) {
