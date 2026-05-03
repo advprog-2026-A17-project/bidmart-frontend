@@ -29,7 +29,7 @@ const formatSessionDate = (dateString: string | undefined | null) => {
 };
 
 const ProfilePage: React.FC = () => {
-    const { user, logout } = useAuth() as any;
+    const { user, logout } = useAuth() as { user: { email: string } | null; logout: () => void };
     const authenticatedFetch = useAuthenticatedFetch();
     const [sessions, setSessions] = useState<Session[]>([]);
     const [profileLoading, setProfileLoading] = useState(true);

@@ -18,10 +18,11 @@ export const useWebSocket = () => {
     const maxReconnectAttemptsRef = useRef(5);
     const [isConnected, setIsConnected] = useState(false);
 
+    const attemptReconnectRef = useRef<() => void>(() => {});
+
     const connect = useCallback(() => {
         return new Promise<void>((resolve, reject) => {
             try {
-                // Use apiUrl('/ws') to get the correct path via Gateway or Nginx
                 const socketUrl = apiUrl('/ws');
                 const socket = new SockJS(socketUrl);
 
@@ -43,7 +44,8 @@ export const useWebSocket = () => {
                     onWebSocketClose: () => {
                         console.warn('[WebSocket] WebSocket closed');
                         setIsConnected(false);
-                        attemptReconnect();
+                        // Invoke via ref to avoid circular dependency
+                        attemptReconnectRef.current(); 
                     },
                 });
 
@@ -65,29 +67,32 @@ export const useWebSocket = () => {
         const delay = Math.pow(2, reconnectAttemptsRef.current) * 1000;
         reconnectAttemptsRef.current += 1;
 
-        console.log(`[WebSocket] Attempting reconnect in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttemptsRef.current})`);
-        
+        console.log(`[WebSocket] Attempting reconnect in ${delay}ms`);
+          
         setTimeout(() => {
             connect().catch(err => console.error('[WebSocket] Reconnect failed:', err));
         }, delay);
     }, [connect]);
 
-    const subscribe = useCallback((destination: string, callback: (message: any) => void) => {
+    useEffect(() => {
+        attemptReconnectRef.current = attemptReconnect;
+    }, [attemptReconnect]);
+
+    const subscribe = useCallback((destination: string, callback: (message: unknown) => void) => {
         if (!clientRef.current?.connected) {
             console.warn('[WebSocket] Not connected, cannot subscribe to:', destination);
             return;
         }
 
-        // Unsubscribe from previous if exists
         if (subscriptionsRef.current.has(destination)) {
             subscriptionsRef.current.get(destination)?.unsubscribe();
         }
 
-        const subscription = clientRef.current.subscribe(destination, (message: any) => {
+        const subscription = clientRef.current.subscribe(destination, (message: { body: string }) => {
             try {
                 const payload = JSON.parse(message.body);
                 callback(payload);
-            } catch (e) {
+            } catch { // <-- Removed 'e'
                 callback(message.body);
             }
         });
@@ -108,12 +113,14 @@ export const useWebSocket = () => {
     useEffect(() => {
         connect().catch(err => console.error('[WebSocket] Initial connection failed:', err));
 
+        // Capture the ref value to avoid stale closure warnings
+        const currentSubscriptions = subscriptionsRef.current;
+
         return () => {
             console.log('[WebSocket] Deactivating client...');
-            // Clean up subscriptions
-            subscriptionsRef.current.forEach(sub => sub.unsubscribe());
-            subscriptionsRef.current.clear();
-            
+            currentSubscriptions.forEach(sub => sub.unsubscribe());
+            currentSubscriptions.clear();
+             
             if (clientRef.current?.active) {
                 clientRef.current.deactivate();
             }
