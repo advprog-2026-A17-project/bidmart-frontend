@@ -15,8 +15,10 @@ const VerifyEmailPage: React.FC = () => {
 
     useEffect(() => {
         if (!token) {
-            setStatus('error');
-            setErrorMessage('No verification token found in the URL.');
+            setTimeout(() => {
+                setStatus('error');
+                setErrorMessage('No verification token found in the URL.');
+            }, 0);
             return;
         }
 

@@ -8,25 +8,29 @@
     "build": "tsc -b && vite build",
     "test": "node --test *.contract.test.mjs",
     "lint": "eslint .",
-    "test": "node --test *.contract.test.mjs",
     "preview": "vite preview",
     "start": "serve -s dist -l ${PORT:-4173}",
     "heroku-postbuild": "npm run build"
   },
   "dependencies": {
+    "@stomp/stompjs": "^7.3.0",
     "@tanstack/react-query": "^5.90.21",
     "@vitejs/plugin-react": "^5.1.4",
     "axios": "^1.13.5",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",
-    "serve": "^14.2.6"
+    "serve": "^14.2.6",
+    "sockjs-client": "^1.6.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
+    "@types/qrcode.react": "^1.0.5",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/sockjs-client": "^1.5.4",
     "@vitejs/plugin-react-swc": "^4.2.2",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
