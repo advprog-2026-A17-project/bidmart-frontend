@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { AuthContext, type AuthLoginResult, type AuthUser } from './auth-context';
 import { apiUrl } from '../config/api';
+import { useSessionRevocation } from '../hooks/useSessionRevocation';
+import { getPersistentItem, setPersistentItem, removePersistentItem } from '../utils/storage';
 
 const API_PATH_PREFIX = '/api/v1/';
 
@@ -24,27 +26,55 @@ const trustedApiPath = (input: RequestInfo | URL): string => {
     return parsedUrl.toString();
 };
 
+const extractTokenIdFromJwt = (token: string | null): string | null => {
+    if (!token) return null;
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+
+        const base64Url = parts[1];
+        let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+
+        while (base64.length % 4 !== 0) {
+            base64 += '=';
+        }
+
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+
+        const payload = JSON.parse(jsonPayload);
+        return payload.tokenId || null;
+    } catch {
+        return null;
+    }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser | null>(() => {
-        const saved = localStorage.getItem('auth_user');
+        const saved = getPersistentItem('auth_user');
         return saved ? JSON.parse(saved) : null;
     });
     const [accessToken, setAccessToken] = useState<string | null>(() => {
-        return localStorage.getItem('access_token');
+        return getPersistentItem('access_token');
     });
     const [refreshToken, setRefreshToken] = useState<string | null>(() => {
-        return localStorage.getItem('refresh_token');
+        return getPersistentItem('refresh_token');
+    });
+    const [tokenId, setTokenId] = useState<string | null>(() => {
+        const token = getPersistentItem('access_token');
+        return extractTokenIdFromJwt(token);
     });
 
     useEffect(() => {
         if (user) {
-            localStorage.setItem('auth_user', JSON.stringify(user));
-            localStorage.setItem('access_token', accessToken || '');
-            localStorage.setItem('refresh_token', refreshToken || '');
+            setPersistentItem('auth_user', JSON.stringify(user));
+            setPersistentItem('access_token', accessToken || '');
+            setPersistentItem('refresh_token', refreshToken || '');
         } else {
-            localStorage.removeItem('auth_user');
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
+            removePersistentItem('auth_user');
+            removePersistentItem('access_token');
+            removePersistentItem('refresh_token');
         }
     }, [user, accessToken, refreshToken]);
 
@@ -52,12 +82,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(payload.user);
         setAccessToken(payload.accessToken);
         setRefreshToken(payload.refreshToken);
+        setTokenId(extractTokenIdFromJwt(payload.accessToken));
     }, []);
 
     const logout = useCallback(async () => {
         if (refreshToken) {
             try {
-                // Invalidate session on the backend before clearing local state
                 await fetch(apiUrl('/api/v1/auth/logout'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -68,10 +98,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         }
         
+        removePersistentItem('auth_user');
+        removePersistentItem('access_token');
+        removePersistentItem('refresh_token');
+
         setUser(null);
         setAccessToken(null);
         setRefreshToken(null);
+        setTokenId(null);
     }, [refreshToken]);
+
+    useSessionRevocation(user, tokenId, logout);
 
     const refreshAccessToken = useCallback(async (): Promise<string | null> => {
         if (!refreshToken) {
@@ -120,11 +157,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         accessToken,
         refreshToken,
+        tokenId,
         login,
         logout,
         refreshAccessToken,
         authenticatedFetch,
-    }), [accessToken, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, user]);
+    }), [accessToken, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, tokenId, user]);
 
     return (
         <AuthContext.Provider value={contextValue}>

@@ -2,25 +2,34 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface Session {
     tokenId: string;
     email: string;
     revoked: boolean;
-    expiresAt: string;
+    createdAt: string;
+    deviceInfo: string | null;
 }
 
 interface UserProfileResponse {
     id: string;
     email: string;
     enabled: boolean;
+    twoFactorEnabled: boolean;
     displayName: string | null;
     avatarUrl: string | null;
     shippingAddress: string | null;
 }
 
+const formatSessionDate = (dateString: string | undefined | null) => {
+    if (!dateString) return 'Unknown Date';
+    const date = new Date(dateString);
+    return isNaN(date.getTime()) ? 'Invalid Format' : date.toLocaleString();
+};
+
 const ProfilePage: React.FC = () => {
-    const { user, logout } = useAuth() as any;
+    const { user, logout } = useAuth() as { user: { email: string } | null; logout: () => void };
     const authenticatedFetch = useAuthenticatedFetch();
     const [sessions, setSessions] = useState<Session[]>([]);
     const [profileLoading, setProfileLoading] = useState(true);
@@ -29,14 +38,20 @@ const ProfilePage: React.FC = () => {
     const [displayName, setDisplayName] = useState('');
     const [avatarUrl, setAvatarUrl] = useState('');
     const [shippingAddress, setShippingAddress] = useState('');
-        const [originalProfile, setOriginalProfile] = useState({
+    const [originalProfile, setOriginalProfile] = useState({
         displayName: '',
         avatarUrl: '',
         shippingAddress: ''
     });
+    
+    // 2FA States
+    const [isTwoFactorEnabled, setIsTwoFactorEnabled] = useState(false);
     const [twoFactorSecret, setTwoFactorSecret] = useState<string | null>(null);
     const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
     const [twoFactorCode, setTwoFactorCode] = useState('');
+    const [isDisabling2FA, setIsDisabling2FA] = useState(false);
+    const [disableCode, setDisableCode] = useState('');
+
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [sessionToRevoke, setSessionToRevoke] = useState<Session | null>(null);
@@ -66,8 +81,8 @@ const ProfilePage: React.FC = () => {
                 setDisplayName(fetchedName);
                 setAvatarUrl(fetchedAvatar);
                 setShippingAddress(fetchedAddress);
+                setIsTwoFactorEnabled(payload.twoFactorEnabled === true);
                 
-                // Simpan salinan data awal
                 setOriginalProfile({
                     displayName: fetchedName,
                     avatarUrl: fetchedAvatar,
@@ -147,6 +162,7 @@ const ProfilePage: React.FC = () => {
             setDisplayName(updatedName);
             setAvatarUrl(updatedAvatar);
             setShippingAddress(updatedAddress);
+            setIsTwoFactorEnabled(payload.twoFactorEnabled === true);
             
             setOriginalProfile({
                 displayName: updatedName,
@@ -175,6 +191,7 @@ const ProfilePage: React.FC = () => {
     const setupTwoFactor = async () => {
         if (!user) return;
         setError(null);
+        setMessage(null);
         const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/2fa/setup'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -198,14 +215,37 @@ const ProfilePage: React.FC = () => {
             body: JSON.stringify({ email: user.email, code: twoFactorCode }),
         });
         if (!response.ok) {
-            setError(await readApiError(response, '2FA verification failed'));
+            setError(await readApiError(response, '2FA verification failed. Please check the code and try again.'));
             return;
         }
-        setMessage('Two-factor authentication enabled.');
+        setMessage('Two-factor authentication enabled successfully.');
         setTwoFactorCode('');
+        setTwoFactorSecret(null);
+        setQrCodeUrl(null);
+        setIsTwoFactorEnabled(true);
     };
 
-const executeRevokeSession = async () => {
+    const disableTwoFactor = async () => {
+        if (!user) return;
+        setError(null);
+        const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/2fa/disable'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email, code: disableCode }),
+        });
+        
+        if (!response.ok) {
+            setError(await readApiError(response, 'Failed to disable 2FA. Please check the code and try again.'));
+            return;
+        }
+        
+        setMessage('Two-factor authentication has been disabled.');
+        setIsTwoFactorEnabled(false);
+        setIsDisabling2FA(false);
+        setDisableCode('');
+    };
+
+    const executeRevokeSession = async () => {
         if (!sessionToRevoke) return;
         setError(null);
         setMessage(null);
@@ -328,34 +368,143 @@ const executeRevokeSession = async () => {
 
             <div className="panel section-stack">
                 <h3>Two-Factor Authentication</h3>
-                <button className="primary-button" type="button" onClick={setupTwoFactor}>
-                    Set Up 2FA
-                </button>
-                {twoFactorSecret && (
-                    <div className="summary-box">
-                        <div>Secret: {twoFactorSecret}</div>
-                        <div>QR URL: {qrCodeUrl}</div>
-                        <label className="field">
-                            <span>Verification code</span>
-                            <input
-                                className="form-input"
-                                value={twoFactorCode}
-                                onChange={(event) => setTwoFactorCode(event.target.value)}
-                            />
-                        </label>
-                        <button className="primary-button" type="button" onClick={verifyTwoFactor}>
-                            Verify 2FA
-                        </button>
+                
+                {isTwoFactorEnabled ? (
+                    <div className="summary-box" style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <p style={{ color: '#15803d', fontWeight: 'bold', margin: 0 }}>
+                                Authenticator App is Active
+                            </p>
+                            <button 
+                                className="secondary-button" 
+                                type="button" 
+                                onClick={() => {
+                                    setIsDisabling2FA(!isDisabling2FA);
+                                    setDisableCode('');
+                                    setError(null);
+                                }}
+                                style={{ color: '#dc2626', borderColor: '#fca5a5', padding: '4px 8px', fontSize: '12px' }}
+                            >
+                                {isDisabling2FA ? 'Cancel' : 'Turn Off 2FA'}
+                            </button>
+                        </div>
+                        
+                        {isDisabling2FA ? (
+                            <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #bbf7d0' }}>
+                                <label className="field">
+                                    <span style={{ color: '#166534' }}>Enter 6-digit code to disable</span>
+                                    <input
+                                        className="form-input"
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="\d*"
+                                        maxLength={6}
+                                        placeholder="123456"
+                                        value={disableCode}
+                                        onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, ''))}
+                                        style={{ borderColor: '#bbf7d0' }}
+                                    />
+                                </label>
+                                <button 
+                                    className="primary-button" 
+                                    type="button" 
+                                    onClick={disableTwoFactor}
+                                    disabled={disableCode.length !== 6}
+                                    style={{ width: '100%', backgroundColor: '#dc2626', borderColor: '#dc2626', marginTop: '10px' }}
+                                >
+                                    Confirm Disable
+                                </button>
+                            </div>
+                        ) : (
+                            <p style={{ margin: 0, fontSize: '14px', color: '#166534' }}>
+                                Your account is currently protected with two-factor authentication.
+                            </p>
+                        )}
                     </div>
+                ) : (
+                    <>
+                        {!twoFactorSecret && (
+                            <button className="primary-button" type="button" onClick={setupTwoFactor}>
+                                Set Up 2FA
+                            </button>
+                        )}
+                        
+                        {twoFactorSecret && (
+                            <div className="summary-box" style={{ textAlign: 'center' }}>
+                                <p style={{ margin: '0 0 15px 0', fontSize: '14px', color: '#555' }}>
+                                    Scan this QR code with your authenticator app (e.g., Google Authenticator, Authy).
+                                </p>
+                                
+                                {qrCodeUrl ? (
+                                    <div style={{ padding: '15px', background: 'white', display: 'inline-block', borderRadius: '8px', marginBottom: '15px' }}>
+                                        <QRCodeSVG value={qrCodeUrl} size={200} />
+                                    </div>
+                                ) : (
+                                    <div>Loading QR Code...</div>
+                                )}
+
+                                <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#777' }}>
+                                    Or enter this secret manually: <br/><strong style={{ letterSpacing: '2px' }}>{twoFactorSecret}</strong>
+                                </p>
+
+                                <div style={{ textAlign: 'left' }}>
+                                    <label className="field">
+                                        <span>Verification code</span>
+                                        <input
+                                            className="form-input"
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="\d*"
+                                            maxLength={6}
+                                            autoComplete="one-time-code"
+                                            placeholder="123456"
+                                            value={twoFactorCode}
+                                            onChange={(event) => setTwoFactorCode(event.target.value.replace(/\D/g, ''))}
+                                        />
+                                    </label>
+                                    <button 
+                                        className="primary-button" 
+                                        type="button" 
+                                        onClick={verifyTwoFactor}
+                                        disabled={twoFactorCode.length !== 6}
+                                        style={{ width: '100%', marginTop: '10px' }}
+                                    >
+                                        Verify 2FA
+                                    </button>
+                                    <button 
+                                        className="secondary-button" 
+                                        type="button" 
+                                        onClick={() => {
+                                            setTwoFactorSecret(null);
+                                            setQrCodeUrl(null);
+                                            setTwoFactorCode('');
+                                            setError(null);
+                                        }}
+                                        style={{ width: '100%', marginTop: '10px' }}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
             <div className="panel">
                 <h3>Active Sessions</h3>
                 {sessions.length ? sessions.map((session) => (
-                    <div key={session.tokenId} className="transaction-item">
-                        <span>{session.email}</span>
-                        <span>{new Date(session.expiresAt).toLocaleString()}</span>
+                    <div key={session.tokenId} className="transaction-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 0', borderBottom: '1px solid #eee' }}>
+                        
+                        <div>
+                            <div style={{ fontWeight: 'bold', fontSize: '15px', color: '#222' }}>
+                                {session.deviceInfo || 'Unknown Device'}
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
+                                {session.email} <span style={{ margin: '0 6px', color: '#ccc' }}>•</span> Created: {formatSessionDate(session.createdAt)}
+                            </div>
+                        </div>
+
                         <button 
                             className="secondary-button" 
                             type="button" 
@@ -367,7 +516,6 @@ const executeRevokeSession = async () => {
                 )) : <div className="empty-state">No active sessions found.</div>}
             </div>
 
-            {/* Modal Konfirmasi Revoke Session */}
             {sessionToRevoke && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -376,7 +524,7 @@ const executeRevokeSession = async () => {
                 }}>
                     <div className="panel section-stack" style={{ background: 'white', padding: '24px', borderRadius: '8px', maxWidth: '400px', width: '90%', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
                         <h3 style={{ marginTop: 0 }}>Revoke Session</h3>
-                        <p>Are you sure you want to revoke the session expiring at <strong>{new Date(sessionToRevoke.expiresAt).toLocaleString()}</strong>?</p>
+                        <p>Are you sure you want to revoke the session created on <strong>{formatSessionDate(sessionToRevoke.createdAt)}</strong>?</p>
                         
                         <div className="toast-error" style={{ margin: '12px 0', padding: '10px', fontSize: '0.9em' }}>
                             <strong>Warning:</strong> If you revoke your currently active session, you will be logged out immediately.
