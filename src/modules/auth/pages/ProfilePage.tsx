@@ -7,7 +7,9 @@ interface Session {
     tokenId: string;
     email: string;
     revoked: boolean;
+    createdAt: string;
     expiresAt: string;
+    deviceInfo?: string;
 }
 
 interface UserProfileResponse {
@@ -29,7 +31,7 @@ const ProfilePage: React.FC = () => {
     const [displayName, setDisplayName] = useState('');
     const [avatarUrl, setAvatarUrl] = useState('');
     const [shippingAddress, setShippingAddress] = useState('');
-        const [originalProfile, setOriginalProfile] = useState({
+    const [originalProfile, setOriginalProfile] = useState({
         displayName: '',
         avatarUrl: '',
         shippingAddress: ''
@@ -67,7 +69,6 @@ const ProfilePage: React.FC = () => {
                 setAvatarUrl(fetchedAvatar);
                 setShippingAddress(fetchedAddress);
                 
-                // Simpan salinan data awal
                 setOriginalProfile({
                     displayName: fetchedName,
                     avatarUrl: fetchedAvatar,
@@ -205,7 +206,7 @@ const ProfilePage: React.FC = () => {
         setTwoFactorCode('');
     };
 
-const executeRevokeSession = async () => {
+    const executeRevokeSession = async () => {
         if (!sessionToRevoke) return;
         setError(null);
         setMessage(null);
@@ -353,9 +354,14 @@ const executeRevokeSession = async () => {
             <div className="panel">
                 <h3>Active Sessions</h3>
                 {sessions.length ? sessions.map((session) => (
-                    <div key={session.tokenId} className="transaction-item">
-                        <span>{session.email}</span>
-                        <span>{new Date(session.expiresAt).toLocaleString()}</span>
+                    <div key={session.tokenId} className="transaction-item" style={{ alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontWeight: 600 }}>{session.deviceInfo || 'Unknown Device'}</span>
+                            <span className="text-muted" style={{ fontSize: '0.9em' }}>{session.email}</span>
+                            <span style={{ fontSize: '0.85em', color: '#666', marginTop: '4px' }}>
+                                Created: {new Date(session.createdAt).toLocaleString()}
+                            </span>
+                        </div>
                         <button 
                             className="secondary-button" 
                             type="button" 
@@ -367,7 +373,6 @@ const executeRevokeSession = async () => {
                 )) : <div className="empty-state">No active sessions found.</div>}
             </div>
 
-            {/* Modal Konfirmasi Revoke Session */}
             {sessionToRevoke && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -376,7 +381,7 @@ const executeRevokeSession = async () => {
                 }}>
                     <div className="panel section-stack" style={{ background: 'white', padding: '24px', borderRadius: '8px', maxWidth: '400px', width: '90%', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
                         <h3 style={{ marginTop: 0 }}>Revoke Session</h3>
-                        <p>Are you sure you want to revoke the session expiring at <strong>{new Date(sessionToRevoke.expiresAt).toLocaleString()}</strong>?</p>
+                        <p>Are you sure you want to revoke the session created at <strong>{new Date(sessionToRevoke.createdAt).toLocaleString()}</strong>?</p>
                         
                         <div className="toast-error" style={{ margin: '12px 0', padding: '10px', fontSize: '0.9em' }}>
                             <strong>Warning:</strong> If you revoke your currently active session, you will be logged out immediately.

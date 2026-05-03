@@ -70,15 +70,6 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
             </label>
             <label className="field">
                 <span>Password</span>
-
-                <button 
-                    type="button" 
-                    className="link-button" 
-                    onClick={onForgotPassword}
-                    style={{ fontSize: '0.85rem' }}
-                >
-                    Forgot password?
-                </button>
                 <div className="password-row">
                     <input
                         className="form-input"
@@ -102,6 +93,15 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                     Register here
                 </button>
             </p>
+                
+            <button 
+                type="button" 
+                className="link-button" 
+                onClick={onForgotPassword}
+                style={{ fontSize: '0.85rem' }}
+            >
+                Forgot password?
+            </button>
         </form>
     );
 };
