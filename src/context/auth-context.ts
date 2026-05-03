@@ -19,6 +19,7 @@ export interface AuthContextType {
     user: AuthUser | null;
     accessToken: string | null;
     refreshToken: string | null;
+    tokenId: string | null;
     login: (payload: AuthLoginResult) => void;
     logout: () => void;
     refreshAccessToken: () => Promise<string | null>;
@@ -29,6 +30,7 @@ export const AuthContext = createContext<AuthContextType>({
     user: null,
     accessToken: null,
     refreshToken: null,
+    tokenId: null,
     login: () => {},
     logout: () => {},
     refreshAccessToken: async () => null,
