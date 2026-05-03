@@ -7,7 +7,7 @@ const read = (path) => readFileSync(path, 'utf-8');
 test('frontend auth and marketplace flows use real authenticated context', () => {
   const authContext = read('./src/context/auth-context.ts');
   const authProvider = read('./src/context/AuthContext.tsx');
-  const loginPage = read('./src/modules/auth/pages/LoginPage.tsx');
+  const loginPage = read('./src/modules/auth/components/LoginForm.tsx');
   const auctionDetail = read('./src/modules/auction/pages/AuctionDetailPage.tsx');
   const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
   const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
