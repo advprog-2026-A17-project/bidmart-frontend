@@ -23,7 +23,7 @@ export const useSessionRevocation = (
         const destination = `/topic/sessions/${tokenId}`;
         console.log('[SessionRevocation] Subscribing to:', destination);
 
-        const handleRevocation = (message: any) => {
+        const handleRevocation = (message: unknown) => {
             console.warn('[SessionRevocation] RECEIVED revocation event:', message);
             
             // Immediately logout the user
