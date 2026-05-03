@@ -7,33 +7,40 @@ export type LoginResponsePayload = AuthLoginResult | { challengeToken: string };
 export type LoginOutcome =
     | { kind: 'success'; payload: AuthLoginResult }
     | { kind: 'challenge'; token: string }
-    | { kind: 'error'; message: string };
+    | { kind: 'error'; message: string; code?: string };
 
 export type RegistrationOutcome =
     | { kind: 'success' }
-    | { kind: 'error'; message: string };
+    | { kind: 'error'; message: string; code?: string };
 
 export const isTwoFactorChallenge = (payload: LoginResponsePayload): payload is { challengeToken: string } =>
     'challengeToken' in payload;
 
-export const postJson = async <T,>(path: string, body: unknown): Promise<{ response: Response; payload: T | null }> => {
+export const postJson = async <T,>(path: string, body: unknown): Promise<{ response: Response; payload: T | null; error?: any }> => {
     const response = await fetch(apiUrl(path), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
     });
-    const payload = response.ok ? await response.json() as T : null;
-    return { response, payload };
+    
+    if (response.ok) {
+        const payload = await response.json() as T;
+        return { response, payload };
+    } else {
+        const error = await response.json().catch(() => ({}));
+        return { response, payload: null, error };
+    }
 };
 
 export const requestLogin = async (email: string, password: string): Promise<LoginOutcome> => {
-    const { response, payload } = await postJson<LoginResponsePayload>('/api/v1/auth/login', { email, password });
+    const { response, payload, error } = await postJson<LoginResponsePayload>('/api/v1/auth/login', { email, password });
 
-    if (response.status === 401) {
-        return { kind: 'error', message: 'Invalid email or password.' };
-    }
     if (!response.ok) {
-        return { kind: 'error', message: `Login failed: HTTP ${response.status}` };
+        return { 
+            kind: 'error', 
+            message: error?.message ?? `Login failed: HTTP ${response.status}`,
+            code: error?.error
+        };
     }
     if (!payload) {
         return { kind: 'error', message: 'Login failed: empty response.' };
@@ -60,18 +67,17 @@ export const requestTwoFactorLogin = async (challengeToken: string, code: string
 };
 
 export const requestRegistration = async (email: string, password: string, role: string): Promise<RegistrationOutcome> => {
-    const response = await fetch(apiUrl('/api/v1/auth/register'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role }),
-    });
+    const { response, error } = await postJson<unknown>('/api/v1/auth/register', { email, password, role });
 
     if (response.ok) {
         return { kind: 'success' };
     }
 
-    const errData = await response.json().catch(() => ({})) as { message?: string };
-    return { kind: 'error', message: errData.message ?? `Registration failed: HTTP ${response.status}` };
+    return { 
+        kind: 'error', 
+        message: error?.message ?? `Registration failed: HTTP ${response.status}`,
+        code: error?.error
+    };
 };
 
 export const requestEmailVerification = async (token: string): Promise<{ kind: 'success' } | { kind: 'error'; message: string }> => {

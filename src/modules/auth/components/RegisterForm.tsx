@@ -28,6 +28,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchTab }) => {
                 return;
             }
             setSuccess('Account created. Please verify your email before logging in.');
+            setEmail('');
             setPassword('');
             // Optionally, you can automatically switch back to login here after a delay
         } catch (err: unknown) {

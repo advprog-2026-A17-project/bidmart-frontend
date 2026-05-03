@@ -34,41 +34,34 @@ const trustedApiPath = (input: RequestInfo | URL): string => {
 /**
  * Extract tokenId from JWT access token.
  * Format: header.payload.signature where payload is base64url encoded JSON.
- /**
-  * Extract tokenId from JWT access token.
-  * Format: header.payload.signature where payload is base64url encoded JSON.
-  */
- const extractTokenIdFromJwt = (token: string | null): string | null => {
-     if (!token) return null;
-     try {
-         const parts = token.split('.');
-         if (parts.length !== 3) return null;
+ */
+const extractTokenIdFromJwt = (token: string | null): string | null => {
+    if (!token) return null;
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
 
-         // Fix base64url to standard base64 before decoding
-         const base64Url = parts[1];
-         let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const base64Url = parts[1];
+        let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
 
-         // Add padding if necessary
-         while (base64.length % 4 !== 0) {
-             base64 += '=';
-         }
+        while (base64.length % 4 !== 0) {
+            base64 += '=';
+        }
 
-         const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-             return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-         }).join(''));
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
 
-         const payload = JSON.parse(jsonPayload);
-         console.log('[AuthContext] Extracted tokenId:', payload.tokenId);
-         return payload.tokenId || null;
-     } catch (error) {
-         console.error('Failed to extract tokenId from JWT:', error);
-         return null;
-     }
- };
+        const payload = JSON.parse(jsonPayload);
+        console.log('[AuthContext] Extracted tokenId:', payload.tokenId);
+        return payload.tokenId || null;
+    } catch (error) {
+        console.error('Failed to extract tokenId from JWT:', error);
+        return null;
+    }
+};
 
- export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-     // ... rest of state initialization ...
-
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser | null>(() => {
         const saved = localStorage.getItem('auth_user');
         return saved ? JSON.parse(saved) : null;

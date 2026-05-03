@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
-import { requestLogin } from '../utils/auth-api';
+import { requestLogin, requestRegistration } from '../utils/auth-api';
 import TwoFactorForm from './TwoFactorForm';
+import UnregisteredEmailModal from './UnregisteredEmailModal';
 
 interface LoginFormProps {
     onSwitchTab: () => void;
@@ -17,8 +18,32 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
     const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(null);
+    const [showUnregisteredModal, setShowUnregisteredModal] = useState(false);
+
+    const handleDirectRegister = async (role: string) => {
+        setLoading(true);
+        setError(null);
+        setSuccess(null);
+        try {
+            const result = await requestRegistration(email, password, role);
+            if (result.kind === 'error') {
+                setError(result.message);
+                setShowUnregisteredModal(false);
+                return;
+            }
+            setSuccess('Account created. Please verify your email before logging in.');
+            setShowUnregisteredModal(false);
+        } catch (err: unknown) {
+            setError('Failed to connect to Auth Service via API Gateway.');
+            setShowUnregisteredModal(false);
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,7 +52,11 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
         try {
             const result = await requestLogin(email, password);
             if (result.kind === 'error') {
-                setError(result.message);
+                if (result.code === 'USER_NOT_FOUND') {
+                    setShowUnregisteredModal(true);
+                } else {
+                    setError(result.message);
+                }
                 return;
             }
             if (result.kind === 'challenge') {
@@ -54,8 +83,18 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
     }
 
     return (
-        <form onSubmit={handleLogin} className="auth-form">
+        <>
+            {showUnregisteredModal && (
+                <UnregisteredEmailModal
+                    email={email}
+                    onClose={() => setShowUnregisteredModal(false)}
+                    onRegister={handleDirectRegister}
+                    loading={loading}
+                />
+            )}
+            <form onSubmit={handleLogin} className="auth-form">
             {error && <div className="toast-error">{error}</div>}
+            {success && <div className="toast-success">{success}</div>}
             
             <label className="field">
                 <span>Email Address</span>
@@ -103,6 +142,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                 Forgot password?
             </button>
         </form>
+        </>
     );
 };
 
