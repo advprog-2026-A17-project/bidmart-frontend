@@ -5,7 +5,7 @@ import { requestLogin } from '../utils/auth-api';
 import TwoFactorForm from './TwoFactorForm';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const LOGIN_VERIFY_ENDPOINT = '/api/v1/auth/2fa/login-verify';
+export const LOGIN_VERIFY_ENDPOINT = '/api/v1/auth/2fa/login-verify';
 
 interface LoginFormProps {
     onSwitchTab: () => void;
