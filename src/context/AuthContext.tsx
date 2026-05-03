@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { AuthContext, type AuthLoginResult, type AuthUser } from './auth-context';
 import { apiUrl } from '../config/api';
 import { useSessionRevocation } from '../hooks/useSessionRevocation';
+import { getPersistentItem, setPersistentItem, removePersistentItem } from '../utils/storage';
 
 const API_PATH_PREFIX = '/api/v1/';
 
@@ -25,21 +26,15 @@ const trustedApiPath = (input: RequestInfo | URL): string => {
     return parsedUrl.toString();
 };
 
-/**
- * Extract tokenId from JWT access token.
- * Format: header.payload.signature where payload is base64url encoded JSON.
- */
 const extractTokenIdFromJwt = (token: string | null): string | null => {
     if (!token) return null;
     try {
         const parts = token.split('.');
         if (parts.length !== 3) return null;
 
-        // Fix base64url to standard base64 before decoding
         const base64Url = parts[1];
         let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
 
-        // Add padding if necessary
         while (base64.length % 4 !== 0) {
             base64 += '=';
         }
@@ -49,39 +44,37 @@ const extractTokenIdFromJwt = (token: string | null): string | null => {
         }).join(''));
 
         const payload = JSON.parse(jsonPayload);
-        console.log('[AuthContext] Extracted tokenId:', payload.tokenId);
         return payload.tokenId || null;
-    } catch (error) {
-        console.error('Failed to extract tokenId from JWT:', error);
+    } catch {
         return null;
     }
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser | null>(() => {
-        const saved = localStorage.getItem('auth_user');
+        const saved = getPersistentItem('auth_user');
         return saved ? JSON.parse(saved) : null;
     });
     const [accessToken, setAccessToken] = useState<string | null>(() => {
-        return localStorage.getItem('access_token');
+        return getPersistentItem('access_token');
     });
     const [refreshToken, setRefreshToken] = useState<string | null>(() => {
-        return localStorage.getItem('refresh_token');
+        return getPersistentItem('refresh_token');
     });
     const [tokenId, setTokenId] = useState<string | null>(() => {
-        const token = localStorage.getItem('access_token');
+        const token = getPersistentItem('access_token');
         return extractTokenIdFromJwt(token);
     });
 
     useEffect(() => {
         if (user) {
-            localStorage.setItem('auth_user', JSON.stringify(user));
-            localStorage.setItem('access_token', accessToken || '');
-            localStorage.setItem('refresh_token', refreshToken || '');
+            setPersistentItem('auth_user', JSON.stringify(user));
+            setPersistentItem('access_token', accessToken || '');
+            setPersistentItem('refresh_token', refreshToken || '');
         } else {
-            localStorage.removeItem('auth_user');
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
+            removePersistentItem('auth_user');
+            removePersistentItem('access_token');
+            removePersistentItem('refresh_token');
         }
     }, [user, accessToken, refreshToken]);
 
@@ -95,7 +88,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const logout = useCallback(async () => {
         if (refreshToken) {
             try {
-                // Invalidate session on the backend before clearing local state
                 await fetch(apiUrl('/api/v1/auth/logout'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -106,11 +98,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         }
         
-        // Synchronously clear localStorage to prevent race conditions during redirect
-        console.log('[AuthContext] Performing logout, clearing storage');
-        localStorage.removeItem('auth_user');
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+        removePersistentItem('auth_user');
+        removePersistentItem('access_token');
+        removePersistentItem('refresh_token');
 
         setUser(null);
         setAccessToken(null);
@@ -118,7 +108,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTokenId(null);
     }, [refreshToken]);
 
-    // Initialize session revocation listener
     useSessionRevocation(user, tokenId, logout);
 
     const refreshAccessToken = useCallback(async (): Promise<string | null> => {
