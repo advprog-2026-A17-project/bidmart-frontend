@@ -29,6 +29,8 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(loginPage, /twoFactorChallenge/);
   assert.match(loginPage, /\/api\/v1\/auth\/2fa\/login-verify/);
   assert.match(loginPage, /field-footer/);
+  assert.match(loginPage, /auth-primary-action/);
+  assert.match(appStyles, /auth-primary-action/);
   assert.match(loginPage, /GoogleLoginButton/);
   assert.match(authApi, /\/api\/v1\/auth\/oauth\/login/);
   assert.match(appStyles, /oauth-divider/);
