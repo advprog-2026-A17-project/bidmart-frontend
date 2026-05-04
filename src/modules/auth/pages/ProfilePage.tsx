@@ -43,6 +43,11 @@ const ProfilePage: React.FC = () => {
         avatarUrl: '',
         shippingAddress: ''
     });
+    const [password, setPassword] = useState('');
+    const [passwordConfirm, setPasswordConfirm] = useState('');
+    const [passwordSaving, setPasswordSaving] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
     
     // 2FA States
     const [isTwoFactorEnabled, setIsTwoFactorEnabled] = useState(false);
@@ -186,6 +191,49 @@ const ProfilePage: React.FC = () => {
         setShippingAddress(originalProfile.shippingAddress);
         setError(null);
         setIsEditing(false);
+    };
+
+    const handlePasswordSave = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!user) return;
+
+        const trimmedPassword = password.trim();
+        if (!trimmedPassword) {
+            setError('Password is required.');
+            return;
+        }
+        if (trimmedPassword !== passwordConfirm) {
+            setError('Passwords do not match.');
+            return;
+        }
+
+        setPasswordSaving(true);
+        setError(null);
+        setMessage(null);
+
+        try {
+            const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/password'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: user.email, password: trimmedPassword }),
+            });
+
+            if (!response.ok) {
+                setError(await readApiError(response, 'Password update failed'));
+                return;
+            }
+
+            setMessage('Password updated successfully.');
+            setPassword('');
+            setPasswordConfirm('');
+            setShowPassword(false);
+            setShowPasswordConfirm(false);
+        } catch (err: unknown) {
+            setError('Failed to update password.');
+            console.error(err);
+        } finally {
+            setPasswordSaving(false);
+        }
     };
 
     const setupTwoFactor = async () => {
@@ -364,6 +412,58 @@ const ProfilePage: React.FC = () => {
                         </div>
                     </form>
                 )}
+            </div>
+
+            <div className="panel section-stack">
+                <h3>Set Password</h3>
+                <p className="text-muted">
+                    Add a password so you can sign in without Google OAuth.
+                </p>
+                <form onSubmit={handlePasswordSave} className="section-stack">
+                    <label className="field">
+                        <span>New password</span>
+                        <div className="password-row">
+                            <input
+                                className="form-input"
+                                type={showPassword ? 'text' : 'password'}
+                                placeholder="••••••••"
+                                value={password}
+                                onChange={(event) => setPassword(event.target.value)}
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => setShowPassword((value) => !value)}
+                            >
+                                {showPassword ? 'Hide' : 'Show'}
+                            </button>
+                        </div>
+                    </label>
+                    <label className="field">
+                        <span>Confirm password</span>
+                        <div className="password-row">
+                            <input
+                                className="form-input"
+                                type={showPasswordConfirm ? 'text' : 'password'}
+                                placeholder="••••••••"
+                                value={passwordConfirm}
+                                onChange={(event) => setPasswordConfirm(event.target.value)}
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => setShowPasswordConfirm((value) => !value)}
+                            >
+                                {showPasswordConfirm ? 'Hide' : 'Show'}
+                            </button>
+                        </div>
+                    </label>
+                    <button className="primary-button" type="submit" disabled={passwordSaving}>
+                        {passwordSaving ? 'Saving...' : 'Save Password'}
+                    </button>
+                </form>
             </div>
 
             <div className="panel section-stack">
