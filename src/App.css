@@ -173,6 +173,17 @@ a {
   font-weight: 600;
 }
 
+.field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.field-link {
+  font-size: 0.85rem;
+}
+
 .field-label {
   margin-bottom: 6px;
   color: #334155;
