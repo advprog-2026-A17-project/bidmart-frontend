@@ -41,6 +41,8 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(envExample, /VITE_GOOGLE_CLIENT_ID/);
   assert.match(profilePage, /\/api\/v1\/auth\/password/);
   assert.match(profilePage, /Set Password/);
+  assert.match(profilePage, /\/api\/v1\/auth\/oauth\/link/);
+  assert.match(profilePage, /Connected Accounts/);
   assert.match(app, /\/profile/);
   assert.match(app, /ProfilePage/);
   assert.match(sellPage, /\/api\/v1\/catalogue\/listings/);
