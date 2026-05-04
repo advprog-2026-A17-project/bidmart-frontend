@@ -9,6 +9,7 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   const authProvider = read('./src/context/AuthContext.tsx');
   const loginPage = read('./src/modules/auth/components/LoginForm.tsx');
   const registerPage = read('./src/modules/auth/components/RegisterForm.tsx');
+  const profilePage = read('./src/modules/auth/pages/ProfilePage.tsx');
   const authApi = read('./src/modules/auth/utils/auth-api.ts');
   const appStyles = read('./src/App.css');
   const envExample = read('./.env.example');
@@ -38,6 +39,8 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(authApi, /\/api\/v1\/auth\/oauth\/login/);
   assert.match(appStyles, /oauth-divider/);
   assert.match(envExample, /VITE_GOOGLE_CLIENT_ID/);
+  assert.match(profilePage, /\/api\/v1\/auth\/password/);
+  assert.match(profilePage, /Set Password/);
   assert.match(app, /\/profile/);
   assert.match(app, /ProfilePage/);
   assert.match(sellPage, /\/api\/v1\/catalogue\/listings/);
