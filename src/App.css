@@ -180,6 +180,12 @@ a {
   gap: 8px;
 }
 
+.field-footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 4px;
+}
+
 .field-link {
   font-size: 0.85rem;
 }
