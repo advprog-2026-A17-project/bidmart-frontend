@@ -102,7 +102,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                     </button>
                 </div>
             </label>
-            <button className="primary-button" type="submit" disabled={loading || oauthBusy}>
+            <button className="primary-button auth-primary-action" type="submit" disabled={loading || oauthBusy}>
                 {loading ? 'Logging in...' : 'Log In'}
             </button>
             {googleClientId && (
