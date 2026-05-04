@@ -30,6 +30,10 @@ const TwoFactorForm: React.FC<TwoFactorFormProps> = ({ challengeToken, onCancel 
                 setError('Two-factor verification requires a new login challenge.');
                 return;
             }
+            if (result.kind === 'email_not_verified') {
+                setError(result.message);
+                return;
+            }
             login(result.payload);
             navigate('/');
         } catch (err: unknown) {
