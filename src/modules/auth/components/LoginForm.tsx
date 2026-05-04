@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
 import { requestLogin } from '../utils/auth-api';
+import GoogleLoginButton from './GoogleLoginButton';
 import TwoFactorForm from './TwoFactorForm';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -15,16 +16,21 @@ interface LoginFormProps {
 const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) => {
     const { login } = useAuth();
     const navigate = useNavigate();
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '';
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [oauthBusy, setOauthBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
     const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(null);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (oauthBusy) {
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
@@ -96,9 +102,21 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                     </button>
                 </div>
             </label>
-            <button className="primary-button" type="submit" disabled={loading}>
+            <button className="primary-button" type="submit" disabled={loading || oauthBusy}>
                 {loading ? 'Logging in...' : 'Log In'}
             </button>
+            {googleClientId && (
+                <>
+                    <div className="oauth-divider">or</div>
+                    <GoogleLoginButton
+                        clientId={googleClientId}
+                        disabled={loading || oauthBusy}
+                        onError={(message) => setError(message)}
+                        onClearError={() => setError(null)}
+                        onBusyChange={setOauthBusy}
+                    />
+                </>
+            )}
             <p className="text-muted auth-switch">
                 No account?{' '}
                 <button type="button" className="link-button" onClick={onSwitchTab}>

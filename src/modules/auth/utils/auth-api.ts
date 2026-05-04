@@ -59,6 +59,21 @@ export const requestTwoFactorLogin = async (challengeToken: string, code: string
     return { kind: 'success', payload };
 };
 
+export const requestOAuthLogin = async (provider: 'google', idToken: string): Promise<LoginOutcome> => {
+    const { response, payload } = await postJson<AuthLoginResult>(
+        '/api/v1/auth/oauth/login',
+        { provider, idToken },
+    );
+
+    if (!response.ok) {
+        return { kind: 'error', message: await readApiError(response, 'OAuth login failed') };
+    }
+    if (!payload) {
+        return { kind: 'error', message: 'OAuth login failed: empty response.' };
+    }
+    return { kind: 'success', payload };
+};
+
 export const requestRegistration = async (email: string, password: string, role: string): Promise<RegistrationOutcome> => {
     const response = await fetch(apiUrl('/api/v1/auth/register'), {
         method: 'POST',
