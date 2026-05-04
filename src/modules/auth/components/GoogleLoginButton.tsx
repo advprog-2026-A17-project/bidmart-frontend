@@ -12,6 +12,7 @@ interface GoogleLoginButtonProps {
     onError: (message: string) => void;
     onClearError?: () => void;
     onBusyChange?: (busy: boolean) => void;
+    onCredential?: (credential: string) => Promise<void>;
 }
 
 const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
@@ -20,6 +21,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
     onError,
     onClearError,
     onBusyChange,
+    onCredential,
 }) => {
     const { login } = useAuth();
     const navigate = useNavigate();
@@ -37,6 +39,11 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
         onBusyChange?.(true);
 
         try {
+            if (onCredential) {
+                await onCredential(response.credential);
+                return;
+            }
+
             const result = await requestOAuthLogin('google', response.credential);
             if (result.kind !== 'success') {
                 onError(result.kind === 'error' ? result.message : 'Google login requires a fresh login.');
@@ -45,12 +52,12 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
             login(result.payload);
             navigate('/');
         } catch (err: unknown) {
-            onError('Failed to connect to Auth Service via API Gateway.');
+            onError(err instanceof Error ? err.message : 'Failed to connect to Auth Service via API Gateway.');
             console.error(err);
         } finally {
             onBusyChange?.(false);
         }
-    }, [login, navigate, onBusyChange, onClearError, onError]);
+    }, [login, navigate, onBusyChange, onClearError, onCredential, onError]);
 
     useEffect(() => {
         if (!clientId) {
