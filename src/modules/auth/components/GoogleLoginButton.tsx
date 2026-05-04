@@ -38,8 +38,8 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
 
         try {
             const result = await requestOAuthLogin('google', response.credential);
-            if (result.kind === 'error') {
-                onError(result.message);
+            if (result.kind !== 'success') {
+                onError(result.kind === 'error' ? result.message : 'Google login requires a fresh login.');
                 return;
             }
             login(result.payload);
