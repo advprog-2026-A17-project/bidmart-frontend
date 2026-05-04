@@ -541,6 +541,10 @@ a {
   gap: 12px;
 }
 
+.auth-primary-action {
+  margin-top: 6px;
+}
+
 .oauth-divider {
   display: flex;
   align-items: center;
