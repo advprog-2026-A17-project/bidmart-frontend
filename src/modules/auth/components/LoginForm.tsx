@@ -78,16 +78,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                 />
             </label>
             <label className="field">
-                <div className="field-header">
-                    <span>Password</span>
-                    <button
-                        type="button"
-                        className="link-button field-link"
-                        onClick={onForgotPassword}
-                    >
-                        Forgot password?
-                    </button>
-                </div>
+                <span>Password</span>
                 <div className="password-row">
                     <input
                         className="form-input"
@@ -99,6 +90,15 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                     />
                     <button type="button" className="secondary-button" onClick={() => setShowPassword((v) => !v)}>
                         {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                </div>
+                <div className="field-footer">
+                    <button
+                        type="button"
+                        className="link-button field-link"
+                        onClick={onForgotPassword}
+                    >
+                        Forgot password?
                     </button>
                 </div>
             </label>
