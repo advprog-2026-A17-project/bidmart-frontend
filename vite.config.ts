@@ -41,7 +41,7 @@ export default defineConfig(() => {
   const apiBaseUrl = process.env.VITE_API_BASE_URL?.trim()
     || parseEnvValue(centralEnvPath, 'VITE_API_BASE_URL')
     || parseEnvValue(localEnvPath, 'VITE_API_BASE_URL')
-    || 'http://localhost:8000'
+    || ''
 
   return {
     plugins: [react()],

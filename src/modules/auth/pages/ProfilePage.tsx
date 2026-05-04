@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { QRCodeSVG } from 'qrcode.react';
+import GoogleLoginButton from '../components/GoogleLoginButton';
 
 interface Session {
     tokenId: string;
@@ -20,6 +21,7 @@ interface UserProfileResponse {
     displayName: string | null;
     avatarUrl: string | null;
     shippingAddress: string | null;
+    oauthProvider: string | null;
 }
 
 const formatSessionDate = (dateString: string | undefined | null) => {
@@ -31,6 +33,7 @@ const formatSessionDate = (dateString: string | undefined | null) => {
 const ProfilePage: React.FC = () => {
     const { user, logout } = useAuth() as { user: { email: string } | null; logout: () => void };
     const authenticatedFetch = useAuthenticatedFetch();
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '';
     const [sessions, setSessions] = useState<Session[]>([]);
     const [profileLoading, setProfileLoading] = useState(true);
     const [profileSaving, setProfileSaving] = useState(false);
@@ -48,6 +51,8 @@ const ProfilePage: React.FC = () => {
     const [passwordSaving, setPasswordSaving] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
+    const [oauthProvider, setOauthProvider] = useState<string | null>(null);
+    const [oauthLinkBusy, setOauthLinkBusy] = useState(false);
     
     // 2FA States
     const [isTwoFactorEnabled, setIsTwoFactorEnabled] = useState(false);
@@ -86,6 +91,7 @@ const ProfilePage: React.FC = () => {
                 setDisplayName(fetchedName);
                 setAvatarUrl(fetchedAvatar);
                 setShippingAddress(fetchedAddress);
+                setOauthProvider(payload.oauthProvider ?? null);
                 setIsTwoFactorEnabled(payload.twoFactorEnabled === true);
                 
                 setOriginalProfile({
@@ -236,6 +242,27 @@ const ProfilePage: React.FC = () => {
         }
     };
 
+    const handleGoogleLink = useCallback(async (credential: string) => {
+        if (!user) {
+            return;
+        }
+        setError(null);
+        setMessage(null);
+
+        const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/oauth/link'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'google', idToken: credential }),
+        });
+
+        if (!response.ok) {
+            throw new Error(await readApiError(response, 'Google account linking failed'));
+        }
+
+        setOauthProvider('google');
+        setMessage('Google account connected.');
+    }, [authenticatedFetch, user]);
+
     const setupTwoFactor = async () => {
         if (!user) return;
         setError(null);
@@ -333,6 +360,9 @@ const ProfilePage: React.FC = () => {
     if (!user) {
         return <div className="page-wrap"><div className="empty-state">Please sign in to manage your profile.</div></div>;
     }
+
+    const hasLinkedProvider = Boolean(oauthProvider);
+    const linkedProviderLabel = oauthProvider ? oauthProvider.toUpperCase() : '';
 
     return (
         <div className="page-wrap">
@@ -464,6 +494,32 @@ const ProfilePage: React.FC = () => {
                         {passwordSaving ? 'Saving...' : 'Save Password'}
                     </button>
                 </form>
+            </div>
+
+            <div className="panel section-stack">
+                <h3>Connected Accounts</h3>
+                <p className="text-muted">
+                    Link Google so you can sign in with your Google account.
+                </p>
+                {!googleClientId && (
+                    <div className="text-muted">Google OAuth is not configured.</div>
+                )}
+                {googleClientId && hasLinkedProvider && (
+                    <div className="summary-box">
+                        <strong>{linkedProviderLabel} connected</strong>
+                        <span className="text-muted">You can sign in with this provider.</span>
+                    </div>
+                )}
+                {googleClientId && !hasLinkedProvider && (
+                    <GoogleLoginButton
+                        clientId={googleClientId}
+                        disabled={oauthLinkBusy}
+                        onError={(message) => setError(message)}
+                        onClearError={() => setError(null)}
+                        onBusyChange={setOauthLinkBusy}
+                        onCredential={handleGoogleLink}
+                    />
+                )}
             </div>
 
             <div className="panel section-stack">
