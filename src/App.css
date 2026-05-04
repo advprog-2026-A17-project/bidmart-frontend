@@ -524,6 +524,41 @@ a {
   gap: 12px;
 }
 
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  justify-content: center;
+}
+
+.oauth-divider::before,
+.oauth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.oauth-button {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+}
+
+.oauth-button-disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.oauth-loading {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .auth-switch {
   text-align: center;
   font-size: 0.84rem;
