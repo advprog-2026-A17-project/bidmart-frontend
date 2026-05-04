@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { requestRegistration } from '../utils/auth-api';
+import GoogleLoginButton from './GoogleLoginButton';
 
 interface RegisterFormProps {
     onSwitchTab: () => void;
@@ -8,16 +9,22 @@ interface RegisterFormProps {
 const ROLES = ['BUYER', 'SELLER'];
 
 const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchTab }) => {
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '';
+
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState('BUYER');
     const [loading, setLoading] = useState(false);
+    const [oauthBusy, setOauthBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (oauthBusy) {
+            return;
+        }
         setLoading(true);
         setError(null);
         setSuccess(null);
@@ -82,9 +89,24 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchTab }) => {
                     ))}
                 </select>
             </label>
-            <button className="primary-button" type="submit" disabled={loading}>
+            <button className="primary-button" type="submit" disabled={loading || oauthBusy}>
                 {loading ? 'Registering...' : 'Create Account'}
             </button>
+            {googleClientId && (
+                <>
+                    <div className="oauth-divider">or</div>
+                    <GoogleLoginButton
+                        clientId={googleClientId}
+                        disabled={loading || oauthBusy}
+                        onError={(message) => {
+                            setError(message);
+                            setSuccess(null);
+                        }}
+                        onClearError={() => setError(null)}
+                        onBusyChange={setOauthBusy}
+                    />
+                </>
+            )}
             <p className="text-muted auth-switch">
                 Already have an account?{' '}
                 <button type="button" className="link-button" onClick={onSwitchTab}>
