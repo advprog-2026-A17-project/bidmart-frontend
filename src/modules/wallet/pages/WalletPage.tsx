@@ -18,8 +18,24 @@ interface WalletTransaction {
     timestamp: string;
 }
 
+interface PaymentIntent {
+    paymentId: string;
+    amountCents: number;
+    status: string;
+    redirectUrl: string;
+}
+
+interface WithdrawalRequestState {
+    withdrawalId: string;
+    amountCents: number;
+    status: string;
+}
+
 const toErrorMessage = (err: unknown): string =>
     err instanceof Error ? err.message : 'Unknown error';
+
+const toAmountCents = (value: string): number => Math.round(Number(value || 0) * 100);
+const formatCents = (value: number | undefined): string => `$${((value ?? 0) / 100).toFixed(2)}`;
 
 const WalletPage: React.FC = () => {
     const { user } = useAuth();
@@ -33,6 +49,9 @@ const WalletPage: React.FC = () => {
     const [walletNotFound, setWalletNotFound] = useState<boolean>(false);
     const [topUpAmount, setTopUpAmount] = useState<string>('');
     const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+    const [bankAccount, setBankAccount] = useState<string>('');
+    const [pendingPayment, setPendingPayment] = useState<PaymentIntent | null>(null);
+    const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawalRequestState | null>(null);
     const [showBalance, setShowBalance] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw'>('overview');
 
@@ -102,8 +121,8 @@ const WalletPage: React.FC = () => {
     };
 
     const handleTopUp = async () => {
-        const amount = parseFloat(topUpAmount);
-        if (!amount || amount <= 0) {
+        const amountCents = toAmountCents(topUpAmount);
+        if (!amountCents || amountCents <= 0) {
             setError('Please enter a valid top-up amount.');
             return;
         }
@@ -112,16 +131,21 @@ const WalletPage: React.FC = () => {
         if (!user) return;
         try {
             const response = await authenticatedFetch(
-                gatewayUrl(`/api/v1/wallet/${user.id}/top-up?amount=${amount}`),
-                { method: 'POST' }
+                gatewayUrl(`/api/v1/wallet/${user.id}/top-up/intent`),
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amountCents }),
+                }
             );
             if (!response.ok) {
                 setError(`Top-up failed: ${await readApiError(response, 'Top-up failed')}`);
                 return;
             }
+            const payment = await response.json() as PaymentIntent;
+            setPendingPayment(payment);
             setTopUpAmount('');
-            showSuccess(`Successfully topped up $${amount.toFixed(2)}!`);
-            await fetchWallet();
+            showSuccess(`Sandbox payment created for ${formatCents(payment.amountCents)}.`);
         } catch (err: unknown) {
             setError(`Top-up failed: ${toErrorMessage(err)}`);
         } finally {
@@ -129,10 +153,41 @@ const WalletPage: React.FC = () => {
         }
     };
 
+    const simulatePayment = async (status: 'PAID' | 'FAILED' | 'EXPIRED') => {
+        if (!pendingPayment) return;
+        setActionLoading(true);
+        setError(null);
+        try {
+            const response = await authenticatedFetch(
+                gatewayUrl(`/api/v1/wallet/midtrans/payments/${pendingPayment.paymentId}/simulate`),
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status }),
+                }
+            );
+            if (!response.ok) {
+                setError(`Payment simulation failed: ${await readApiError(response, 'Payment simulation failed')}`);
+                return;
+            }
+            setPendingPayment(null);
+            showSuccess(`Sandbox payment marked ${status}.`);
+            await fetchWallet();
+        } catch (err: unknown) {
+            setError(`Payment simulation failed: ${toErrorMessage(err)}`);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const handleWithdraw = async () => {
-        const amount = parseFloat(withdrawAmount);
-        if (!amount || amount <= 0) {
+        const amountCents = toAmountCents(withdrawAmount);
+        if (!amountCents || amountCents <= 0) {
             setError('Please enter a valid withdrawal amount.');
+            return;
+        }
+        if (!bankAccount.trim()) {
+            setError('Please enter a bank account for sandbox withdrawal.');
             return;
         }
         setActionLoading(true);
@@ -140,18 +195,51 @@ const WalletPage: React.FC = () => {
         if (!user) return;
         try {
             const response = await authenticatedFetch(
-                gatewayUrl(`/api/v1/wallet/${user.id}/withdraw?amount=${amount}`),
-                { method: 'POST' }
+                gatewayUrl(`/api/v1/wallet/${user.id}/withdrawals`),
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amountCents, bankAccount }),
+                }
             );
             if (!response.ok) {
                 setError(`Withdrawal failed: ${await readApiError(response, 'Withdrawal failed')}`);
                 return;
             }
+            const withdrawal = await response.json() as WithdrawalRequestState;
+            setPendingWithdrawal(withdrawal);
             setWithdrawAmount('');
-            showSuccess(`Successfully withdrew $${amount.toFixed(2)}!`);
+            showSuccess(`Sandbox withdrawal requested for ${formatCents(withdrawal.amountCents)}.`);
             await fetchWallet();
         } catch (err: unknown) {
             setError(`Withdrawal failed: ${toErrorMessage(err)}`);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const simulateWithdrawal = async (status: 'COMPLETED' | 'FAILED') => {
+        if (!pendingWithdrawal) return;
+        setActionLoading(true);
+        setError(null);
+        try {
+            const response = await authenticatedFetch(
+                gatewayUrl(`/api/v1/wallet/midtrans/withdrawals/${pendingWithdrawal.withdrawalId}/simulate`),
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status }),
+                }
+            );
+            if (!response.ok) {
+                setError(`Withdrawal simulation failed: ${await readApiError(response, 'Withdrawal simulation failed')}`);
+                return;
+            }
+            setPendingWithdrawal(null);
+            showSuccess(`Sandbox withdrawal marked ${status}.`);
+            await fetchWallet();
+        } catch (err: unknown) {
+            setError(`Withdrawal simulation failed: ${toErrorMessage(err)}`);
         } finally {
             setActionLoading(false);
         }
@@ -191,13 +279,13 @@ const WalletPage: React.FC = () => {
                                 </button>
                             </div>
                             <strong>
-                                {showBalance ? `$${wallet ? Number(wallet.activeBalance).toFixed(2) : '0.00'}` : '••••••'}
+                                {showBalance ? formatCents(wallet?.activeBalance) : '••••••'}
                             </strong>
                             <small>Account verified and active</small>
                         </div>
                         <div className="wallet-summary-card">
                             <span>Held Balance</span>
-                            <strong>${wallet ? Number(wallet.heldBalance).toFixed(2) : '0.00'}</strong>
+                            <strong>{formatCents(wallet?.heldBalance)}</strong>
                             <small>Reserved for active bids</small>
                         </div>
                         <div className="wallet-summary-card">
@@ -229,8 +317,29 @@ const WalletPage: React.FC = () => {
                                 />
                             </label>
                             <button className="primary-button" onClick={handleTopUp} disabled={actionLoading}>
-                                {actionLoading ? 'Processing...' : 'Top Up'}
+                                {actionLoading ? 'Processing...' : 'Create Sandbox Payment'}
                             </button>
+                            {pendingPayment && (
+                                <div className="summary-box sandbox-status">
+                                    <div>Payment ID: {pendingPayment.paymentId}</div>
+                                    <div>Amount: {formatCents(pendingPayment.amountCents)}</div>
+                                    <div>Status: {pendingPayment.status}</div>
+                                    <a href={pendingPayment.redirectUrl} target="_blank" rel="noreferrer">
+                                        Open Midtrans Sandbox Redirect
+                                    </a>
+                                    <div className="button-row">
+                                        <button className="primary-button" onClick={() => simulatePayment('PAID')} disabled={actionLoading}>
+                                            Pay Sandbox
+                                        </button>
+                                        <button className="secondary-button" onClick={() => simulatePayment('FAILED')} disabled={actionLoading}>
+                                            Fail
+                                        </button>
+                                        <button className="secondary-button" onClick={() => simulatePayment('EXPIRED')} disabled={actionLoading}>
+                                            Expire
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -249,9 +358,33 @@ const WalletPage: React.FC = () => {
                                     onChange={(e) => setWithdrawAmount(e.target.value)}
                                 />
                             </label>
+                            <label className="field">
+                                Bank Account
+                                <input
+                                    className="form-input"
+                                    placeholder="Sandbox bank account"
+                                    value={bankAccount}
+                                    onChange={(e) => setBankAccount(e.target.value)}
+                                />
+                            </label>
                             <button className="primary-button" onClick={handleWithdraw} disabled={actionLoading}>
-                                {actionLoading ? 'Processing...' : 'Withdraw'}
+                                {actionLoading ? 'Processing...' : 'Request Sandbox Withdrawal'}
                             </button>
+                            {pendingWithdrawal && (
+                                <div className="summary-box sandbox-status">
+                                    <div>Withdrawal ID: {pendingWithdrawal.withdrawalId}</div>
+                                    <div>Amount: {formatCents(pendingWithdrawal.amountCents)}</div>
+                                    <div>Status: {pendingWithdrawal.status}</div>
+                                    <div className="button-row">
+                                        <button className="primary-button" onClick={() => simulateWithdrawal('COMPLETED')} disabled={actionLoading}>
+                                            Complete
+                                        </button>
+                                        <button className="secondary-button" onClick={() => simulateWithdrawal('FAILED')} disabled={actionLoading}>
+                                            Fail and Reverse
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -265,7 +398,7 @@ const WalletPage: React.FC = () => {
                                             {tx.type.replace('_', ' ')}
                                         </span>
                                         <span className="transaction-amount">
-                                            ${Number(tx.amount).toFixed(2)}
+                                            {formatCents(Number(tx.amount))}
                                         </span>
                                         <span className="transaction-date">
                                             {new Date(tx.timestamp).toLocaleString()}
