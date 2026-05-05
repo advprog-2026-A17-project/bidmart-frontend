@@ -26,6 +26,10 @@ const CONDITIONS = [
 
 const AUCTION_DURATIONS = [1, 3, 5, 7, 10];
 
+const toAmountCents = (value: string): number => Math.round(Number(value || 0) * 100);
+const toErrorMessage = (err: unknown): string =>
+    err instanceof Error ? err.message : 'Unknown error';
+
 const SellPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
@@ -71,55 +75,101 @@ const SellPage: React.FC = () => {
         }
     };
 
+    const rollbackCreatedListing = async (listingId: string) => {
+        const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/cancel`), {
+            method: 'POST',
+        });
+        if (!response.ok) {
+            throw new Error(await readApiError(response, 'Listing rollback failed'));
+        }
+    };
+
+    const publishCreatedListing = async (listingId: string) => {
+        const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/publish`), {
+            method: 'POST',
+        });
+        if (!response.ok) {
+            throw new Error(await readApiError(response, 'Listing publish failed'));
+        }
+    };
+
+    const markAuctionCreated = async (listingId: string, auctionId: string) => {
+        const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/auction-created`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ auctionId }),
+        });
+        if (!response.ok) {
+            throw new Error(await readApiError(response, 'Listing auction marker failed'));
+        }
+    };
+
     const publishListing = async () => {
         if (!user) {
             setError('Please sign in as a seller before publishing.');
             return;
         }
         setError(null);
-        const listingResponse = await authenticatedFetch(gatewayUrl('/api/v1/catalogue/listings'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                title: formData.title,
-                description: formData.description,
-                category: formData.category,
-                categoryId: formData.categoryId || null,
-                condition: formData.condition,
-                sellerId: user.id,
-                startingPrice: Number(formData.startingBid),
-                imageUrl: formData.images[0] ?? null,
-            }),
-        });
-        if (!listingResponse.ok) {
-            setError(await readApiError(listingResponse, 'Listing creation failed'));
-            return;
-        }
-        const listing = await listingResponse.json() as { id: string | number };
-        const listingId = String(listing.id);
-        setCreatedListingId(listingId);
+        let listingId: string | null = null;
+        try {
+            const listingResponse = await authenticatedFetch(gatewayUrl('/api/v1/catalogue/listings'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: formData.title,
+                    description: formData.description,
+                    category: formData.category,
+                    categoryId: formData.categoryId || null,
+                    condition: formData.condition,
+                    sellerId: user.id,
+                    startingPrice: toAmountCents(formData.startingBid),
+                    imageUrl: formData.images[0] ?? null,
+                }),
+            });
+            if (!listingResponse.ok) {
+                setError(await readApiError(listingResponse, 'Listing creation failed'));
+                return;
+            }
+            const listing = await listingResponse.json() as { id: string | number };
+            listingId = String(listing.id);
+            setCreatedListingId(listingId);
+            await publishCreatedListing(listingId);
 
-        const now = Math.floor(Date.now() / 1000);
-        const auctionResponse = await authenticatedFetch(gatewayUrl('/api/v1/auctions'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                listingId,
-                sellerId: user.id,
-                startingPrice: Number(formData.startingBid),
-                reservePrice: Number(formData.reservePrice || formData.startingBid),
-                minimumIncrement: Number(formData.minimumIncrement || 1),
-                startTime: now,
-                endTime: now + formData.duration * 24 * 60 * 60,
-            }),
-        });
-        if (!auctionResponse.ok) {
-            setError(await readApiError(auctionResponse, 'Auction creation failed'));
-            return;
+            const now = Math.floor(Date.now() / 1000);
+            const auctionResponse = await authenticatedFetch(gatewayUrl('/api/v1/auctions'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    listingId,
+                    sellerId: user.id,
+                    auctionType: 'ENGLISH',
+                    startingPrice: toAmountCents(formData.startingBid),
+                    reservePrice: toAmountCents(formData.reservePrice || formData.startingBid),
+                    minimumIncrement: toAmountCents(formData.minimumIncrement || '1'),
+                    startTime: now,
+                    endTime: now + formData.duration * 24 * 60 * 60,
+                }),
+            });
+            if (!auctionResponse.ok) {
+                throw new Error(await readApiError(auctionResponse, 'Auction creation failed'));
+            }
+            const auction = await auctionResponse.json() as { id: string | number };
+            const auctionId = String(auction.id);
+            await markAuctionCreated(listingId, auctionId);
+            setCreatedAuctionId(auctionId);
+            setPublished(true);
+        } catch (err: unknown) {
+            if (listingId) {
+                try {
+                    await rollbackCreatedListing(listingId);
+                    setCreatedListingId(null);
+                } catch (rollbackError: unknown) {
+                    setError(`${toErrorMessage(err)} ${toErrorMessage(rollbackError)}`);
+                    return;
+                }
+            }
+            setError(toErrorMessage(err));
         }
-        const auction = await auctionResponse.json() as { id: string };
-        setCreatedAuctionId(auction.id);
-        setPublished(true);
     };
 
     const cancelListing = async () => {

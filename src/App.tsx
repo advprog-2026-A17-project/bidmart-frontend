@@ -3,6 +3,7 @@ import AuctionDetailPage from './modules/auction/pages/AuctionDetailPage';
 import CataloguePage from './modules/catalogue/pages/CataloguePage';
 import SellPage from './modules/catalogue/pages/SellPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
+import NotificationCenter from './modules/notifications/components/NotificationCenter';
 import AuthPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
 import ProfileGuard from './modules/auth/components/ProfileGuard';
@@ -65,6 +66,7 @@ function App() {
             <Router>
                 <div className="app-shell">
                     <Navbar />
+                    <NotificationCenter />
                     <main className="app-main">
                         <ProfileGuard>
                             <Routes>

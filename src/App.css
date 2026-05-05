@@ -111,6 +111,68 @@ a {
   padding: 24px;
 }
 
+.notification-center {
+  max-width: 1200px;
+  margin: 14px auto 0;
+  padding: 0 24px;
+}
+
+.notification-center-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.connection-live,
+.connection-idle {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.connection-live {
+  background: #eef7da;
+  color: #45610e;
+}
+
+.connection-idle {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.notification-list {
+  display: grid;
+  gap: 8px;
+}
+
+.notification-item,
+.notification-empty,
+.notification-error {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+  font-size: 0.86rem;
+}
+
+.notification-item {
+  display: grid;
+  gap: 3px;
+}
+
+.notification-item span {
+  color: var(--muted);
+}
+
+.notification-error {
+  margin-bottom: 8px;
+  color: var(--danger);
+  background: #fee2e2;
+}
+
 .page-wrap {
   display: grid;
   gap: 20px;
@@ -437,6 +499,17 @@ a {
 
 .wallet-actions {
   display: flex;
+  gap: 8px;
+}
+
+.sandbox-status a {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 

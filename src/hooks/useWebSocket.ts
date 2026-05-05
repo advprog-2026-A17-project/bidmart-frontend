@@ -11,7 +11,7 @@ import { apiUrl } from '../config/api';
  * Usage:
  * const { isConnected, subscribe, unsubscribe } = useWebSocket();
  */
-export const useWebSocket = () => {
+export const useWebSocket = (socketPath = '/ws') => {
     const clientRef = useRef<Client | null>(null);
     const subscriptionsRef = useRef<Map<string, StompSubscription>>(new Map());
     const reconnectAttemptsRef = useRef(0);
@@ -23,7 +23,7 @@ export const useWebSocket = () => {
     const connect = useCallback(() => {
         return new Promise<void>((resolve, reject) => {
             try {
-                const socketUrl = apiUrl('/ws');
+                const socketUrl = apiUrl(socketPath);
                 const socket = new SockJS(socketUrl);
 
                 const client = new Client({
@@ -56,7 +56,7 @@ export const useWebSocket = () => {
                 reject(error);
             }
         });
-    }, []);
+    }, [socketPath]);
 
     const attemptReconnect = useCallback(() => {
         if (reconnectAttemptsRef.current >= maxReconnectAttemptsRef.current) {
