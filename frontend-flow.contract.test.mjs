@@ -55,3 +55,33 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(auctionDetail + walletPage + sellPage, /readApiError/);
   assert.match(packageJson, /"test"/);
 });
+
+test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtime notifications', () => {
+  const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
+  const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
+  const notificationCenter = read('./src/modules/notifications/components/NotificationCenter.tsx');
+  const app = read('./src/App.tsx');
+
+  assert.match(sellPage, /publishCreatedListing/);
+  assert.match(sellPage, /markAuctionCreated/);
+  assert.match(sellPage, /rollbackCreatedListing/);
+  assert.match(sellPage, /\/publish/);
+  assert.match(sellPage, /auction-created/);
+  assert.match(sellPage, /auctionType:\s*'ENGLISH'/);
+
+  assert.match(walletPage, /toAmountCents/);
+  assert.match(walletPage, /top-up\/intent/);
+  assert.match(walletPage, /amountCents/);
+  assert.match(walletPage, /pendingPayment/);
+  assert.match(walletPage, /midtrans\/payments/);
+  assert.match(walletPage, /\/withdrawals/);
+  assert.match(walletPage, /bankAccount/);
+  assert.match(walletPage, /pendingWithdrawal/);
+  assert.match(walletPage, /midtrans\/withdrawals/);
+
+  assert.match(notificationCenter, /useWebSocket/);
+  assert.match(notificationCenter, /\/user\/queue\/notifications/);
+  assert.match(notificationCenter, /\/api\/v1\/notifications/);
+  assert.match(notificationCenter, /notification-item/);
+  assert.match(app, /NotificationCenter/);
+});
