@@ -32,14 +32,15 @@ const NotificationCenter = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
-    const [notifications, setNotifications] = useState<BidmartNotification[]>([]);
+    const [storedNotifications, setStoredNotifications] = useState<BidmartNotification[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [isOpen, setIsOpen] = useState(false);
     const popoverRef = useRef<HTMLDivElement | null>(null);
+    const notifications = user ? storedNotifications : [];
 
     const prependNotification = useCallback((payload: unknown) => {
         const next = notificationFromPayload(payload);
-        setNotifications((current) => {
+        setStoredNotifications((current) => {
             if (current.some((item) => item.id === next.id)) {
                 return current;
             }
@@ -49,8 +50,6 @@ const NotificationCenter = () => {
 
     useEffect(() => {
         if (!user) {
-            setNotifications([]);
-            setIsOpen(false);
             return;
         }
 
@@ -62,7 +61,7 @@ const NotificationCenter = () => {
                     return;
                 }
                 const payload = await response.json() as BidmartNotification[] | { notifications?: BidmartNotification[] };
-                setNotifications(Array.isArray(payload) ? payload.slice(0, 5) : (payload.notifications ?? []).slice(0, 5));
+                setStoredNotifications(Array.isArray(payload) ? payload.slice(0, 5) : (payload.notifications ?? []).slice(0, 5));
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : 'Notification lookup failed');
             }
