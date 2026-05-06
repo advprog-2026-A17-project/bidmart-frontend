@@ -82,6 +82,8 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
   assert.match(notificationCenter, /useWebSocket/);
   assert.match(notificationCenter, /\/user\/queue\/notifications/);
   assert.match(notificationCenter, /\/api\/v1\/notifications/);
-  assert.match(notificationCenter, /notification-item/);
+  assert.match(notificationCenter, /notification-bell-button/);
+  assert.match(notificationCenter, /notification-popover/);
+  assert.doesNotMatch(app, /<Navbar \/>\s*<NotificationCenter \/>/);
   assert.match(app, /NotificationCenter/);
 });
