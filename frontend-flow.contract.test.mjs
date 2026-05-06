@@ -47,7 +47,9 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(app, /ProfilePage/);
   assert.match(sellPage, /\/api\/v1\/catalogue\/listings/);
   assert.match(sellPage, /\/api\/v1\/auctions/);
-  assert.match(sellPage, /categoryId/);
+  assert.doesNotMatch(sellPage, /categoryId/);
+  assert.match(sellPage, /readImageFile/);
+  assert.match(sellPage, /type="file"/);
   assert.match(sellPage, /cancelListing/);
   assert.match(auctionDetail, /\/close/);
   assert.match(walletPage, /\/detail/);
@@ -70,6 +72,8 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
   assert.match(sellPage, /auctionType:\s*'ENGLISH'/);
 
   assert.match(walletPage, /toAmountCents/);
+  assert.match(walletPage, /Wallet Account/);
+  assert.doesNotMatch(walletPage, /User ID/);
   assert.match(walletPage, /top-up\/intent/);
   assert.match(walletPage, /amountCents/);
   assert.match(walletPage, /pendingPayment/);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { readApiError, gatewayUrl } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
@@ -36,6 +37,10 @@ const toErrorMessage = (err: unknown): string =>
 
 const toAmountCents = (value: string): number => Math.round(Number(value || 0) * 100);
 const formatCents = (value: number | undefined): string => `$${((value ?? 0) / 100).toFixed(2)}`;
+const walletDisplayName = (email?: string): string => {
+    const localPart = email?.split('@')[0]?.replace(/[^a-z0-9]/gi, '').slice(0, 10).toUpperCase();
+    return `BM-${localPart || 'ACCOUNT'}`;
+};
 
 const WalletPage: React.FC = () => {
     const { user } = useAuth();
@@ -54,6 +59,7 @@ const WalletPage: React.FC = () => {
     const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawalRequestState | null>(null);
     const [showBalance, setShowBalance] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw'>('overview');
+    const [acceptWalletTerms, setAcceptWalletTerms] = useState(false);
 
     const fetchWallet = useCallback(async () => {
         setLoading(true);
@@ -245,6 +251,29 @@ const WalletPage: React.FC = () => {
         }
     };
 
+    if (!user) {
+        return (
+            <div className="page-wrap">
+                <section className="page-head">
+                    <h1>Wallet</h1>
+                    <p>Preview BidMart Wallet before signing in</p>
+                </section>
+
+                <section className="panel access-panel center-content">
+                    <span className="hero-badge">Account Required</span>
+                    <h2>Sign in to manage wallet funds</h2>
+                    <p className="text-muted">
+                        Wallets are created during account setup and used for sandbox top-ups, bid holds, refunds, and withdrawals.
+                    </p>
+                    <div className="access-actions">
+                        <Link className="primary-button" to="/login">Sign In or Register</Link>
+                        <Link className="secondary-button" to="/">Explore Auctions</Link>
+                    </div>
+                </section>
+            </div>
+        );
+    }
+
     return (
         <div className="page-wrap">
             <section className="page-head">
@@ -259,13 +288,21 @@ const WalletPage: React.FC = () => {
                 <div className="loading-state">Loading wallet from API Gateway...</div>
             ) : walletNotFound ? (
                 <div className="panel center-content">
-                    <p className="text-muted">No wallet found for user <strong>{user?.id}</strong>.</p>
+                    <p className="text-muted">Your wallet is not active yet.</p>
+                    <label className="terms-check">
+                        <input
+                            type="checkbox"
+                            checked={acceptWalletTerms}
+                            onChange={(event) => setAcceptWalletTerms(event.target.checked)}
+                        />
+                        <span>I agree to use BidMart Wallet only for sandbox bidding, top-up, and withdrawal simulation.</span>
+                    </label>
                     <button
                         className="primary-button"
                         onClick={createWallet}
-                        disabled={actionLoading}
+                        disabled={actionLoading || !acceptWalletTerms}
                     >
-                        {actionLoading ? 'Creating...' : 'Create Wallet'}
+                        {actionLoading ? 'Creating...' : 'Activate Wallet'}
                     </button>
                 </div>
             ) : (
@@ -289,9 +326,9 @@ const WalletPage: React.FC = () => {
                             <small>Reserved for active bids</small>
                         </div>
                         <div className="wallet-summary-card">
-                            <span>User ID</span>
-                            <strong>{user?.id}</strong>
-                            <small>Gateway profile</small>
+                            <span>Wallet Account</span>
+                            <strong>{walletDisplayName(user.email)}</strong>
+                            <small>Display reference</small>
                         </div>
                     </div>
 
@@ -321,7 +358,7 @@ const WalletPage: React.FC = () => {
                             </button>
                             {pendingPayment && (
                                 <div className="summary-box sandbox-status">
-                                    <div>Payment ID: {pendingPayment.paymentId}</div>
+                                    <div>Payment ref: {pendingPayment.paymentId.slice(0, 8).toUpperCase()}</div>
                                     <div>Amount: {formatCents(pendingPayment.amountCents)}</div>
                                     <div>Status: {pendingPayment.status}</div>
                                     <a href={pendingPayment.redirectUrl} target="_blank" rel="noreferrer">
@@ -372,7 +409,7 @@ const WalletPage: React.FC = () => {
                             </button>
                             {pendingWithdrawal && (
                                 <div className="summary-box sandbox-status">
-                                    <div>Withdrawal ID: {pendingWithdrawal.withdrawalId}</div>
+                                    <div>Withdrawal ref: {pendingWithdrawal.withdrawalId.slice(0, 8).toUpperCase()}</div>
                                     <div>Amount: {formatCents(pendingWithdrawal.amountCents)}</div>
                                     <div>Status: {pendingWithdrawal.status}</div>
                                     <div className="button-row">

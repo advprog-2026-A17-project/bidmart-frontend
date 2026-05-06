@@ -26,10 +26,18 @@ const CONDITIONS = [
 ];
 
 const AUCTION_DURATIONS = [1, 3, 5, 7, 10];
+const MAX_IMAGE_BYTES = 600 * 1024;
 
 const toAmountCents = (value: string): number => Math.round(Number(value || 0) * 100);
 const toErrorMessage = (err: unknown): string =>
     err instanceof Error ? err.message : 'Unknown error';
+const readImageFile = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('Unable to read image file.'));
+        reader.readAsDataURL(file);
+    });
 
 const SellPage: React.FC = () => {
     const { user } = useAuth();
@@ -46,7 +54,6 @@ const SellPage: React.FC = () => {
         title: '',
         description: '',
         category: '',
-        categoryId: '',
         condition: '',
         startingBid: '',
         reservePrice: '',
@@ -75,6 +82,30 @@ const SellPage: React.FC = () => {
         const next = direction === 'next' ? idx + 1 : idx - 1;
         if (next >= 0 && next < steps.length) {
             setStep(steps[next].id);
+        }
+    };
+
+    const handleImageUpload = async (files: FileList | null) => {
+        if (!files?.length) {
+            return;
+        }
+        setError(null);
+        try {
+            const selectedFiles = Array.from(files).slice(0, 3);
+            const images = await Promise.all(
+                selectedFiles.map((file) => {
+                    if (!file.type.startsWith('image/')) {
+                        throw new Error('Please upload image files only.');
+                    }
+                    if (file.size > MAX_IMAGE_BYTES) {
+                        throw new Error('Each image must be 600KB or smaller for this demo.');
+                    }
+                    return readImageFile(file);
+                })
+            );
+            setFormData((previous) => ({ ...previous, images }));
+        } catch (err: unknown) {
+            setError(toErrorMessage(err));
         }
     };
 
@@ -122,7 +153,6 @@ const SellPage: React.FC = () => {
                     title: formData.title,
                     description: formData.description,
                     category: formData.category,
-                    categoryId: formData.categoryId || null,
                     condition: formData.condition,
                     sellerId: user.id,
                     startingPrice: toAmountCents(formData.startingBid),
@@ -190,31 +220,30 @@ const SellPage: React.FC = () => {
     };
 
     if (!user || !isSeller) {
+        const isSignedOut = !user;
         return (
             <div className="page-wrap">
                 <section className="page-head">
-                    <h1>Create Listing</h1>
-                    <p>Start selling your items on BidMart</p>
+                    <h1>{isSignedOut ? 'Sell on BidMart' : 'Seller access required'}</h1>
+                    <p>{isSignedOut ? 'Create an account as a seller to publish auction listings.' : 'Buyer accounts can browse, bid, and manage wallet funds.'}</p>
                 </section>
 
                 <section className="panel access-panel center-content">
-                    <span className="hero-badge">Seller access required</span>
-                    <h2>Seller access required</h2>
+                    <span className="hero-badge">{isSignedOut ? 'Public Preview' : 'Buyer Account'}</span>
+                    <h2>{isSignedOut ? 'Start with a seller account' : 'This page is for sellers'}</h2>
                     <p className="text-muted">
-                        {!user
-                            ? 'Sign in with a seller account to create and publish listings.'
-                            : 'Only seller accounts can publish listings.'}
+                        {isSignedOut
+                            ? 'Seller accounts can create listings, attach product photos, configure auction rules, and publish to the marketplace.'
+                            : 'Your current role does not allow listing creation. Use a seller account when you need to publish items.'}
                     </p>
-                    {user && <p className="access-role-summary">Current roles: {roleSummary}</p>}
+                    {user && <p className="access-role-summary">Current role: {roleSummary}</p>}
                     <div className="access-actions">
-                        <Link className="primary-button" to={user ? '/' : '/login'}>
-                            {user ? 'Back to Explore' : 'Sign In'}
+                        <Link className="primary-button" to={isSignedOut ? '/login' : '/'}>
+                            {isSignedOut ? 'Sign In or Register' : 'Back to Explore'}
                         </Link>
-                        {user && (
-                            <Link className="secondary-button" to="/profile">
-                                View Profile
-                            </Link>
-                        )}
+                        <Link className="secondary-button" to="/wallet">
+                            {isSignedOut ? 'View Wallet Preview' : 'Go to Wallet'}
+                        </Link>
                     </div>
                 </section>
             </div>
@@ -283,15 +312,6 @@ const SellPage: React.FC = () => {
                                 ))}
                             </select>
                         </label>
-                        <label className="field">
-                            <span>Category ID</span>
-                            <input
-                                className="form-input"
-                                value={formData.categoryId}
-                                onChange={(e) => setFormData((p) => ({ ...p, categoryId: e.target.value }))}
-                                placeholder="Optional category identifier"
-                            />
-                        </label>
                         <div>
                             <div className="field-label">Condition</div>
                             <div className="chip-grid">
@@ -318,25 +338,22 @@ const SellPage: React.FC = () => {
                 {step === 'images' && (
                     <div className="section-stack">
                         <h3>Upload Images</h3>
-                        <button
-                            type="button"
-                            className="upload-zone"
-                            onClick={() =>
-                                setFormData((p) =>
-                                    p.images.length
-                                        ? p
-                                        : { ...p, images: ['image-1', 'image-2', 'image-3'] }
-                                )
-                            }
-                        >
+                        <label className="upload-zone">
                             <strong>Drop images here or click to upload</strong>
-                            <span>JPG, PNG up to 10MB each. Add 1-12 images.</span>
-                        </button>
+                            <span>JPG, PNG, or WebP up to 600KB each. Add up to 3 images.</span>
+                            <input
+                                className="file-input"
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                multiple
+                                onChange={(event) => handleImageUpload(event.target.files)}
+                            />
+                        </label>
                         {formData.images.length > 0 && (
                             <div className="image-mock-grid">
                                 {formData.images.map((img, idx) => (
                                     <div key={`${img}-${idx}`} className="image-mock-card">
-                                        Image {idx + 1}
+                                        <img src={img} alt={`Upload preview ${idx + 1}`} />
                                     </div>
                                 ))}
                             </div>

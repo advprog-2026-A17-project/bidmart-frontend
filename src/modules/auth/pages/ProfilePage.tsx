@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
@@ -358,7 +359,26 @@ const ProfilePage: React.FC = () => {
     };
 
     if (!user) {
-        return <div className="page-wrap"><div className="empty-state">Please sign in to manage your profile.</div></div>;
+        return (
+            <div className="page-wrap">
+                <section className="page-head">
+                    <h1>Account</h1>
+                    <p>Manage identity, security, and profile details</p>
+                </section>
+
+                <section className="panel access-panel center-content">
+                    <span className="hero-badge">Public Preview</span>
+                    <h2>Sign in to open your account center</h2>
+                    <p className="text-muted">
+                        Your profile stores verification status, shipping details, active sessions, OAuth links, and two-factor settings.
+                    </p>
+                    <div className="access-actions">
+                        <Link className="primary-button" to="/login">Sign In or Register</Link>
+                        <Link className="secondary-button" to="/">Explore Auctions</Link>
+                    </div>
+                </section>
+            </div>
+        );
     }
 
     const hasLinkedProvider = Boolean(oauthProvider);
