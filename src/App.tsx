@@ -3,6 +3,7 @@ import AuctionDetailPage from './modules/auction/pages/AuctionDetailPage';
 import CataloguePage from './modules/catalogue/pages/CataloguePage';
 import SellPage from './modules/catalogue/pages/SellPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
+import NotificationCenter from './modules/notifications/components/NotificationCenter';
 import AuthPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
 import ProfileGuard from './modules/auth/components/ProfileGuard';
@@ -14,6 +15,7 @@ import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
 const Navbar = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const canSell = !user || user.roles?.some((role) => role.name === 'SELLER');
 
     const handleLogout = () => {
         logout();
@@ -29,13 +31,14 @@ const Navbar = () => {
             <div className="app-nav-links">
                 <Link to="/" className="app-nav-link">Explore</Link>
                 <Link to="/auctions/demo" className="app-nav-link">Auction</Link>
-                <Link to="/sell" className="app-nav-link">Sell</Link>
+                {canSell && <Link to="/sell" className="app-nav-link">Sell</Link>}
                 <Link to="/wallet" className="app-nav-link">Wallet</Link>
                 <Link to="/profile" className="app-nav-link">Profile</Link>
             </div>
             <div className="app-nav-right">
                 {user ? (
                     <>
+                        <NotificationCenter />
                         <span className="app-user-pill">
                             {user.email}
                             {user.roles?.length > 0 && (

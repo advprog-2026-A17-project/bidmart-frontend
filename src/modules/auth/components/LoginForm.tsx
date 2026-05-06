@@ -5,7 +5,6 @@ import { requestLogin, requestResendVerification } from '../utils/auth-api';
 import GoogleLoginButton from './GoogleLoginButton';
 import TwoFactorForm from './TwoFactorForm';
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const LOGIN_VERIFY_ENDPOINT = '/api/v1/auth/2fa/login-verify';
 
 interface LoginFormProps {

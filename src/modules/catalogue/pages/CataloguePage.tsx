@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { apiUrl } from '../../../config/api';
 import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
 import { Link } from 'react-router-dom';
 
 interface CatalogueItem {
-    id: number;
+    id: number | string;
     title: string;
     description: string;
     startingPrice: number;
@@ -38,7 +38,17 @@ const CataloguePage: React.FC = () => {
     });
     const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
 
-    const fetchItems = async (params: SearchParams) => {
+    const parseCatalogueItems = (payload: unknown): CatalogueItem[] => {
+        if (Array.isArray(payload)) {
+            return payload as CatalogueItem[];
+        }
+        if (payload && typeof payload === 'object' && Array.isArray((payload as { content?: unknown }).content)) {
+            return (payload as { content: CatalogueItem[] }).content;
+        }
+        return [];
+    };
+
+    const fetchItems = useCallback(async (params: SearchParams) => {
         setLoading(true);
         setError(null);
         const query = new URLSearchParams();
@@ -54,8 +64,8 @@ const CataloguePage: React.FC = () => {
                 setError(`HTTP error! status: ${response.status}`);
                 return;
             }
-            const data: CatalogueItem[] = await response.json();
-            setItems(data);
+            const data: unknown = await response.json();
+            setItems(parseCatalogueItems(data));
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Unknown error';
             console.error('Fetch failed:', message);
@@ -63,11 +73,11 @@ const CataloguePage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchItems(appliedParams);
-    }, [appliedParams]);
+    }, [appliedParams, fetchItems]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -185,7 +195,7 @@ const CataloguePage: React.FC = () => {
                             </li>
                         ))
                     ) : (
-                        <li className="empty-state">No items found matching your search criteria.</li>
+                        <li className="empty-state catalog-empty-state">No items found matching your search criteria.</li>
                     )}
                 </ul>
             )}
