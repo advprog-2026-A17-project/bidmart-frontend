@@ -47,11 +47,62 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(app, /ProfilePage/);
   assert.match(sellPage, /\/api\/v1\/catalogue\/listings/);
   assert.match(sellPage, /\/api\/v1\/auctions/);
-  assert.match(sellPage, /categoryId/);
+  assert.doesNotMatch(sellPage, /categoryId/);
+  assert.match(sellPage, /readImageFile/);
+  assert.match(sellPage, /type="file"/);
   assert.match(sellPage, /cancelListing/);
   assert.match(auctionDetail, /\/close/);
   assert.match(walletPage, /\/detail/);
   assert.match(auctionDetail, /setInterval/);
   assert.match(auctionDetail + walletPage + sellPage, /readApiError/);
   assert.match(packageJson, /"test"/);
+});
+
+test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtime notifications', () => {
+  const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
+  const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
+  const notificationCenter = read('./src/modules/notifications/components/NotificationCenter.tsx');
+  const app = read('./src/App.tsx');
+
+  assert.match(sellPage, /publishCreatedListing/);
+  assert.match(sellPage, /markAuctionCreated/);
+  assert.match(sellPage, /rollbackCreatedListing/);
+  assert.match(sellPage, /\/publish/);
+  assert.match(sellPage, /auction-created/);
+  assert.match(sellPage, /auctionType:\s*'ENGLISH'/);
+
+  assert.match(walletPage, /toAmountCents/);
+  assert.match(walletPage, /Wallet Account/);
+  assert.doesNotMatch(walletPage, /User ID/);
+  assert.match(walletPage, /top-up\/intent/);
+  assert.match(walletPage, /amountCents/);
+  assert.match(walletPage, /pendingPayment/);
+  assert.match(walletPage, /midtrans\/payments\/return/);
+  assert.match(walletPage, /window\.location\.assign/);
+  assert.match(walletPage, /redirectUrl/);
+  assert.match(walletPage, /\/withdrawals/);
+  assert.match(walletPage, /bankAccount/);
+  assert.match(walletPage, /pendingWithdrawal/);
+  assert.doesNotMatch(walletPage, /simulatePayment|simulateWithdrawal|\/simulate/);
+  assert.doesNotMatch(walletPage, /Mark Paid|Mark Failed|Expire|Fail and Reverse/);
+
+  assert.match(notificationCenter, /useWebSocket/);
+  assert.match(notificationCenter, /\/user\/queue\/notifications/);
+  assert.match(notificationCenter, /\/api\/v1\/notifications/);
+  assert.match(notificationCenter, /notification-bell-button/);
+  assert.match(notificationCenter, /notification-popover/);
+  assert.doesNotMatch(app, /<Navbar \/>\s*<NotificationCenter \/>/);
+  assert.match(app, /NotificationCenter/);
+});
+
+test('frontend sell flow is gated to seller accounts before any listing request is sent', () => {
+  const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
+  const app = read('./src/App.tsx');
+
+  assert.match(sellPage, /role\.name === 'SELLER'/);
+  assert.match(sellPage, /Only seller accounts can publish listings/);
+  assert.match(sellPage, /Seller access required/);
+  assert.match(app, /const canSell = !user \|\| user\.roles\?\.some/);
+  assert.match(app, /canSell &&/);
+  assert.match(app, /to="\/sell"/);
 });
