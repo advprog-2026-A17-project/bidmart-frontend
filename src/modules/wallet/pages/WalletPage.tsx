@@ -354,22 +354,21 @@ const WalletPage: React.FC = () => {
                                 />
                             </label>
                             <button className="primary-button" onClick={handleTopUp} disabled={actionLoading}>
-                                {actionLoading ? 'Processing...' : 'Create Sandbox Payment'}
+                                {actionLoading ? 'Processing...' : 'Create Sandbox Payment Intent'}
                             </button>
                             {pendingPayment && (
                                 <div className="summary-box sandbox-status">
+                                    <strong>Midtrans Sandbox Simulation</strong>
                                     <div>Payment ref: {pendingPayment.paymentId.slice(0, 8).toUpperCase()}</div>
                                     <div>Amount: {formatCents(pendingPayment.amountCents)}</div>
                                     <div>Status: {pendingPayment.status}</div>
-                                    <a href={pendingPayment.redirectUrl} target="_blank" rel="noreferrer">
-                                        Open Midtrans Sandbox Redirect
-                                    </a>
+                                    <span className="text-muted">Redirect generated locally: {pendingPayment.redirectUrl}</span>
                                     <div className="button-row">
                                         <button className="primary-button" onClick={() => simulatePayment('PAID')} disabled={actionLoading}>
-                                            Pay Sandbox
+                                            Mark Paid
                                         </button>
                                         <button className="secondary-button" onClick={() => simulatePayment('FAILED')} disabled={actionLoading}>
-                                            Fail
+                                            Mark Failed
                                         </button>
                                         <button className="secondary-button" onClick={() => simulatePayment('EXPIRED')} disabled={actionLoading}>
                                             Expire
