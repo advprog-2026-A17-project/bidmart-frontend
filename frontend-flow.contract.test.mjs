@@ -87,3 +87,15 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
   assert.doesNotMatch(app, /<Navbar \/>\s*<NotificationCenter \/>/);
   assert.match(app, /NotificationCenter/);
 });
+
+test('frontend sell flow is gated to seller accounts before any listing request is sent', () => {
+  const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
+  const app = read('./src/App.tsx');
+
+  assert.match(sellPage, /role\.name === 'SELLER'/);
+  assert.match(sellPage, /Only seller accounts can publish listings/);
+  assert.match(sellPage, /Seller access required/);
+  assert.match(app, /const canSell = !user \|\| user\.roles\?\.some/);
+  assert.match(app, /canSell &&/);
+  assert.match(app, /to="\/sell"/);
+});
