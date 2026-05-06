@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { readApiError, gatewayUrl } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
@@ -45,6 +45,8 @@ const walletDisplayName = (email?: string): string => {
 const WalletPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
+    const location = useLocation();
+    const navigate = useNavigate();
     const [wallet, setWallet] = useState<Wallet | null>(null);
     const [history, setHistory] = useState<WalletTransaction[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -116,15 +118,69 @@ const WalletPage: React.FC = () => {
         }
     };
 
+    const showSuccess = useCallback((msg: string) => {
+        setSuccess(msg);
+        setError(null);
+        setTimeout(() => setSuccess(null), 3000);
+    }, []);
+
     useEffect(() => {
         fetchWallet();
     }, [fetchWallet]);
 
-    const showSuccess = (msg: string) => {
-        setSuccess(msg);
-        setError(null);
-        setTimeout(() => setSuccess(null), 3000);
-    };
+    useEffect(() => {
+        if (!user) return;
+
+        const params = new URLSearchParams(location.search);
+        const orderId = params.get('order_id') ?? params.get('orderId');
+        const transactionStatus = params.get('transaction_status') ?? params.get('transactionStatus');
+        const statusCode = params.get('status_code') ?? params.get('statusCode');
+
+        if (!orderId || !transactionStatus) {
+            return;
+        }
+
+        let active = true;
+
+        const syncMidtransReturn = async () => {
+            setActionLoading(true);
+            setError(null);
+            try {
+                const response = await authenticatedFetch(
+                    gatewayUrl('/api/v1/wallet/midtrans/payments/return'),
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ orderId, transactionStatus, statusCode }),
+                    }
+                );
+                if (!response.ok) {
+                    setError(`Midtrans payment sync failed: ${await readApiError(response, 'Midtrans payment sync failed')}`);
+                    return;
+                }
+                const payment = await response.json() as PaymentIntent;
+                if (!active) return;
+                setPendingPayment(null);
+                showSuccess(`Midtrans payment ${payment.status}.`);
+                await fetchWallet();
+                navigate('/wallet', { replace: true });
+            } catch (err: unknown) {
+                if (active) {
+                    setError(`Midtrans payment sync failed: ${toErrorMessage(err)}`);
+                }
+            } finally {
+                if (active) {
+                    setActionLoading(false);
+                }
+            }
+        };
+
+        void syncMidtransReturn();
+
+        return () => {
+            active = false;
+        };
+    }, [authenticatedFetch, fetchWallet, location.search, navigate, showSuccess, user]);
 
     const handleTopUp = async () => {
         const amountCents = toAmountCents(topUpAmount);
@@ -151,36 +207,10 @@ const WalletPage: React.FC = () => {
             const payment = await response.json() as PaymentIntent;
             setPendingPayment(payment);
             setTopUpAmount('');
-            showSuccess(`Sandbox payment created for ${formatCents(payment.amountCents)}.`);
+            showSuccess(`Opening Midtrans Sandbox for ${formatCents(payment.amountCents)}.`);
+            window.location.assign(payment.redirectUrl);
         } catch (err: unknown) {
             setError(`Top-up failed: ${toErrorMessage(err)}`);
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
-    const simulatePayment = async (status: 'PAID' | 'FAILED' | 'EXPIRED') => {
-        if (!pendingPayment) return;
-        setActionLoading(true);
-        setError(null);
-        try {
-            const response = await authenticatedFetch(
-                gatewayUrl(`/api/v1/wallet/midtrans/payments/${pendingPayment.paymentId}/simulate`),
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status }),
-                }
-            );
-            if (!response.ok) {
-                setError(`Payment simulation failed: ${await readApiError(response, 'Payment simulation failed')}`);
-                return;
-            }
-            setPendingPayment(null);
-            showSuccess(`Sandbox payment marked ${status}.`);
-            await fetchWallet();
-        } catch (err: unknown) {
-            setError(`Payment simulation failed: ${toErrorMessage(err)}`);
         } finally {
             setActionLoading(false);
         }
@@ -219,33 +249,6 @@ const WalletPage: React.FC = () => {
             await fetchWallet();
         } catch (err: unknown) {
             setError(`Withdrawal failed: ${toErrorMessage(err)}`);
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
-    const simulateWithdrawal = async (status: 'COMPLETED' | 'FAILED') => {
-        if (!pendingWithdrawal) return;
-        setActionLoading(true);
-        setError(null);
-        try {
-            const response = await authenticatedFetch(
-                gatewayUrl(`/api/v1/wallet/midtrans/withdrawals/${pendingWithdrawal.withdrawalId}/simulate`),
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status }),
-                }
-            );
-            if (!response.ok) {
-                setError(`Withdrawal simulation failed: ${await readApiError(response, 'Withdrawal simulation failed')}`);
-                return;
-            }
-            setPendingWithdrawal(null);
-            showSuccess(`Sandbox withdrawal marked ${status}.`);
-            await fetchWallet();
-        } catch (err: unknown) {
-            setError(`Withdrawal simulation failed: ${toErrorMessage(err)}`);
         } finally {
             setActionLoading(false);
         }
@@ -358,22 +361,13 @@ const WalletPage: React.FC = () => {
                             </button>
                             {pendingPayment && (
                                 <div className="summary-box sandbox-status">
-                                    <strong>Midtrans Sandbox Simulation</strong>
+                                    <strong>Midtrans Sandbox Checkout</strong>
                                     <div>Payment ref: {pendingPayment.paymentId.slice(0, 8).toUpperCase()}</div>
                                     <div>Amount: {formatCents(pendingPayment.amountCents)}</div>
                                     <div>Status: {pendingPayment.status}</div>
-                                    <span className="text-muted">Redirect generated locally: {pendingPayment.redirectUrl}</span>
-                                    <div className="button-row">
-                                        <button className="primary-button" onClick={() => simulatePayment('PAID')} disabled={actionLoading}>
-                                            Mark Paid
-                                        </button>
-                                        <button className="secondary-button" onClick={() => simulatePayment('FAILED')} disabled={actionLoading}>
-                                            Mark Failed
-                                        </button>
-                                        <button className="secondary-button" onClick={() => simulatePayment('EXPIRED')} disabled={actionLoading}>
-                                            Expire
-                                        </button>
-                                    </div>
+                                    <a className="primary-button" href={pendingPayment.redirectUrl}>
+                                        Open Midtrans Sandbox
+                                    </a>
                                 </div>
                             )}
                         </div>
@@ -411,14 +405,7 @@ const WalletPage: React.FC = () => {
                                     <div>Withdrawal ref: {pendingWithdrawal.withdrawalId.slice(0, 8).toUpperCase()}</div>
                                     <div>Amount: {formatCents(pendingWithdrawal.amountCents)}</div>
                                     <div>Status: {pendingWithdrawal.status}</div>
-                                    <div className="button-row">
-                                        <button className="primary-button" onClick={() => simulateWithdrawal('COMPLETED')} disabled={actionLoading}>
-                                            Complete
-                                        </button>
-                                        <button className="secondary-button" onClick={() => simulateWithdrawal('FAILED')} disabled={actionLoading}>
-                                            Fail and Reverse
-                                        </button>
-                                    </div>
+                                    <span className="text-muted">Withdrawal status updates are reflected in transaction history.</span>
                                 </div>
                             )}
                         </div>
