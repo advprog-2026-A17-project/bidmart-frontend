@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
@@ -33,6 +34,8 @@ const toErrorMessage = (err: unknown): string =>
 const SellPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
+    const isSeller = user?.roles?.some((role) => role.name === 'SELLER') ?? false;
+    const roleSummary = user?.roles?.map((role) => role.name).join(', ') ?? 'No active role';
     const [step, setStep] = useState<Step>('details');
     const [published, setPublished] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -105,8 +108,8 @@ const SellPage: React.FC = () => {
     };
 
     const publishListing = async () => {
-        if (!user) {
-            setError('Please sign in as a seller before publishing.');
+        if (!user || !isSeller) {
+            setError('Only seller accounts can publish listings. Sign in with a SELLER role to continue.');
             return;
         }
         setError(null);
@@ -185,6 +188,38 @@ const SellPage: React.FC = () => {
         setCreatedListingId(null);
         setCreatedAuctionId(null);
     };
+
+    if (!user || !isSeller) {
+        return (
+            <div className="page-wrap">
+                <section className="page-head">
+                    <h1>Create Listing</h1>
+                    <p>Start selling your items on BidMart</p>
+                </section>
+
+                <section className="panel access-panel center-content">
+                    <span className="hero-badge">Seller access required</span>
+                    <h2>Seller access required</h2>
+                    <p className="text-muted">
+                        {!user
+                            ? 'Sign in with a seller account to create and publish listings.'
+                            : 'Only seller accounts can publish listings.'}
+                    </p>
+                    {user && <p className="access-role-summary">Current roles: {roleSummary}</p>}
+                    <div className="access-actions">
+                        <Link className="primary-button" to={user ? '/' : '/login'}>
+                            {user ? 'Back to Explore' : 'Sign In'}
+                        </Link>
+                        {user && (
+                            <Link className="secondary-button" to="/profile">
+                                View Profile
+                            </Link>
+                        )}
+                    </div>
+                </section>
+            </div>
+        );
+    }
 
     return (
         <div className="page-wrap">
