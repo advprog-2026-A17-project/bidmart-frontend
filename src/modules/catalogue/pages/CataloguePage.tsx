@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { apiUrl } from '../../../config/api';
 import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
 import { Link } from 'react-router-dom';
@@ -48,7 +48,7 @@ const CataloguePage: React.FC = () => {
         return [];
     };
 
-    const fetchItems = async (params: SearchParams) => {
+    const fetchItems = useCallback(async (params: SearchParams) => {
         setLoading(true);
         setError(null);
         const query = new URLSearchParams();
@@ -73,11 +73,11 @@ const CataloguePage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchItems(appliedParams);
-    }, [appliedParams]);
+    }, [appliedParams, fetchItems]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
