@@ -37,6 +37,7 @@ const Navbar = () => {
             <div className="app-nav-right">
                 {user ? (
                     <>
+                        <NotificationCenter />
                         <span className="app-user-pill">
                             {user.email}
                             {user.roles?.length > 0 && (
@@ -66,7 +67,6 @@ function App() {
             <Router>
                 <div className="app-shell">
                     <Navbar />
-                    <NotificationCenter />
                     <main className="app-main">
                         <ProfileGuard>
                             <Routes>
