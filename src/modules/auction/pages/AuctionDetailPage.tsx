@@ -27,6 +27,12 @@ const bidButtonLabel = (isClosed: boolean, isSignedIn: boolean): string => {
     return isSignedIn ? 'Place Bid' : 'Sign in to Bid';
 };
 
+const detailTitle = (id?: string): string =>
+    id && id !== 'demo' ? 'Auction Detail' : 'Live Auctions Dashboard';
+
+const openAuctionCount = (auctions: Auction[]): number =>
+    auctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)).length;
+
 const AuctionDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const { user } = useAuth();
@@ -36,29 +42,6 @@ const AuctionDetailPage: React.FC = () => {
     const [bidInputs, setBidInputs] = useState<{ [key: string]: number }>({});
     const [loading, setLoading] = useState<boolean>(true);
     const [listingDetails, setListingDetails] = useState<any>(null);
-    const [listingLoading, setListingLoading] = useState<boolean>(true);
-
-    // Fetch listing details directly from catalogue service
-    useEffect(() => {
-        const fetchListing = async () => {
-            if (!id || id === 'demo') {
-                setListingLoading(false);
-                return;
-            }
-            try {
-                const res = await authenticatedFetch(apiUrl(`${CATALOGUE_LISTINGS_BASE_PATH}/${id}`));
-                if (res.ok) {
-                    const data = await res.json();
-                    setListingDetails(data);
-                }
-            } catch (err) {
-                console.warn('Could not fetch listing details:', err);
-            } finally {
-                setListingLoading(false);
-            }
-        };
-        fetchListing();
-    }, [id, authenticatedFetch]);
 
     const fetchAuctions = useCallback(async () => {
         try {
@@ -77,6 +60,19 @@ const AuctionDetailPage: React.FC = () => {
             }
 
             setAuctions(data);
+
+            if (data.length > 0 && id && id !== 'demo') {
+                try {
+                    const listingId = data[0].listingId;
+                    const listingRes = await authenticatedFetch(apiUrl(`${CATALOGUE_LISTINGS_BASE_PATH}/${listingId}`));
+                    if (listingRes.ok) {
+                        const listingData = await listingRes.json();
+                        setListingDetails(listingData);
+                    }
+                } catch (listingErr) {
+                    console.warn('Could not fetch listing details:', listingErr);
+                }
+            }
 
             const initialInputs: { [key: string]: number } = {};
             data.forEach(auction => {
@@ -150,143 +146,86 @@ const AuctionDetailPage: React.FC = () => {
         }
     };
 
-    const formatPrice = (price: any) => {
-        if (price === null || price === undefined) return '-';
-        const num = typeof price === 'string' ? parseFloat(price) : price;
-        if (isNaN(num)) return '-';
-        return `$${num.toFixed(2)}`;
-    };
-
-    const isLoading = loading || listingLoading;
     const selectedAuction = auctions[0];
     const selectedMeta = selectedAuction ? buildAuctionCardMeta(selectedAuction) : null;
-    const hasAuction = Boolean(selectedAuction && selectedMeta);
-    const isDemoOrList = !id || id === 'demo';
-
-    // Determine page title
-    const pageTitle = isDemoOrList
-        ? 'Live Auctions Dashboard'
-        : listingDetails?.title
-            ? listingDetails.title
-            : 'Listing Detail';
+    const thumbnailSeeds = selectedAuction
+        ? [selectedAuction.id, `${selectedAuction.id}-2`, `${selectedAuction.id}-3`]
+        : [];
 
     let content: React.ReactNode;
-    if (isLoading) {
-        content = <div className="loading-state">Loading details...</div>;
-    } else if (isDemoOrList && auctions.length === 0) {
-        content = <div className="empty-state">No active auctions found.</div>;
-    } else if (!isDemoOrList && !listingDetails && !hasAuction) {
-        content = <div className="empty-state">Listing not found.</div>;
+    if (loading) {
+        content = <div className="loading-state">Fetching operational data from API Gateway...</div>;
+    } else if (!selectedAuction || !selectedMeta) {
+        content = <div className="empty-state">No matching auctions found in the data persistence layer.</div>;
     } else {
         content = (
             <div className="auction-layout">
                 <section className="panel">
-                    {/* Listing Image */}
                     <div className="auction-image-main">
                         {listingDetails?.imageUrl ? (
                             <img
                                 src={listingDetails.imageUrl}
-                                alt={listingDetails.title || 'Listing'}
-                                style={{width: '100%', maxHeight: '500px', objectFit: 'cover', borderRadius: '8px'}}
+                                alt={listingDetails.title || `Listing ${selectedAuction.listingId}`}
+                                style={{ width: '100%', maxHeight: '500px', objectFit: 'cover', borderRadius: '8px' }}
                             />
                         ) : (
-                            <div className="catalog-image catalog-image-fallback" style={{height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem'}}>No Image Available</div>
+                            <img
+                                src={`https://picsum.photos/seed/${selectedAuction.id}/900/700`}
+                                alt={`Listing ${selectedAuction.listingId}`}
+                            />
                         )}
                     </div>
-
-                    {/* Listing Title */}
-                    <h2 style={{marginTop: '16px'}}>{listingDetails?.title || (selectedAuction ? `Auction #${selectedAuction.id.slice(0, 8)}` : 'Listing Detail')}</h2>
-
-                    {/* Description */}
+                    <h2>{listingDetails?.title || `Listing #${selectedAuction.listingId}`}</h2>
                     {listingDetails?.description && (
-                        <p style={{marginTop: '8px', lineHeight: '1.6', color: 'var(--text-secondary, #aaa)'}}>{listingDetails.description}</p>
+                        <p style={{ marginTop: '8px', lineHeight: '1.6', color: 'var(--text-secondary, #aaa)' }}>{listingDetails.description}</p>
                     )}
-
-                    {/* Badges row: Category, Condition, Status */}
-                    <div className="catalog-top-row" style={{marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
-                        {listingDetails?.category && (
-                            <span className="category-badge">{listingDetails.category}</span>
-                        )}
-                        {listingDetails?.condition && (
-                            <span className="status-badge status-ACTIVE" style={{textTransform: 'capitalize'}}>{listingDetails.condition}</span>
-                        )}
-                        {listingDetails?.status && (
-                            <span className={`status-badge status-${listingDetails.status}`}>{listingDetails.status}</span>
-                        )}
-                        {selectedAuction && selectedMeta && (
-                            <span className={`auction-time-left ${selectedMeta.isClosed ? 'auction-time-left-closed' : ''}`}>
-                                {selectedMeta.timeLeftLabel}
-                            </span>
-                        )}
+                    {listingDetails?.category && (
+                        <span className="category-badge" style={{ marginTop: '12px', display: 'inline-block' }}>{listingDetails.category}</span>
+                    )}
+                    <p className="text-muted" style={{ marginTop: '8px' }}>Auction ID: {selectedAuction.id}</p>
+                    <div className="catalog-status-row">
+                        <span className={`status-badge status-${selectedAuction.status}`}>{selectedMeta.statusLabel}</span>
+                        <span className={`auction-time-left ${selectedMeta.isClosed ? 'auction-time-left-closed' : ''}`}>
+                            {selectedMeta.timeLeftLabel}
+                        </span>
                     </div>
-
-                    {/* Category ID */}
-                    {listingDetails?.categoryEntity?.id && (
-                        <p className="text-muted" style={{marginTop: '8px'}}>Category ID: {listingDetails.categoryEntity.id}</p>
-                    )}
-
-                    {/* Price Info */}
-                    <div style={{marginTop: '12px'}}>
-                        {listingDetails?.startingPrice != null && (
-                            <p className="text-muted">Starting Price: {formatPrice(listingDetails.startingPrice)}</p>
-                        )}
-                        {listingDetails?.currentPrice != null && (
-                            <p className="text-muted">Current Price: {formatPrice(listingDetails.currentPrice)}</p>
-                        )}
-                    </div>
-
-                    {/* Auction-specific info */}
-                    {selectedAuction && (
-                        <div style={{marginTop: '8px'}}>
-                            <p className="text-muted">Auction ID: {selectedAuction.id}</p>
-                            <p className="text-muted">
-                                Min increment: {formatPrice(selectedAuction.minimumIncrement)} • Ends: {new Date(selectedAuction.endTime).toLocaleString()}
-                            </p>
-                        </div>
-                    )}
-
-                    {/* No auction notice */}
-                    {!hasAuction && listingDetails && (
-                        <div className="summary-box" style={{marginTop: '16px', padding: '16px', borderRadius: '8px'}}>
-                            <p>This listing does not have an active auction yet.</p>
-                        </div>
-                    )}
+                    <p className="text-muted">
+                        Starting Price: ${selectedAuction.startingPrice.toFixed(2)} • Min increment: ${selectedAuction.minimumIncrement.toFixed(2)} • Ends:{' '}
+                        {new Date(selectedAuction.endTime).toLocaleString()}
+                    </p>
                 </section>
 
-                {/* Bidding panel - only show if auction exists */}
-                {hasAuction && selectedAuction && selectedMeta && (
-                    <aside className="panel section-stack">
-                        <h3>Place Your Bid</h3>
-                        <div className="auction-price">{formatPrice(selectedMeta.currentHighest)}</div>
-                        <small className="text-muted">Current highest bid</small>
-                        <label className="field">
-                            <span>Your amount</span>
-                            <input
-                                type="number"
-                                className="form-input"
-                                value={bidInputs[selectedAuction.id] || selectedMeta.minNextBid}
-                                step={selectedAuction.minimumIncrement}
-                                min={selectedMeta.minNextBid}
-                                disabled={selectedMeta.isClosed}
-                                onChange={(e) => handleBidChange(selectedAuction.id, e.target.value)}
-                            />
-                        </label>
-                        <button
-                            className="primary-button"
-                            onClick={() => placeBid(selectedAuction.id)}
-                            disabled={selectedMeta.isClosed || !user}
-                        >
-                            {bidButtonLabel(selectedMeta.isClosed, Boolean(user))}
-                        </button>
-                        <button
-                            className="secondary-button"
-                            onClick={() => closeAuction(selectedAuction.id)}
-                            disabled={!user || !selectedMeta.isClosed}
-                        >
-                            Close Auction
-                        </button>
-                    </aside>
-                )}
+                <aside className="panel section-stack">
+                    <h3>Place Your Bid</h3>
+                    <div className="auction-price">${selectedMeta.currentHighest.toFixed(2)}</div>
+                    <small className="text-muted">Current highest bid</small>
+                    <label className="field">
+                        <span>Your amount</span>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={bidInputs[selectedAuction.id] || selectedMeta.minNextBid}
+                            step={selectedAuction.minimumIncrement}
+                            min={selectedMeta.minNextBid}
+                            disabled={selectedMeta.isClosed}
+                            onChange={(e) => handleBidChange(selectedAuction.id, e.target.value)}
+                        />
+                    </label>
+                    <button
+                        className="primary-button"
+                        onClick={() => placeBid(selectedAuction.id)}
+                        disabled={selectedMeta.isClosed || !user}
+                    >
+                        {bidButtonLabel(selectedMeta.isClosed, Boolean(user))}
+                    </button>
+                    <button
+                        className="secondary-button"
+                        onClick={() => closeAuction(selectedAuction.id)}
+                        disabled={!user || !selectedMeta.isClosed}
+                    >
+                        Close Auction
+                    </button>
+                </aside>
             </div>
         );
     }
@@ -294,12 +233,10 @@ const AuctionDetailPage: React.FC = () => {
     return (
         <div className="page-wrap">
             <section className="page-head">
-                <h1>{pageTitle}</h1>
-                {isDemoOrList && (
-                    <p>
-                        Total: {auctions.length} • Open: {auctions.filter(a => !CLOSED_STATUSES.has(a.status)).length}
-                    </p>
-                )}
+                <h1>{detailTitle(id)}</h1>
+                <p>
+                    Total: {auctions.length} • Open: {openAuctionCount(auctions)}
+                </p>
             </section>
 
             {error && <div className="toast-error">{error}</div>}
