@@ -78,7 +78,9 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
   assert.match(walletPage, /amountCents/);
   assert.match(walletPage, /pendingPayment/);
   assert.match(walletPage, /midtrans\/payments\/return/);
-  assert.match(walletPage, /window\.location\.assign/);
+  assert.match(walletPage, /midtrans\/payments\/\$\{pendingPayment\.paymentId\}\/sync/);
+  assert.match(walletPage, /paymentMethod/);
+  assert.match(walletPage, /Open Midtrans Simulator/);
   assert.match(walletPage, /redirectUrl/);
   assert.match(walletPage, /\/withdrawals/);
   assert.match(walletPage, /bankAccount/);

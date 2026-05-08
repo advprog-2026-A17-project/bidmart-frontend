@@ -27,7 +27,7 @@ const bidButtonLabel = (isClosed: boolean, isSignedIn: boolean): string => {
 };
 
 const detailTitle = (id?: string): string =>
-    id && id !== 'demo' ? 'Auction Detail' : 'Live Auctions Dashboard';
+    id ? 'Auction Detail' : 'Live Auctions Dashboard';
 
 const openAuctionCount = (auctions: Auction[]): number =>
     auctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)).length;
@@ -53,8 +53,8 @@ const AuctionDetailPage: React.FC = () => {
             const responsePayload: unknown = await response.json();
             let data: Auction[] = parseAuctionsResponse(responsePayload);
 
-            if (id && id !== 'demo') {
-                data = data.filter(auction => auction.id === id);
+            if (id) {
+                data = data.filter(auction => auction.id === id || auction.listingId === id);
             }
 
             setAuctions(data);
@@ -141,7 +141,7 @@ const AuctionDetailPage: React.FC = () => {
     if (loading) {
         content = <div className="loading-state">Fetching operational data from API Gateway...</div>;
     } else if (!selectedAuction || !selectedMeta) {
-        content = <div className="empty-state">No matching auctions found in the data persistence layer.</div>;
+        content = <div className="empty-state">No matching auction found.</div>;
     } else {
         content = (
             <div className="auction-layout">
