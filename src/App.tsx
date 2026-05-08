@@ -30,7 +30,7 @@ const Navbar = () => {
             </div>
             <div className="app-nav-links">
                 <Link to="/" className="app-nav-link">Explore</Link>
-                <Link to="/auctions/demo" className="app-nav-link">Auction</Link>
+                <Link to="/auctions" className="app-nav-link">Auction</Link>
                 {canSell && <Link to="/sell" className="app-nav-link">Sell</Link>}
                 <Link to="/wallet" className="app-nav-link">Wallet</Link>
                 <Link to="/profile" className="app-nav-link">Profile</Link>
@@ -74,6 +74,7 @@ function App() {
                                 <Route path="/" element={<CataloguePage />} />
                                 <Route path="/login" element={<AuthPage />} />
                                 <Route path="/profile" element={<ProfilePage />} />
+                                <Route path="/auctions" element={<AuctionDetailPage />} />
                                 <Route path="/auctions/:id" element={<AuctionDetailPage />} />
                                 <Route path="/sell" element={<SellPage />} />
                                 <Route path="/wallet" element={<WalletPage />} />
