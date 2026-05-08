@@ -24,6 +24,8 @@ interface PaymentIntent {
     amountCents: number;
     status: string;
     redirectUrl: string;
+    vaNumber?: string | null;
+    paymentChannel?: string | null;
 }
 
 interface WithdrawalRequestState {
@@ -31,6 +33,15 @@ interface WithdrawalRequestState {
     amountCents: number;
     status: string;
 }
+
+const PAYMENT_METHODS = [
+    { value: 'bca_va', label: 'BCA VA' },
+    { value: 'bni_va', label: 'BNI VA' },
+    { value: 'bri_va', label: 'BRI VA' },
+    { value: 'permata_va', label: 'Permata VA' },
+    { value: 'mandiri_bill', label: 'Mandiri Bill' },
+    { value: 'qris', label: 'QRIS' },
+];
 
 const toErrorMessage = (err: unknown): string =>
     err instanceof Error ? err.message : 'Unknown error';
@@ -55,6 +66,7 @@ const WalletPage: React.FC = () => {
     const [success, setSuccess] = useState<string | null>(null);
     const [walletNotFound, setWalletNotFound] = useState<boolean>(false);
     const [topUpAmount, setTopUpAmount] = useState<string>('');
+    const [paymentMethod, setPaymentMethod] = useState<string>('bca_va');
     const [withdrawAmount, setWithdrawAmount] = useState<string>('');
     const [bankAccount, setBankAccount] = useState<string>('');
     const [pendingPayment, setPendingPayment] = useState<PaymentIntent | null>(null);
@@ -197,7 +209,7 @@ const WalletPage: React.FC = () => {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amountCents }),
+                    body: JSON.stringify({ amountCents, paymentMethod }),
                 }
             );
             if (!response.ok) {
@@ -207,10 +219,33 @@ const WalletPage: React.FC = () => {
             const payment = await response.json() as PaymentIntent;
             setPendingPayment(payment);
             setTopUpAmount('');
-            showSuccess(`Opening Midtrans Sandbox for ${formatCents(payment.amountCents)}.`);
-            window.location.assign(payment.redirectUrl);
+            showSuccess(`Sandbox payment created for ${formatCents(payment.amountCents)}.`);
         } catch (err: unknown) {
             setError(`Top-up failed: ${toErrorMessage(err)}`);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const syncPendingPayment = async () => {
+        if (!pendingPayment) return;
+        setActionLoading(true);
+        setError(null);
+        try {
+            const response = await authenticatedFetch(
+                gatewayUrl(`/api/v1/wallet/midtrans/payments/${pendingPayment.paymentId}/sync`),
+                { method: 'POST' }
+            );
+            if (!response.ok) {
+                setError(`Payment sync failed: ${await readApiError(response, 'Payment sync failed')}`);
+                return;
+            }
+            const payment = await response.json() as PaymentIntent;
+            setPendingPayment(payment.status === 'PENDING' ? payment : null);
+            showSuccess(`Payment ${payment.status}.`);
+            await fetchWallet();
+        } catch (err: unknown) {
+            setError(`Payment sync failed: ${toErrorMessage(err)}`);
         } finally {
             setActionLoading(false);
         }
@@ -356,18 +391,37 @@ const WalletPage: React.FC = () => {
                                     onChange={(e) => setTopUpAmount(e.target.value)}
                                 />
                             </label>
+                            <label className="field">
+                                Payment Method
+                                <select
+                                    className="form-input"
+                                    value={paymentMethod}
+                                    onChange={(e) => setPaymentMethod(e.target.value)}
+                                >
+                                    {PAYMENT_METHODS.map((method) => (
+                                        <option key={method.value} value={method.value}>
+                                            {method.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
                             <button className="primary-button" onClick={handleTopUp} disabled={actionLoading}>
                                 {actionLoading ? 'Processing...' : 'Create Sandbox Payment Intent'}
                             </button>
                             {pendingPayment && (
                                 <div className="summary-box sandbox-status">
-                                    <strong>Midtrans Sandbox Checkout</strong>
+                                    <strong>Midtrans Sandbox Payment</strong>
                                     <div>Payment ref: {pendingPayment.paymentId.slice(0, 8).toUpperCase()}</div>
                                     <div>Amount: {formatCents(pendingPayment.amountCents)}</div>
+                                    {pendingPayment.paymentChannel && <div>Method: {pendingPayment.paymentChannel.replace('_', ' ')}</div>}
                                     <div>Status: {pendingPayment.status}</div>
-                                    <a className="primary-button" href={pendingPayment.redirectUrl}>
-                                        Open Midtrans Sandbox
+                                    {pendingPayment.vaNumber && <div>Payment code: {pendingPayment.vaNumber}</div>}
+                                    <a className="primary-button" href={pendingPayment.redirectUrl} target="_blank" rel="noreferrer">
+                                        Open Midtrans Simulator
                                     </a>
+                                    <button className="secondary-button" onClick={syncPendingPayment} disabled={actionLoading}>
+                                        {actionLoading ? 'Syncing...' : 'Sync Payment Status'}
+                                    </button>
                                 </div>
                             )}
                         </div>
