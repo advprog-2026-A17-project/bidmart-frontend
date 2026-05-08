@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
@@ -29,6 +30,7 @@ const AUCTION_DURATIONS = [1, 3, 5, 7, 10];
 const SellPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
+    const navigate = useNavigate();
     const [step, setStep] = useState<Step>('details');
     const [published, setPublished] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -109,8 +111,8 @@ const SellPage: React.FC = () => {
                 startingPrice: Number(formData.startingBid),
                 reservePrice: Number(formData.reservePrice || formData.startingBid),
                 minimumIncrement: Number(formData.minimumIncrement || 1),
-                startTime: now,
-                endTime: now + formData.duration * 24 * 60 * 60,
+                start_time: now,
+                end_time: now + formData.duration * 24 * 60 * 60,
             }),
         });
         if (!auctionResponse.ok) {
@@ -120,6 +122,9 @@ const SellPage: React.FC = () => {
         const auction = await auctionResponse.json() as { id: string };
         setCreatedAuctionId(auction.id);
         setPublished(true);
+        setTimeout(() => {
+            navigate('/');
+        }, 1500);
     };
 
     const cancelListing = async () => {
@@ -134,6 +139,30 @@ const SellPage: React.FC = () => {
         setPublished(false);
         setCreatedListingId(null);
         setCreatedAuctionId(null);
+    };
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files) return;
+
+        Array.from(files).forEach((file) => {
+            if (file.size > 10 * 1024 * 1024) {
+                alert(`File ${file.name} is too large. Max 10MB.`);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                if (event.target?.result) {
+                    setFormData((p) => ({
+                        ...p,
+                        images: [...p.images, event.target!.result as string],
+                    }));
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+        // Clear input so the same file can be selected again if needed
+        e.target.value = '';
     };
 
     return (
@@ -233,25 +262,21 @@ const SellPage: React.FC = () => {
                 {step === 'images' && (
                     <div className="section-stack">
                         <h3>Upload Images</h3>
-                        <button
-                            type="button"
-                            className="upload-zone"
-                            onClick={() =>
-                                setFormData((p) =>
-                                    p.images.length
-                                        ? p
-                                        : { ...p, images: ['image-1', 'image-2', 'image-3'] }
-                                )
-                            }
-                        >
+                        <label className="upload-zone" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                            <input 
+                                type="file" 
+                                accept="image/png, image/jpeg, image/webp" 
+                                multiple 
+                                onChange={handleImageUpload} 
+                                style={{ display: 'none' }} 
+                            />
                             <strong>Drop images here or click to upload</strong>
                             <span>JPG, PNG up to 10MB each. Add 1-12 images.</span>
-                        </button>
+                        </label>
                         {formData.images.length > 0 && (
                             <div className="image-mock-grid">
                                 {formData.images.map((img, idx) => (
-                                    <div key={`${img}-${idx}`} className="image-mock-card">
-                                        Image {idx + 1}
+                                    <div key={idx} className="image-mock-card" style={{ backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center', height: '100px', width: '100%' }}>
                                     </div>
                                 ))}
                             </div>

@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react
 import AuctionDetailPage from './modules/auction/pages/AuctionDetailPage';
 import CataloguePage from './modules/catalogue/pages/CataloguePage';
 import SellPage from './modules/catalogue/pages/SellPage';
+import EditListingPage from './modules/catalogue/pages/EditListingPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
 import AuthPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
@@ -73,6 +74,7 @@ function App() {
                                 <Route path="/profile" element={<ProfilePage />} />
                                 <Route path="/auctions/:id" element={<AuctionDetailPage />} />
                                 <Route path="/sell" element={<SellPage />} />
+                                <Route path="/edit/:id" element={<EditListingPage />} />
                                 <Route path="/wallet" element={<WalletPage />} />
                                 <Route path="/verify-email" element={<VerifyEmailPage />} />
                             </Routes>

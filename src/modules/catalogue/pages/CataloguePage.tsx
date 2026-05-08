@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { apiUrl } from '../../../config/api';
-import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
+import { CATALOGUE_LISTINGS_SEARCH_PATH, CATALOGUE_LISTINGS_BASE_PATH } from '../api/endpoints';
 import { Link } from 'react-router-dom';
+import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { useAuth } from '../../../context/useAuth';
 
 interface CatalogueItem {
-    id: number;
+    id: string;
     title: string;
     description: string;
+    sellerId: string;
     startingPrice: number;
     currentPrice: number;
     imageUrl: string | null;
@@ -23,6 +26,8 @@ interface SearchParams {
 }
 
 const CataloguePage: React.FC = () => {
+    const { user } = useAuth();
+    const authenticatedFetch = useAuthenticatedFetch();
     const [items, setItems] = useState<CatalogueItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -49,13 +54,13 @@ const CataloguePage: React.FC = () => {
         const url = apiUrl(`${CATALOGUE_LISTINGS_SEARCH_PATH}${query.toString() ? '?' + query.toString() : ''}`);
 
         try {
-            const response = await fetch(url);
+            const response = await authenticatedFetch(url);
             if (!response.ok) {
                 setError(`HTTP error! status: ${response.status}`);
                 return;
             }
-            const data: CatalogueItem[] = await response.json();
-            setItems(data);
+            const data = await response.json();
+            setItems(data.content || data || []);
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Unknown error';
             console.error('Fetch failed:', message);
@@ -80,13 +85,38 @@ const CataloguePage: React.FC = () => {
         setAppliedParams(empty);
     };
 
+    const deleteListing = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this listing? This action cannot be undone.')) return;
+        try {
+            const response = await authenticatedFetch(apiUrl(`${CATALOGUE_LISTINGS_BASE_PATH}/${id}`), {
+                method: 'DELETE',
+            });
+            if (!response.ok) {
+                const message = await response.text();
+                setError(`Failed to delete listing: ${message}`);
+                return;
+            }
+            setItems((prev) => prev.filter((item) => item.id !== id));
+        } catch (err: unknown) {
+            setError('Failed to connect to Catalogue Service for deletion.');
+        }
+    };
+
     const renderTimeLeft = (endTime: string) => {
+        if (!endTime) return 'Ended';
         const diff = new Date(endTime).getTime() - Date.now();
         if (diff <= 0) return 'Ended';
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         if (hours > 0) return `${hours}h ${mins}m left`;
         return `${mins}m left`;
+    };
+
+    const formatPrice = (price: any) => {
+        if (price === null || price === undefined) return '-';
+        const num = typeof price === 'string' ? parseFloat(price) : price;
+        if (isNaN(num)) return '-';
+        return `$${num.toFixed(2)}`;
     };
 
     const visibleItems = [...items].sort((a, b) => {
@@ -175,12 +205,18 @@ const CataloguePage: React.FC = () => {
                                 </div>
                                 <div className="catalog-pricing">
                                     <div>
-                                        <span className="text-muted catalog-starting-price">Starting: ${item.startingPrice?.toFixed(2)}</span>
-                                        <span className="price">${item.currentPrice?.toFixed(2)}</span>
+                                        <span className="text-muted catalog-starting-price">Starting: {formatPrice(item.startingPrice)}</span>
+                                        <span className="price">{item.currentPrice != null ? formatPrice(item.currentPrice) : formatPrice(item.startingPrice)}</span>
                                     </div>
                                     <Link to={`/auctions/${item.id}`} className="primary-button card-cta">
                                         View Auction
                                     </Link>
+                                    {user?.id === item.sellerId && (
+                                        <div style={{display: 'flex', gap: '8px', marginTop: '8px'}}>
+                                            <Link to={`/edit/${item.id}`} className="secondary-button" style={{flex: 1, textAlign: 'center'}}>Edit</Link>
+                                            <button className="secondary-button" style={{flex: 1}} onClick={() => deleteListing(item.id)}>Delete</button>
+                                        </div>
+                                    )}
                                 </div>
                             </li>
                         ))

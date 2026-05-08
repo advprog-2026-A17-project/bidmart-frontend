@@ -54,7 +54,7 @@ const AuctionDetailPage: React.FC = () => {
             let data: Auction[] = parseAuctionsResponse(responsePayload);
 
             if (id && id !== 'demo') {
-                data = data.filter(auction => auction.id === id);
+                data = data.filter(auction => auction.listingId === id || auction.id === id);
             }
 
             setAuctions(data);
