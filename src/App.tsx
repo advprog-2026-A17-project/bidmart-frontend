@@ -15,6 +15,7 @@ import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
 const Navbar = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const isSeller = user?.roles?.some(r => r.name?.toUpperCase() === 'SELLER') ?? false;
 
     const handleLogout = () => {
         logout();
@@ -30,7 +31,7 @@ const Navbar = () => {
             <div className="app-nav-links">
                 <Link to="/" className="app-nav-link">Explore</Link>
                 <Link to="/auctions/demo" className="app-nav-link">Auction</Link>
-                <Link to="/sell" className="app-nav-link">Sell</Link>
+                {isSeller && <Link to="/sell" className="app-nav-link">Sell</Link>}
                 <Link to="/wallet" className="app-nav-link">Wallet</Link>
                 <Link to="/profile" className="app-nav-link">Profile</Link>
             </div>

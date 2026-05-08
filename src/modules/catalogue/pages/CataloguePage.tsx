@@ -14,6 +14,7 @@ interface CatalogueItem {
     currentPrice: number;
     imageUrl: string | null;
     category?: string;
+    condition?: string;
     status: string;
     endTime: string;
     hasBids: boolean;
@@ -28,6 +29,8 @@ interface SearchParams {
 const CataloguePage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
+    const isSeller = user?.roles?.some(r => r.name?.toUpperCase() === 'SELLER') ?? false;
+    const isOwner = (sellerId: string) => isSeller && user?.id === sellerId;
     const [items, setItems] = useState<CatalogueItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -188,7 +191,39 @@ const CataloguePage: React.FC = () => {
                 <ul className="catalog-grid">
                     {visibleItems.length > 0 ? (
                         visibleItems.map((item) => (
-                            <li key={item.id} className="catalog-card">
+                            <li key={item.id} className="catalog-card" style={{position: 'relative'}}>
+                                {isOwner(item.sellerId) && (
+                                    <button
+                                        onClick={() => deleteListing(item.id)}
+                                        title="Delete listing"
+                                        style={{
+                                            position: 'absolute',
+                                            top: '10px',
+                                            right: '10px',
+                                            zIndex: 10,
+                                            background: 'rgba(220, 38, 38, 0.9)',
+                                            border: 'none',
+                                            borderRadius: '50%',
+                                            width: '36px',
+                                            height: '36px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                            transition: 'transform 0.15s, background 0.15s',
+                                        }}
+                                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(185, 28, 28, 1)'; e.currentTarget.style.transform = 'scale(1.1)'; }}
+                                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(220, 38, 38, 0.9)'; e.currentTarget.style.transform = 'scale(1)'; }}
+                                    >
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <polyline points="3 6 5 6 21 6"/>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                            <line x1="10" y1="11" x2="10" y2="17"/>
+                                            <line x1="14" y1="11" x2="14" y2="17"/>
+                                        </svg>
+                                    </button>
+                                )}
                                 {item.imageUrl ? (
                                     <img src={item.imageUrl} alt={item.title} className="catalog-image" />
                                 ) : (
@@ -197,6 +232,7 @@ const CataloguePage: React.FC = () => {
                                 <div className="catalog-meta">
                                     <div className="catalog-top-row">
                                         {item.category && <span className="category-badge">{item.category}</span>}
+                                        {item.condition && <span className="status-badge status-ACTIVE" style={{textTransform: 'capitalize'}}>{item.condition}</span>}
                                         <span className={`status-badge status-${item.status}`}>{item.status}</span>
                                     </div>
                                     <strong>{item.title}</strong>
@@ -209,13 +245,10 @@ const CataloguePage: React.FC = () => {
                                         <span className="price">{item.currentPrice != null ? formatPrice(item.currentPrice) : formatPrice(item.startingPrice)}</span>
                                     </div>
                                     <Link to={`/auctions/${item.id}`} className="primary-button card-cta">
-                                        View Auction
+                                        View Details
                                     </Link>
-                                    {user?.id === item.sellerId && (
-                                        <div style={{display: 'flex', gap: '8px', marginTop: '8px'}}>
-                                            <Link to={`/edit/${item.id}`} className="secondary-button" style={{flex: 1, textAlign: 'center'}}>Edit</Link>
-                                            <button className="secondary-button" style={{flex: 1}} onClick={() => deleteListing(item.id)}>Delete</button>
-                                        </div>
+                                    {isOwner(item.sellerId) && (
+                                        <Link to={`/edit/${item.id}`} className="secondary-button" style={{textAlign: 'center', marginTop: '8px'}}>Edit</Link>
                                     )}
                                 </div>
                             </li>

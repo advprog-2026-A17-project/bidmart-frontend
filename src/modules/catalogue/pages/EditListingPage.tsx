@@ -35,6 +35,7 @@ const EditListingPage: React.FC = () => {
         description: '',
         category: '',
         imageUrl: '',
+        startingPrice: '',
     });
 
     useEffect(() => {
@@ -61,6 +62,7 @@ const EditListingPage: React.FC = () => {
                     description: data.description || '',
                     category: data.category || '',
                     imageUrl: data.imageUrl || '',
+                    startingPrice: data.startingPrice != null ? String(data.startingPrice) : '',
                 });
             } catch (err) {
                 setError('Failed to load listing.');
@@ -111,6 +113,7 @@ const EditListingPage: React.FC = () => {
             description: formData.description,
             category: formData.category,
             imageUrl: formData.imageUrl,
+            startingPrice: formData.startingPrice ? Math.round(Number(formData.startingPrice) * 100) / 100 : originalListing.startingPrice,
         };
 
         try {
@@ -158,7 +161,7 @@ const EditListingPage: React.FC = () => {
         <div className="page-wrap">
             <section className="page-head">
                 <h1>Edit Listing</h1>
-                <p>Update your listing details. Note: Price and duration cannot be changed once created.</p>
+                <p>Update your listing details below.</p>
             </section>
 
             {success && <div className="toast-success">Listing updated successfully!</div>}
@@ -199,6 +202,17 @@ const EditListingPage: React.FC = () => {
                                 </option>
                             ))}
                         </select>
+                    </label>
+                    <label className="field">
+                        Starting Price
+                        <input
+                            className="form-input"
+                            type="number"
+                            min={1}
+                            value={formData.startingPrice}
+                            onChange={(e) => setFormData((p) => ({ ...p, startingPrice: e.target.value }))}
+                            placeholder="0.00"
+                        />
                     </label>
                 </div>
 
