@@ -32,7 +32,6 @@ test('auction war between two buyers', async ({ page, browser, request }) => {
   const buyerEmail = buildTestEmail('buyer-a');
   const buyerTwoEmail = buildTestEmail('buyer-b');
 
-  const seller = await registerUserViaApi(request, sellerEmail, password, 'SELLER');
   const buyerA = await registerUserViaApi(request, buyerEmail, password, 'BUYER');
   const buyerB = await registerUserViaApi(request, buyerTwoEmail, password, 'BUYER');
 
