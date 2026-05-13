@@ -32,29 +32,6 @@ const detailTitle = (id?: string): string =>
 const openAuctionCount = (auctions: Auction[]): number =>
     auctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)).length;
 
-const AuctionSkeleton = () => (
-    <div className="auction-layout skeleton-grid" aria-busy="true" aria-label="Loading auctions">
-        <section className="panel section-stack skeleton-card">
-            <div className="auction-image-main skeleton-block" />
-            <div className="auction-thumbs">
-                <span className="skeleton-thumb" />
-                <span className="skeleton-thumb" />
-                <span className="skeleton-thumb" />
-            </div>
-            <span className="skeleton-line" />
-            <span className="skeleton-line skeleton-line-medium" />
-            <span className="skeleton-line skeleton-line-short" />
-        </section>
-        <aside className="panel section-stack skeleton-card">
-            <span className="skeleton-line skeleton-line-medium" />
-            <span className="skeleton-line skeleton-line-large" />
-            <span className="skeleton-line" />
-            <span className="skeleton-button" />
-            <span className="skeleton-button" />
-        </aside>
-    </div>
-);
-
 const AuctionDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const { user } = useAuth();
@@ -162,7 +139,7 @@ const AuctionDetailPage: React.FC = () => {
 
     let content: React.ReactNode;
     if (loading) {
-        content = <AuctionSkeleton />;
+        content = <div className="loading-state">Fetching operational data from API Gateway...</div>;
     } else if (!selectedAuction || !selectedMeta) {
         content = <div className="empty-state">No matching auction found.</div>;
     } else {
