@@ -101,6 +101,21 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
   assert.match(app, /NotificationCenter/);
 });
 
+test('frontend uses skeleton loading states for core async surfaces', () => {
+  const cataloguePage = read('./src/modules/catalogue/pages/CataloguePage.tsx');
+  const auctionDetail = read('./src/modules/auction/pages/AuctionDetailPage.tsx');
+  const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
+  const notificationCenter = read('./src/modules/notifications/components/NotificationCenter.tsx');
+  const appStyles = read('./src/App.css');
+
+  assert.match(cataloguePage, /aria-label="Loading listings"/);
+  assert.match(auctionDetail, /aria-label="Loading auctions"/);
+  assert.match(walletPage, /aria-label="Loading wallet"/);
+  assert.match(notificationCenter, /aria-label="Loading notifications"/);
+  assert.match(appStyles, /skeleton-pulse/);
+  assert.match(appStyles, /skeleton-card/);
+});
+
 test('frontend sell flow is gated to seller accounts before any listing request is sent', () => {
   const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
   const app = read('./src/App.tsx');
