@@ -194,31 +194,6 @@ const WalletPage: React.FC = () => {
         };
     }, [authenticatedFetch, fetchWallet, location.search, navigate, showSuccess, user]);
 
-    const walletSkeleton = (
-        <div className="section-stack" aria-busy="true" aria-label="Loading wallet">
-            <div className="wallet-summary-grid skeleton-grid">
-                <div className="wallet-summary-card wallet-main skeleton-card">
-                    <span className="skeleton-line skeleton-line-short" />
-                    <span className="skeleton-line skeleton-line-large" />
-                    <span className="skeleton-line skeleton-line-medium" />
-                </div>
-                <div className="wallet-summary-card skeleton-card">
-                    <span className="skeleton-line skeleton-line-short" />
-                    <span className="skeleton-line skeleton-line-large" />
-                </div>
-                <div className="wallet-summary-card skeleton-card">
-                    <span className="skeleton-line skeleton-line-short" />
-                    <span className="skeleton-line skeleton-line-medium" />
-                </div>
-            </div>
-            <div className="panel section-stack skeleton-card">
-                <span className="skeleton-line" />
-                <span className="skeleton-line skeleton-line-medium" />
-                <span className="skeleton-button" />
-            </div>
-        </div>
-    );
-
     const handleTopUp = async () => {
         const amountCents = toAmountCents(topUpAmount);
         if (!amountCents || amountCents <= 0) {
@@ -348,7 +323,7 @@ const WalletPage: React.FC = () => {
             {success && <div className="toast-success">{success}</div>}
 
             {loading ? (
-                walletSkeleton
+                <div className="loading-state">Loading wallet from API Gateway...</div>
             ) : walletNotFound ? (
                 <div className="panel center-content">
                     <p className="text-muted">Your wallet is not active yet.</p>
