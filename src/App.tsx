@@ -9,6 +9,7 @@ import ProfilePage from './modules/auth/pages/ProfilePage';
 import ProfileGuard from './modules/auth/components/ProfileGuard';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
+import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import './App.css';
 import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
 
@@ -64,27 +65,29 @@ const Navbar = () => {
 
 function App() {
     return (
-        <AuthProvider>
-            <Router>
-                <div className="app-shell">
-                    <Navbar />
-                    <main className="app-main">
-                        <ProfileGuard>
-                            <Routes>
-                                <Route path="/" element={<CataloguePage />} />
-                                <Route path="/login" element={<AuthPage />} />
-                                <Route path="/profile" element={<ProfilePage />} />
-                                <Route path="/auctions" element={<AuctionDetailPage />} />
-                                <Route path="/auctions/:id" element={<AuctionDetailPage />} />
-                                <Route path="/sell" element={<SellPage />} />
-                                <Route path="/wallet" element={<WalletPage />} />
-                                <Route path="/verify-email" element={<VerifyEmailPage />} />
-                            </Routes>
-                        </ProfileGuard>
-                    </main>
-                </div>
-            </Router>
-        </AuthProvider>
+        <GlobalErrorBoundary>
+            <AuthProvider>
+                <Router>
+                    <div className="app-shell">
+                        <Navbar />
+                        <main className="app-main">
+                            <ProfileGuard>
+                                <Routes>
+                                    <Route path="/" element={<CataloguePage />} />
+                                    <Route path="/login" element={<AuthPage />} />
+                                    <Route path="/profile" element={<ProfilePage />} />
+                                    <Route path="/auctions" element={<AuctionDetailPage />} />
+                                    <Route path="/auctions/:id" element={<AuctionDetailPage />} />
+                                    <Route path="/sell" element={<SellPage />} />
+                                    <Route path="/wallet" element={<WalletPage />} />
+                                    <Route path="/verify-email" element={<VerifyEmailPage />} />
+                                </Routes>
+                            </ProfileGuard>
+                        </main>
+                    </div>
+                </Router>
+            </AuthProvider>
+        </GlobalErrorBoundary>
     );
 }
 
