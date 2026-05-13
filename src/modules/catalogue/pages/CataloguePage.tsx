@@ -99,6 +99,23 @@ const CataloguePage: React.FC = () => {
         return `${mins}m left`;
     };
 
+    const buildFallbackImage = (itemId: CatalogueItem['id']) =>
+        `https://picsum.photos/seed/${encodeURIComponent(String(itemId))}/640/480`;
+
+    const resolveImageSrc = (item: CatalogueItem) => {
+        const url = item.imageUrl?.trim();
+        return url ? url : buildFallbackImage(item.id);
+    };
+
+    const handleImageError = (
+        event: React.SyntheticEvent<HTMLImageElement>,
+        itemId: CatalogueItem['id']
+    ) => {
+        const target = event.currentTarget;
+        target.onerror = null;
+        target.src = buildFallbackImage(itemId);
+    };
+
     const visibleItems = [...items].sort((a, b) => {
         if (sortBy === 'price-asc') return a.currentPrice - b.currentPrice;
         if (sortBy === 'price-desc') return b.currentPrice - a.currentPrice;
@@ -188,11 +205,13 @@ const CataloguePage: React.FC = () => {
                     {visibleItems.length > 0 ? (
                         visibleItems.map((item) => (
                             <li key={item.id} className="catalog-card">
-                                {item.imageUrl ? (
-                                    <img src={item.imageUrl} alt={item.title} className="catalog-image" />
-                                ) : (
-                                    <div className="catalog-image catalog-image-fallback">No Image</div>
-                                )}
+                                <img
+                                    src={resolveImageSrc(item)}
+                                    alt={item.title}
+                                    className="catalog-image"
+                                    loading="lazy"
+                                    onError={(event) => handleImageError(event, item.id)}
+                                />
                                 <div className="catalog-meta">
                                     <div className="catalog-top-row">
                                         {item.category && <span className="category-badge">{item.category}</span>}
