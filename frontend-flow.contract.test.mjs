@@ -17,6 +17,7 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
   const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
   const app = read('./src/App.tsx');
+  const globalErrorBoundary = read('./src/components/GlobalErrorBoundary.tsx');
   const packageJson = read('./package.json');
 
   assert.doesNotMatch(auctionDetail, /DUMMY_BIDDER_ID/);
@@ -45,6 +46,9 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(profilePage, /Connected Accounts/);
   assert.match(app, /\/profile/);
   assert.match(app, /ProfilePage/);
+  assert.match(app, /GlobalErrorBoundary/);
+  assert.match(globalErrorBoundary, /role="alert"/);
+  assert.match(globalErrorBoundary, /toast-error/);
   assert.match(sellPage, /\/api\/v1\/catalogue\/listings/);
   assert.match(sellPage, /\/api\/v1\/auctions/);
   assert.doesNotMatch(sellPage, /categoryId/);
