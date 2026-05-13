@@ -105,25 +105,6 @@ const CataloguePage: React.FC = () => {
         return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
     });
 
-    const catalogueSkeleton = (
-        <ul className="catalog-grid skeleton-grid" aria-busy="true" aria-label="Loading listings">
-            {Array.from({ length: 6 }).map((_, index) => (
-                <li key={index} className="catalog-card skeleton-card">
-                    <div className="catalog-image skeleton-block" />
-                    <div className="catalog-meta">
-                        <span className="skeleton-line skeleton-line-short" />
-                        <span className="skeleton-line" />
-                        <span className="skeleton-line skeleton-line-medium" />
-                    </div>
-                    <div className="catalog-pricing">
-                        <span className="skeleton-line skeleton-line-medium" />
-                        <span className="skeleton-button" />
-                    </div>
-                </li>
-            ))}
-        </ul>
-    );
-
     return (
         <div className="page-wrap">
             <section className="hero">
@@ -182,7 +163,7 @@ const CataloguePage: React.FC = () => {
             {error && <div className="toast-error">{error}</div>}
 
             {loading ? (
-                catalogueSkeleton
+                <div className="loading-state">Loading catalogue from API Gateway...</div>
             ) : (
                 <ul className="catalog-grid">
                     {visibleItems.length > 0 ? (
