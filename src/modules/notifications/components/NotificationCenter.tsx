@@ -34,6 +34,7 @@ const NotificationCenter = () => {
     const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
     const [storedNotifications, setStoredNotifications] = useState<BidmartNotification[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
     const popoverRef = useRef<HTMLDivElement | null>(null);
     const notifications = user ? storedNotifications : [];
@@ -54,6 +55,7 @@ const NotificationCenter = () => {
         }
 
         const fetchNotifications = async () => {
+            setIsLoading(true);
             try {
                 const response = await authenticatedFetch(gatewayUrl('/api/v1/notifications'));
                 if (!response.ok) {
@@ -64,6 +66,8 @@ const NotificationCenter = () => {
                 setStoredNotifications(Array.isArray(payload) ? payload.slice(0, 5) : (payload.notifications ?? []).slice(0, 5));
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : 'Notification lookup failed');
+            } finally {
+                setIsLoading(false);
             }
         };
 
@@ -141,7 +145,13 @@ const NotificationCenter = () => {
                     </div>
                     {error && <div className="notification-error">{error}</div>}
                     <div className="notification-list">
-                        {notifications.length > 0 ? (
+                        {isLoading ? (
+                            <div className="notification-skeleton" aria-busy="true" aria-label="Loading notifications">
+                                <span className="skeleton-line" />
+                                <span className="skeleton-line skeleton-line-medium" />
+                                <span className="skeleton-line" />
+                            </div>
+                        ) : notifications.length > 0 ? (
                             notifications.map((item) => (
                                 <article key={item.id} className={`notification-item notification-${item.type.toLowerCase()}`}>
                                     <strong>{item.title}</strong>
