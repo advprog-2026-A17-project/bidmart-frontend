@@ -955,6 +955,73 @@ a {
   padding: 20px;
 }
 
+.skeleton-grid {
+  pointer-events: none;
+}
+
+.skeleton-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-block,
+.skeleton-line,
+.skeleton-button,
+.skeleton-thumb {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #e5e7eb 0%, #f8fafc 45%, #e5e7eb 100%);
+  background-size: 220% 100%;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-block {
+  min-height: 180px;
+}
+
+.skeleton-line {
+  width: 100%;
+  height: 12px;
+}
+
+.skeleton-line-short {
+  width: 34%;
+}
+
+.skeleton-line-medium {
+  width: 64%;
+}
+
+.skeleton-line-large {
+  width: 78%;
+  height: 32px;
+}
+
+.skeleton-button {
+  width: 150px;
+  height: 40px;
+}
+
+.skeleton-thumb {
+  width: 100%;
+  min-height: 84px;
+}
+
+.notification-skeleton {
+  display: grid;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+@keyframes skeleton-pulse {
+  from {
+    background-position: 220% 0;
+  }
+  to {
+    background-position: -220% 0;
+  }
+}
+
 .primary-button:disabled,
 .secondary-button:disabled {
   opacity: 0.6;
