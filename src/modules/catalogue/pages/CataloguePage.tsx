@@ -38,6 +38,12 @@ const CataloguePage: React.FC = () => {
     });
     const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
 
+    const formatMoney = (value: number | undefined) =>
+        `$${(value ?? 0).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        })}`;
+
     const parseCatalogueItems = (payload: unknown): CatalogueItem[] => {
         if (Array.isArray(payload)) {
             return payload as CatalogueItem[];
@@ -121,6 +127,10 @@ const CataloguePage: React.FC = () => {
         if (sortBy === 'price-desc') return b.currentPrice - a.currentPrice;
         return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
     });
+    const liveItems = items.filter((item) => item.status === 'ACTIVE' || item.status === 'AVAILABLE');
+    const featuredItem = visibleItems[0];
+    const hotLots = visibleItems.slice(1, 4);
+    const categoryCount = new Set(items.map((item) => item.category).filter(Boolean)).size;
 
     const catalogueSkeleton = (
         <ul className="catalog-grid skeleton-grid" aria-busy="true" aria-label="Loading listings">
@@ -143,26 +153,52 @@ const CataloguePage: React.FC = () => {
 
     return (
         <div className="page-wrap">
-            <section className="hero">
-                <p className="hero-badge">Real-time Bidding</p>
-                <h1>Explore Auctions</h1>
-                <p>Discover active listings from every category and place bids before time runs out.</p>
+            <section className="market-hero">
+                <div className="market-hero-copy">
+                    <p className="eyebrow">Live Market</p>
+                    <h1>Discover Auctions</h1>
+                    <p>Track active lots, compare bids, and move quickly on listings before the closing window tightens.</p>
+                    <div className="market-hero-actions">
+                        <a href="#catalogue-results" className="primary-button">
+                            <span className="material-symbols-outlined" aria-hidden="true">sensors</span>
+                            View Live Lots
+                        </a>
+                        <Link to="/seller-studio" className="secondary-button">
+                            <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                            Start Selling
+                        </Link>
+                    </div>
+                </div>
+                <div className="market-hero-panel" aria-label="Marketplace summary">
+                    <div>
+                        <span className="metric-label">Live Lots</span>
+                        <strong>{loading ? '--' : liveItems.length}</strong>
+                    </div>
+                    <div>
+                        <span className="metric-label">Categories</span>
+                        <strong>{loading ? '--' : categoryCount}</strong>
+                    </div>
+                    <div>
+                        <span className="metric-label">Ending Next</span>
+                        <strong>{loading || !featuredItem ? '--' : renderTimeLeft(featuredItem.endTime)}</strong>
+                    </div>
+                </div>
             </section>
 
-            <div className="panel">
+            <div className="panel toolbar-panel">
                 <form className="search-form" onSubmit={handleSearch}>
-                    <label>
-                        Search
+                    <label className="field">
+                        <span>Search</span>
                         <input
                             className="form-input"
                             type="text"
-                            placeholder="e.g. iPhone, gaming console"
+                            placeholder="Search lots, categories, asset IDs"
                             value={searchParams.keyword}
                             onChange={(e) => setSearchParams((p) => ({ ...p, keyword: e.target.value }))}
                         />
                     </label>
-                    <label>
-                        Min Price
+                    <label className="field">
+                        <span>Min Price</span>
                         <input
                             className="form-input"
                             type="number"
@@ -172,8 +208,8 @@ const CataloguePage: React.FC = () => {
                             onChange={(e) => setSearchParams((p) => ({ ...p, minPrice: e.target.value }))}
                         />
                     </label>
-                    <label>
-                        Max Price
+                    <label className="field">
+                        <span>Max Price</span>
                         <input
                             className="form-input"
                             type="number"
@@ -183,16 +219,22 @@ const CataloguePage: React.FC = () => {
                             onChange={(e) => setSearchParams((p) => ({ ...p, maxPrice: e.target.value }))}
                         />
                     </label>
-                    <label>
-                        Sort
+                    <label className="field">
+                        <span>Sort</span>
                         <select className="form-input" value={sortBy} onChange={(e) => setSortBy(e.target.value as 'recent' | 'price-asc' | 'price-desc')}>
                             <option value="recent">Ending Soon</option>
                             <option value="price-asc">Price: Low to High</option>
                             <option value="price-desc">Price: High to Low</option>
                         </select>
                     </label>
-                    <button className="primary-button" type="submit">Apply</button>
-                    <button className="secondary-button" type="button" onClick={handleReset}>Reset</button>
+                    <button className="primary-button" type="submit">
+                        <span className="material-symbols-outlined" aria-hidden="true">tune</span>
+                        Apply
+                    </button>
+                    <button className="secondary-button" type="button" onClick={handleReset}>
+                        <span className="material-symbols-outlined" aria-hidden="true">restart_alt</span>
+                        Reset
+                    </button>
                 </form>
             </div>
 
@@ -201,41 +243,125 @@ const CataloguePage: React.FC = () => {
             {loading ? (
                 catalogueSkeleton
             ) : (
-                <ul className="catalog-grid">
-                    {visibleItems.length > 0 ? (
-                        visibleItems.map((item) => (
-                            <li key={item.id} className="catalog-card">
+                <>
+                    {featuredItem && (
+                        <section className="market-overview-grid" aria-label="Featured marketplace activity">
+                            <Link to={`/listings/${featuredItem.id}`} className="hero-lot-card">
                                 <img
-                                    src={resolveImageSrc(item)}
-                                    alt={item.title}
-                                    className="catalog-image"
-                                    loading="lazy"
-                                    onError={(event) => handleImageError(event, item.id)}
+                                    src={resolveImageSrc(featuredItem)}
+                                    alt={featuredItem.title}
+                                    loading="eager"
+                                    onError={(event) => handleImageError(event, featuredItem.id)}
                                 />
-                                <div className="catalog-meta">
-                                    <div className="catalog-top-row">
-                                        {item.category && <span className="category-badge">{item.category}</span>}
+                                <div className="hero-lot-overlay" />
+                                <div className="hero-lot-badges">
+                                    <span className="hero-badge">Hero Lot</span>
+                                    <span className="time-badge">
+                                        <span className="material-symbols-outlined" aria-hidden="true">timer</span>
+                                        {renderTimeLeft(featuredItem.endTime)}
+                                    </span>
+                                </div>
+                                <div className="hero-lot-content">
+                                    <div>
+                                        <h2>{featuredItem.title}</h2>
+                                        <p>{featuredItem.description || 'No description provided.'}</p>
+                                    </div>
+                                    <div className="hero-lot-price">
+                                        <span>Current Bid</span>
+                                        <strong>{formatMoney(featuredItem.currentPrice)}</strong>
+                                    </div>
+                                </div>
+                            </Link>
+
+                            <aside className="hot-lots-panel">
+                                <div className="section-title-row">
+                                    <div>
+                                        <p className="eyebrow">Urgency</p>
+                                        <h2>Hot Lots Ending</h2>
+                                    </div>
+                                    <span className="material-symbols-outlined section-title-icon" aria-hidden="true">local_fire_department</span>
+                                </div>
+                                <div className="hot-lots-list">
+                                    {hotLots.length > 0 ? (
+                                        hotLots.map((item) => (
+                                            <Link key={item.id} to={`/listings/${item.id}`} className="hot-lot-card">
+                                                <img
+                                                    src={resolveImageSrc(item)}
+                                                    alt={item.title}
+                                                    loading="lazy"
+                                                    onError={(event) => handleImageError(event, item.id)}
+                                                />
+                                                <div>
+                                                    <span className="time-badge compact">
+                                                        <span className="material-symbols-outlined" aria-hidden="true">timer</span>
+                                                        {renderTimeLeft(item.endTime)}
+                                                    </span>
+                                                    <strong>{item.title}</strong>
+                                                    <span className="text-muted">{formatMoney(item.currentPrice)}</span>
+                                                </div>
+                                            </Link>
+                                        ))
+                                    ) : (
+                                        <div className="empty-state compact-empty">No urgent lots yet.</div>
+                                    )}
+                                </div>
+                            </aside>
+                        </section>
+                    )}
+
+                    <div className="section-title-row" id="catalogue-results">
+                        <div>
+                            <p className="eyebrow">Recent Action</p>
+                            <h2>Available Lots</h2>
+                        </div>
+                        <span className="section-count">{visibleItems.length} results</span>
+                    </div>
+
+                    <ul className="catalog-grid">
+                        {visibleItems.length > 0 ? (
+                            visibleItems.map((item) => (
+                                <li key={item.id} className="catalog-card">
+                                    <div className="catalog-image-wrap">
+                                        <img
+                                            src={resolveImageSrc(item)}
+                                            alt={item.title}
+                                            className="catalog-image"
+                                            loading="lazy"
+                                            onError={(event) => handleImageError(event, item.id)}
+                                        />
                                         <span className={`status-badge status-${item.status}`}>{item.status}</span>
                                     </div>
-                                    <strong>{item.title}</strong>
-                                    <small className="text-muted">{item.description || 'No description provided.'}</small>
-                                    <small className="text-muted">{renderTimeLeft(item.endTime)}</small>
-                                </div>
-                                <div className="catalog-pricing">
-                                    <div>
-                                        <span className="text-muted catalog-starting-price">Starting: ${item.startingPrice?.toFixed(2)}</span>
-                                        <span className="price">${item.currentPrice?.toFixed(2)}</span>
+                                    <div className="catalog-meta">
+                                        <div className="catalog-top-row">
+                                            {item.category && <span className="category-badge">{item.category}</span>}
+                                            {item.hasBids && <span className="activity-badge">Active Bids</span>}
+                                        </div>
+                                        <strong>{item.title}</strong>
+                                        <small className="text-muted">{item.description || 'No description provided.'}</small>
                                     </div>
-                                    <Link to={`/auctions/${item.id}`} className="primary-button card-cta">
-                                        View Auction
-                                    </Link>
-                                </div>
-                            </li>
-                        ))
-                    ) : (
-                        <li className="empty-state catalog-empty-state">No items found matching your search criteria.</li>
-                    )}
-                </ul>
+                                    <div className="catalog-pricing">
+                                        <div>
+                                            <span className="text-muted catalog-starting-price">Starting: {formatMoney(item.startingPrice)}</span>
+                                            <span className="price">{formatMoney(item.currentPrice)}</span>
+                                        </div>
+                                        <div className="catalog-card-actions">
+                                            <span className="time-badge compact">
+                                                <span className="material-symbols-outlined" aria-hidden="true">schedule</span>
+                                                {renderTimeLeft(item.endTime)}
+                                            </span>
+                                            <Link to={`/listings/${item.id}`} className="primary-button card-cta">
+                                                <span className="material-symbols-outlined" aria-hidden="true">gavel</span>
+                                                Details
+                                            </Link>
+                                        </div>
+                                    </div>
+                                </li>
+                            ))
+                        ) : (
+                            <li className="empty-state catalog-empty-state">No items found matching your search criteria.</li>
+                        )}
+                    </ul>
+                </>
             )}
         </div>
     );

@@ -5,6 +5,7 @@ import { useSessionRevocation } from '../hooks/useSessionRevocation';
 import { getPersistentItem, setPersistentItem, removePersistentItem } from '../utils/storage';
 
 const API_PATH_PREFIX = '/api/v1/';
+type AccountRole = 'BUYER' | 'SELLER';
 
 const trustedApiPath = (input: RequestInfo | URL): string => {
     const rawUrl = input instanceof Request ? input.url : input.toString();
@@ -50,6 +51,19 @@ const extractTokenIdFromJwt = (token: string | null): string | null => {
     }
 };
 
+const hasRole = (user: AuthUser | null, role: AccountRole): boolean =>
+    user?.roles?.some((item) => item.name === role) ?? false;
+
+const resolveActiveRole = (user: AuthUser | null, preferred: string | null): AccountRole | null => {
+    if (!user) return null;
+    if ((preferred === 'BUYER' || preferred === 'SELLER') && hasRole(user, preferred)) {
+        return preferred;
+    }
+    if (hasRole(user, 'BUYER')) return 'BUYER';
+    if (hasRole(user, 'SELLER')) return 'SELLER';
+    return null;
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser | null>(() => {
         const saved = getPersistentItem('auth_user');
@@ -65,24 +79,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const token = getPersistentItem('access_token');
         return extractTokenIdFromJwt(token);
     });
+    const [activeRole, setActiveRole] = useState<AccountRole | null>(() => {
+        const savedRole = getPersistentItem('active_role');
+        const savedUser = getPersistentItem('auth_user');
+        return resolveActiveRole(savedUser ? JSON.parse(savedUser) as AuthUser : null, savedRole);
+    });
 
     useEffect(() => {
         if (user) {
             setPersistentItem('auth_user', JSON.stringify(user));
             setPersistentItem('access_token', accessToken || '');
             setPersistentItem('refresh_token', refreshToken || '');
+            const nextRole = resolveActiveRole(user, activeRole);
+            if (nextRole) {
+                setPersistentItem('active_role', nextRole);
+            }
         } else {
             removePersistentItem('auth_user');
             removePersistentItem('access_token');
             removePersistentItem('refresh_token');
+            removePersistentItem('active_role');
         }
-    }, [user, accessToken, refreshToken]);
+    }, [user, accessToken, refreshToken, activeRole]);
 
     const login = useCallback((payload: AuthLoginResult) => {
         setUser(payload.user);
         setAccessToken(payload.accessToken);
         setRefreshToken(payload.refreshToken);
         setTokenId(extractTokenIdFromJwt(payload.accessToken));
+        setActiveRole(resolveActiveRole(payload.user, getPersistentItem('active_role')));
     }, []);
 
     const logout = useCallback(async () => {
@@ -101,11 +126,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removePersistentItem('auth_user');
         removePersistentItem('access_token');
         removePersistentItem('refresh_token');
+        removePersistentItem('active_role');
 
         setUser(null);
         setAccessToken(null);
         setRefreshToken(null);
         setTokenId(null);
+        setActiveRole(null);
     }, [refreshToken]);
 
     useSessionRevocation(user, tokenId, logout);
@@ -153,16 +180,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return response;
     }, [accessToken, refreshAccessToken, refreshToken]);
 
+    const switchRole = useCallback((role: AccountRole) => {
+        if (!hasRole(user, role)) {
+            return;
+        }
+        setActiveRole(role);
+        setPersistentItem('active_role', role);
+    }, [user]);
+
     const contextValue = useMemo(() => ({
         user,
         accessToken,
         refreshToken,
         tokenId,
+        activeRole,
         login,
         logout,
+        switchRole,
         refreshAccessToken,
         authenticatedFetch,
-    }), [accessToken, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, tokenId, user]);
+    }), [accessToken, activeRole, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, switchRole, tokenId, user]);
 
     return (
         <AuthContext.Provider value={contextValue}>

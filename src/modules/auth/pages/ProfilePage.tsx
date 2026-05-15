@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import BackButton from '../../../components/BackButton';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
@@ -387,6 +388,7 @@ const ProfilePage: React.FC = () => {
     return (
         <div className="page-wrap">
             <section className="page-head">
+                <BackButton fallback="/" />
                 <h1>Profile</h1>
                 <p>{user.email}</p>
             </section>
