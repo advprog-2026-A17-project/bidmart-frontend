@@ -29,6 +29,15 @@ const toNonEmptyString = (value: unknown): string | null => {
     return trimmed === '' ? null : trimmed;
 };
 
+const toTimestampString = (value: unknown): string | null => {
+    const numeric = toNumber(value);
+    if (numeric !== null) {
+        const millis = numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+        return new Date(millis).toISOString();
+    }
+    return toNonEmptyString(value);
+};
+
 const parseAuction = (value: unknown): Auction | null => {
     if (!isRecord(value)) {
         return null;
@@ -41,8 +50,8 @@ const parseAuction = (value: unknown): Auction | null => {
     const reservePrice = toNumber(value.reservePrice);
     const minimumIncrement = toNumber(value.minimumIncrement);
     const status = toNonEmptyString(value.status);
-    const startTime = toNonEmptyString(value.startTime);
-    const endTime = toNonEmptyString(value.endTime);
+    const startTime = toTimestampString(value.startTime);
+    const endTime = toTimestampString(value.endTime);
     const currentHighestBidRaw = value.currentHighestBid;
     const currentHighestBid = currentHighestBidRaw === null
         ? null

@@ -1,8 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import BackButton from '../../../components/BackButton';
 import { readApiError, gatewayUrl } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { useWebSocket } from '../../../hooks/useWebSocket';
+import {
+    formatCents,
+    paymentExpiryMs,
+    paymentReference,
+    rememberPaymentExpiry,
+    type PaymentIntent,
+} from '../utils/payment';
 
 interface Wallet {
     id: string;
@@ -17,22 +26,33 @@ interface WalletTransaction {
     type: string;
     amount: number;
     timestamp: string;
-}
-
-interface PaymentIntent {
-    paymentId: string;
-    amountCents: number;
-    status: string;
-    redirectUrl: string;
-    vaNumber?: string | null;
-    paymentChannel?: string | null;
+    correlationId?: string | null;
+    sourceService?: string | null;
 }
 
 interface WithdrawalRequestState {
     withdrawalId: string;
     amountCents: number;
     status: string;
+    bankCode?: string | null;
+    accountNumber?: string | null;
+    accountName?: string | null;
+    payoutReference?: string | null;
 }
+
+const WITHDRAWAL_BANKS = [
+    { value: 'bca', label: 'BCA' },
+    { value: 'bni', label: 'BNI' },
+    { value: 'bri', label: 'BRI' },
+    { value: 'mandiri', label: 'Mandiri' },
+    { value: 'permata', label: 'Permata' },
+    { value: 'cimb', label: 'CIMB Niaga' },
+    { value: 'danamon', label: 'Danamon' },
+    { value: 'bsi', label: 'BSI' },
+    { value: 'btn', label: 'BTN' },
+    { value: 'ocbc', label: 'OCBC NISP' },
+    { value: 'panin', label: 'Panin' },
+];
 
 const PAYMENT_METHODS = [
     { value: 'bca_va', label: 'BCA VA' },
@@ -47,7 +67,20 @@ const toErrorMessage = (err: unknown): string =>
     err instanceof Error ? err.message : 'Unknown error';
 
 const toAmountCents = (value: string): number => Math.round(Number(value || 0) * 100);
-const formatCents = (value: number | undefined): string => `$${((value ?? 0) / 100).toFixed(2)}`;
+const timestampMs = (value?: string | null): number => {
+    if (!value) {
+        return 0;
+    }
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+const effectivePaymentStatus = (payment: PaymentIntent): string => {
+    const remainingMs = paymentExpiryMs(payment) - Date.now();
+    if (payment.status === 'EXPIRED' && remainingMs > 0) {
+        return 'PENDING';
+    }
+    return payment.status === 'PENDING' && remainingMs <= 0 ? 'EXPIRED' : payment.status;
+};
 const walletDisplayName = (email?: string): string => {
     const localPart = email?.split('@')[0]?.replace(/[^a-z0-9]/gi, '').slice(0, 10).toUpperCase();
     return `BM-${localPart || 'ACCOUNT'}`;
@@ -56,10 +89,12 @@ const walletDisplayName = (email?: string): string => {
 const WalletPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
+    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
     const location = useLocation();
     const navigate = useNavigate();
     const [wallet, setWallet] = useState<Wallet | null>(null);
     const [history, setHistory] = useState<WalletTransaction[]>([]);
+    const [unpaidPayments, setUnpaidPayments] = useState<PaymentIntent[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [actionLoading, setActionLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
@@ -68,7 +103,8 @@ const WalletPage: React.FC = () => {
     const [topUpAmount, setTopUpAmount] = useState<string>('');
     const [paymentMethod, setPaymentMethod] = useState<string>('bca_va');
     const [withdrawAmount, setWithdrawAmount] = useState<string>('');
-    const [bankAccount, setBankAccount] = useState<string>('');
+    const [withdrawBankCode, setWithdrawBankCode] = useState<string>('bca');
+    const [withdrawAccountNumber, setWithdrawAccountNumber] = useState<string>('');
     const [pendingPayment, setPendingPayment] = useState<PaymentIntent | null>(null);
     const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawalRequestState | null>(null);
     const [showBalance, setShowBalance] = useState(true);
@@ -82,6 +118,7 @@ const WalletPage: React.FC = () => {
         if (!user) {
             setWallet(null);
             setHistory([]);
+            setUnpaidPayments([]);
             setLoading(false);
             setError('Please sign in to view your wallet.');
             return;
@@ -99,6 +136,7 @@ const WalletPage: React.FC = () => {
             const data = await response.json();
             setWallet(data.wallet ?? data);
             setHistory(data.history ?? []);
+            setUnpaidPayments(data.unpaidPayments ?? []);
         } catch (err: unknown) {
             console.error('Fetch wallet failed:', toErrorMessage(err));
             setError('Failed to connect to Wallet Service via API Gateway.');
@@ -139,6 +177,22 @@ const WalletPage: React.FC = () => {
     useEffect(() => {
         fetchWallet();
     }, [fetchWallet]);
+
+    useEffect(() => {
+        if (!user || !isConnected) {
+            return;
+        }
+
+        const destination = '/user/queue/notifications';
+        subscribe(destination, (payload) => {
+            const event = payload as { type?: string; payload?: { type?: string } };
+            const type = String(event.payload?.type ?? event.type ?? '');
+            if (['BID_PLACED', 'OUTBID', 'AUCTION_WON', 'AUCTION_ENDED', 'ORDER_CREATED'].includes(type)) {
+                void fetchWallet();
+            }
+        });
+        return () => unsubscribe(destination);
+    }, [fetchWallet, isConnected, subscribe, unsubscribe, user]);
 
     useEffect(() => {
         if (!user) return;
@@ -242,9 +296,12 @@ const WalletPage: React.FC = () => {
                 return;
             }
             const payment = await response.json() as PaymentIntent;
-            setPendingPayment(payment);
+            const expiresAt = rememberPaymentExpiry(payment.paymentId);
+            const paymentWithLocalExpiry = { ...payment, expiresAt: new Date(expiresAt).toISOString() };
+            setPendingPayment(paymentWithLocalExpiry);
             setTopUpAmount('');
-            showSuccess(`Sandbox payment created for ${formatCents(payment.amountCents)}.`);
+            showSuccess(`Payment created for ${formatCents(paymentWithLocalExpiry.amountCents)}.`);
+            navigate(`/wallet/payments/${payment.paymentId}`);
         } catch (err: unknown) {
             setError(`Top-up failed: ${toErrorMessage(err)}`);
         } finally {
@@ -252,9 +309,9 @@ const WalletPage: React.FC = () => {
         }
     };
 
-    const syncPendingPayment = async () => {
+    const syncPendingPayment = useCallback(async (silent = false) => {
         if (!pendingPayment) return;
-        setActionLoading(true);
+        if (!silent) setActionLoading(true);
         setError(null);
         try {
             const response = await authenticatedFetch(
@@ -272,9 +329,41 @@ const WalletPage: React.FC = () => {
         } catch (err: unknown) {
             setError(`Payment sync failed: ${toErrorMessage(err)}`);
         } finally {
-            setActionLoading(false);
+            if (!silent) setActionLoading(false);
         }
-    };
+    }, [authenticatedFetch, fetchWallet, pendingPayment, showSuccess]);
+
+    useEffect(() => {
+        if (!pendingPayment || pendingPayment.status !== 'PENDING') {
+            return;
+        }
+
+        const sync = () => void syncPendingPayment(true);
+        const interval = globalThis.setInterval(sync, 8_000);
+        window.addEventListener('focus', sync);
+        document.addEventListener('visibilitychange', sync);
+
+        return () => {
+            globalThis.clearInterval(interval);
+            window.removeEventListener('focus', sync);
+            document.removeEventListener('visibilitychange', sync);
+        };
+    }, [pendingPayment, syncPendingPayment]);
+
+    const transactionRows = useMemo(() => [
+        ...unpaidPayments.map((payment) => ({
+            kind: 'payment' as const,
+            id: payment.paymentId,
+            timestamp: timestampMs(payment.createdAt),
+            payment,
+        })),
+        ...history.map((transaction) => ({
+            kind: 'transaction' as const,
+            id: transaction.id,
+            timestamp: timestampMs(transaction.timestamp),
+            transaction,
+        })),
+    ].sort((a, b) => b.timestamp - a.timestamp), [history, unpaidPayments]);
 
     const handleWithdraw = async () => {
         const amountCents = toAmountCents(withdrawAmount);
@@ -282,8 +371,9 @@ const WalletPage: React.FC = () => {
             setError('Please enter a valid withdrawal amount.');
             return;
         }
-        if (!bankAccount.trim()) {
-            setError('Please enter a bank account for sandbox withdrawal.');
+        const normalizedAccountNumber = withdrawAccountNumber.replace(/[\s-]/g, '');
+        if (!/^\d{6,32}$/.test(normalizedAccountNumber)) {
+            setError('Enter a valid numeric bank account number.');
             return;
         }
         setActionLoading(true);
@@ -295,7 +385,11 @@ const WalletPage: React.FC = () => {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amountCents, bankAccount }),
+                    body: JSON.stringify({
+                        amountCents,
+                        bankCode: withdrawBankCode,
+                        accountNumber: normalizedAccountNumber,
+                    }),
                 }
             );
             if (!response.ok) {
@@ -305,7 +399,8 @@ const WalletPage: React.FC = () => {
             const withdrawal = await response.json() as WithdrawalRequestState;
             setPendingWithdrawal(withdrawal);
             setWithdrawAmount('');
-            showSuccess(`Sandbox withdrawal requested for ${formatCents(withdrawal.amountCents)}.`);
+            setWithdrawAccountNumber('');
+            showSuccess(`Withdrawal requested for ${formatCents(withdrawal.amountCents)}.`);
             await fetchWallet();
         } catch (err: unknown) {
             setError(`Withdrawal failed: ${toErrorMessage(err)}`);
@@ -326,7 +421,7 @@ const WalletPage: React.FC = () => {
                     <span className="hero-badge">Account Required</span>
                     <h2>Sign in to manage wallet funds</h2>
                     <p className="text-muted">
-                        Wallets are created during account setup and used for sandbox top-ups, bid holds, refunds, and withdrawals.
+                        Wallets are created during account setup and used for top-ups, bid holds, refunds, and withdrawals.
                     </p>
                     <div className="access-actions">
                         <Link className="primary-button" to="/login">Sign In or Register</Link>
@@ -340,8 +435,13 @@ const WalletPage: React.FC = () => {
     return (
         <div className="page-wrap">
             <section className="page-head">
-                <h1>Wallet</h1>
-                <p>Manage your BidMart account balance</p>
+                <BackButton fallback="/" />
+                <p className="eyebrow">Financial Desk</p>
+                <h1>Wallet Dashboard</h1>
+                <p>Manage bidding liquidity, active holds, deposits, withdrawals, and audit history.</p>
+                <span className={isConnected ? 'connection-live' : 'connection-idle'}>
+                    {isConnected ? 'Live wallet events' : 'Realtime offline'}
+                </span>
             </section>
 
             {error && <div className="toast-error">{error}</div>}
@@ -358,7 +458,7 @@ const WalletPage: React.FC = () => {
                             checked={acceptWalletTerms}
                             onChange={(event) => setAcceptWalletTerms(event.target.checked)}
                         />
-                        <span>I agree to use BidMart Wallet only for sandbox bidding, top-up, and withdrawal simulation.</span>
+                        <span>I agree to use BidMart Wallet only for bidding, top-up, and withdrawal activity.</span>
                     </label>
                     <button
                         className="primary-button"
@@ -373,8 +473,9 @@ const WalletPage: React.FC = () => {
                     <div className="wallet-summary-grid">
                         <div className="wallet-summary-card wallet-main">
                             <div className="wallet-summary-top">
-                                <span>Total Balance</span>
-                                <button className="link-button" onClick={() => setShowBalance((value) => !value)}>
+                                <span className="metric-label">Total Balance</span>
+                                <button className="icon-button" aria-label={showBalance ? 'Hide balance' : 'Show balance'} onClick={() => setShowBalance((value) => !value)}>
+                                    <span className="material-symbols-outlined" aria-hidden="true">{showBalance ? 'visibility_off' : 'visibility'}</span>
                                     {showBalance ? 'Hide' : 'Show'}
                                 </button>
                             </div>
@@ -384,21 +485,36 @@ const WalletPage: React.FC = () => {
                             <small>Account verified and active</small>
                         </div>
                         <div className="wallet-summary-card">
-                            <span>Held Balance</span>
+                            <div className="wallet-summary-top">
+                                <span className="metric-label">Active Holds</span>
+                                <span className="material-symbols-outlined metric-icon" aria-hidden="true">lock</span>
+                            </div>
                             <strong>{formatCents(wallet?.heldBalance)}</strong>
                             <small>Reserved for active bids</small>
                         </div>
                         <div className="wallet-summary-card">
-                            <span>Wallet Account</span>
+                            <div className="wallet-summary-top">
+                                <span className="metric-label">Wallet Account</span>
+                                <span className="material-symbols-outlined metric-icon" aria-hidden="true">account_balance</span>
+                            </div>
                             <strong>{walletDisplayName(user.email)}</strong>
                             <small>Display reference</small>
                         </div>
                     </div>
 
-                    <div className="wallet-actions panel">
-                        <button className="primary-button" onClick={() => setActiveTab('deposit')}>Add Funds</button>
-                        <button className="secondary-button" onClick={() => setActiveTab('withdraw')}>Withdraw</button>
-                        <button className="secondary-button" onClick={() => setActiveTab('overview')}>Transactions</button>
+                    <div className="wallet-actions">
+                        <button className={activeTab === 'deposit' ? 'primary-button' : 'secondary-button'} onClick={() => setActiveTab('deposit')}>
+                            <span className="material-symbols-outlined" aria-hidden="true">add_card</span>
+                            Add Funds
+                        </button>
+                        <button className={activeTab === 'withdraw' ? 'primary-button' : 'secondary-button'} onClick={() => setActiveTab('withdraw')}>
+                            <span className="material-symbols-outlined" aria-hidden="true">payments</span>
+                            Withdraw
+                        </button>
+                        <button className={activeTab === 'overview' ? 'primary-button' : 'secondary-button'} onClick={() => setActiveTab('overview')}>
+                            <span className="material-symbols-outlined" aria-hidden="true">receipt_long</span>
+                            Transactions
+                        </button>
                     </div>
 
                     {activeTab === 'deposit' && (
@@ -431,24 +547,9 @@ const WalletPage: React.FC = () => {
                                 </select>
                             </label>
                             <button className="primary-button" onClick={handleTopUp} disabled={actionLoading}>
-                                {actionLoading ? 'Processing...' : 'Create Sandbox Payment Intent'}
+                                <span className="material-symbols-outlined" aria-hidden="true">payments</span>
+                                {actionLoading ? 'Processing...' : 'Continue to Payment'}
                             </button>
-                            {pendingPayment && (
-                                <div className="summary-box sandbox-status">
-                                    <strong>Midtrans Sandbox Payment</strong>
-                                    <div>Payment ref: {pendingPayment.paymentId.slice(0, 8).toUpperCase()}</div>
-                                    <div>Amount: {formatCents(pendingPayment.amountCents)}</div>
-                                    {pendingPayment.paymentChannel && <div>Method: {pendingPayment.paymentChannel.replace('_', ' ')}</div>}
-                                    <div>Status: {pendingPayment.status}</div>
-                                    {pendingPayment.vaNumber && <div>Payment code: {pendingPayment.vaNumber}</div>}
-                                    <a className="primary-button" href={pendingPayment.redirectUrl} target="_blank" rel="noreferrer">
-                                        Open Midtrans Simulator
-                                    </a>
-                                    <button className="secondary-button" onClick={syncPendingPayment} disabled={actionLoading}>
-                                        {actionLoading ? 'Syncing...' : 'Sync Payment Status'}
-                                    </button>
-                                </div>
-                            )}
                         </div>
                     )}
 
@@ -468,45 +569,114 @@ const WalletPage: React.FC = () => {
                                 />
                             </label>
                             <label className="field">
-                                Bank Account
+                                Destination Bank
+                                <select
+                                    className="form-input"
+                                    value={withdrawBankCode}
+                                    onChange={(e) => setWithdrawBankCode(e.target.value)}
+                                >
+                                    {WITHDRAWAL_BANKS.map((bank) => (
+                                        <option key={bank.value} value={bank.value}>
+                                            {bank.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label className="field">
+                                Account Number
                                 <input
                                     className="form-input"
-                                    placeholder="Sandbox bank account"
-                                    value={bankAccount}
-                                    onChange={(e) => setBankAccount(e.target.value)}
+                                    inputMode="numeric"
+                                    placeholder="Numeric bank account number"
+                                    value={withdrawAccountNumber}
+                                    onChange={(e) => setWithdrawAccountNumber(e.target.value)}
                                 />
                             </label>
                             <button className="primary-button" onClick={handleWithdraw} disabled={actionLoading}>
-                                {actionLoading ? 'Processing...' : 'Request Sandbox Withdrawal'}
+                                <span className="material-symbols-outlined" aria-hidden="true">outbox</span>
+                                {actionLoading ? 'Processing...' : 'Request Withdrawal'}
                             </button>
                             {pendingWithdrawal && (
-                                <div className="summary-box sandbox-status">
+                                <div className="summary-box payment-status-card">
                                     <div>Withdrawal ref: {pendingWithdrawal.withdrawalId.slice(0, 8).toUpperCase()}</div>
                                     <div>Amount: {formatCents(pendingWithdrawal.amountCents)}</div>
+                                    {pendingWithdrawal.accountName && <div>Account name: {pendingWithdrawal.accountName}</div>}
+                                    {pendingWithdrawal.payoutReference && <div>Payout ref: {pendingWithdrawal.payoutReference}</div>}
                                     <div>Status: {pendingWithdrawal.status}</div>
-                                    <span className="text-muted">Withdrawal status updates are reflected in transaction history.</span>
+                                    <span className="text-muted">The bank account is validated before funds are reserved for payout.</span>
                                 </div>
                             )}
                         </div>
                     )}
 
                     {activeTab === 'overview' && (
-                        <div className="panel">
-                            <h3>Transaction History</h3>
-                            {history.length > 0 ? (
-                                history.map((tx) => (
-                                    <div key={tx.id} className="transaction-item">
-                                        <span className={`transaction-type type-${tx.type}`}>
-                                            {tx.type.replace('_', ' ')}
-                                        </span>
-                                        <span className="transaction-amount">
-                                            {formatCents(Number(tx.amount))}
-                                        </span>
-                                        <span className="transaction-date">
-                                            {new Date(tx.timestamp).toLocaleString()}
-                                        </span>
-                                    </div>
-                                ))
+                        <div className="panel transaction-panel">
+                            <div className="section-title-row">
+                                <div>
+                                    <p className="eyebrow">Audit Trail</p>
+                                    <h2>Transaction History</h2>
+                                </div>
+                                <span className="section-count">{history.length + unpaidPayments.length} records</span>
+                            </div>
+                            {transactionRows.length > 0 ? (
+                                <>
+                                    {transactionRows.map((row) => {
+                                        if (row.kind === 'payment') {
+                                            const status = effectivePaymentStatus(row.payment);
+                                            return (
+                                                <Link
+                                                    key={`payment-${row.id}`}
+                                                    to={`/wallet/payments/${row.payment.paymentId}`}
+                                                    className="transaction-item transaction-link"
+                                                >
+                                                    <div>
+                                                        <span className={`transaction-type type-PAYMENT_${status}`}>
+                                                            {status === 'PENDING' ? 'UNPAID PAYMENT' : `PAYMENT ${status}`}
+                                                        </span>
+                                                        <span className="transaction-date">
+                                                            {row.payment.createdAt ? new Date(row.payment.createdAt).toLocaleString() : paymentReference(row.payment.paymentId)}
+                                                        </span>
+                                                    </div>
+                                                    <span className="transaction-amount">
+                                                        {formatCents(row.payment.amountCents)}
+                                                    </span>
+                                                </Link>
+                                            );
+                                        }
+
+                                        const tx = row.transaction;
+                                        const paymentId = tx.correlationId && tx.sourceService === 'midtrans'
+                                            ? tx.correlationId
+                                            : null;
+                                        const content = (
+                                            <>
+                                                <div>
+                                                    <span className={`transaction-type type-${tx.type}`}>
+                                                        {tx.type.replaceAll('_', ' ')}
+                                                    </span>
+                                                    <span className="transaction-date">
+                                                        {new Date(tx.timestamp).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <span className="transaction-amount">{formatCents(Number(tx.amount))}</span>
+                                            </>
+                                        );
+
+                                        return paymentId ? (
+                                            <Link
+                                                key={`tx-${tx.id}`}
+                                                to={`/wallet/payments/${paymentId}`}
+                                                className="transaction-item transaction-link"
+                                            >
+                                                {content}
+                                            </Link>
+                                        ) : (
+                                            <div key={`tx-${tx.id}`} className="transaction-item">
+                                                {content}
+                                            </div>
+                                        );
+                                    })}
+                                </>
                             ) : (
                                 <div className="empty-state">No transactions yet.</div>
                             )}

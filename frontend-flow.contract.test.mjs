@@ -44,7 +44,9 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(profilePage, /Set Password/);
   assert.match(profilePage, /\/api\/v1\/auth\/oauth\/link/);
   assert.match(profilePage, /Connected Accounts/);
-  assert.match(app, /\/profile/);
+  assert.match(app, /\/seller-studio/);
+  assert.match(authContext, /activeRole/);
+  assert.match(app, /RoleHome/);
   assert.match(app, /ProfilePage/);
   assert.match(app, /GlobalErrorBoundary/);
   assert.match(globalErrorBoundary, /role="alert"/);
@@ -57,7 +59,7 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(sellPage, /cancelListing/);
   assert.match(auctionDetail, /\/close/);
   assert.match(walletPage, /\/detail/);
-  assert.match(auctionDetail, /setInterval/);
+  assert.match(auctionDetail, /useAuctionRealtime/);
   assert.match(auctionDetail + walletPage + sellPage, /readApiError/);
   assert.match(packageJson, /"test"/);
 });
@@ -65,6 +67,8 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
 test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtime notifications', () => {
   const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
   const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
+  const paymentDetailPage = read('./src/modules/wallet/pages/PaymentDetailPage.tsx');
+  const paymentUtils = read('./src/modules/wallet/utils/payment.ts');
   const notificationCenter = read('./src/modules/notifications/components/NotificationCenter.tsx');
   const app = read('./src/App.tsx');
 
@@ -84,13 +88,23 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
   assert.match(walletPage, /midtrans\/payments\/return/);
   assert.match(walletPage, /midtrans\/payments\/\$\{pendingPayment\.paymentId\}\/sync/);
   assert.match(walletPage, /paymentMethod/);
-  assert.match(walletPage, /Open Midtrans Simulator/);
-  assert.match(walletPage, /redirectUrl/);
+  assert.match(walletPage, /unpaidPayments/);
+  assert.match(walletPage, /\/wallet\/payments\/\$\{payment\.paymentId\}/);
+  assert.match(paymentDetailPage, /Waiting for Payment/);
+  assert.match(paymentDetailPage, /Expires in/);
+  assert.match(paymentDetailPage, /formatRemainingTime/);
+  assert.match(paymentDetailPage, /formatPaymentMethod/);
+  assert.match(walletPage, /Continue to Payment/);
+  assert.match(paymentUtils, /redirectUrl/);
+  assert.match(app, /\/wallet\/payments\/:paymentId/);
   assert.match(walletPage, /\/withdrawals/);
-  assert.match(walletPage, /bankAccount/);
+  assert.match(walletPage, /bankCode/);
+  assert.match(walletPage, /accountNumber/);
+  assert.match(walletPage, /WITHDRAWAL_BANKS/);
   assert.match(walletPage, /pendingWithdrawal/);
   assert.doesNotMatch(walletPage, /simulatePayment|simulateWithdrawal|\/simulate/);
   assert.doesNotMatch(walletPage, /Mark Paid|Mark Failed|Expire|Fail and Reverse/);
+  assert.doesNotMatch(walletPage, /Open Midtrans Simulator|Sync Payment Status|Create Sandbox Payment Intent/);
 
   assert.match(notificationCenter, /useWebSocket/);
   assert.match(notificationCenter, /\/user\/queue\/notifications/);
@@ -123,7 +137,9 @@ test('frontend sell flow is gated to seller accounts before any listing request 
   assert.match(sellPage, /role\.name === 'SELLER'/);
   assert.match(sellPage, /Only seller accounts can publish listings/);
   assert.match(sellPage, /Seller access required/);
-  assert.match(app, /const canSell = !user \|\| user\.roles\?\.some/);
-  assert.match(app, /canSell &&/);
-  assert.match(app, /to="\/sell"/);
+  assert.match(app, /const isSeller = activeRole === 'SELLER'/);
+  assert.match(app, /sellerOnly/);
+  assert.match(app, /activeRole === 'SELLER'/);
+  assert.match(app, /Switch to Selling/);
+  assert.match(app, /Switch to Buying/);
 });
