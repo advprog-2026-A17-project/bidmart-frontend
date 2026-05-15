@@ -3,17 +3,31 @@ import { requestRegistration } from '../utils/auth-api';
 import GoogleLoginButton from './GoogleLoginButton';
 
 interface RegisterFormProps {
+    initialRole?: 'BUYER' | 'SELLER';
     onSwitchTab: () => void;
 }
 
-const ROLES = ['BUYER', 'SELLER'];
+const ROLES = [
+    {
+        value: 'BUYER',
+        title: 'Buying account',
+        description: 'Browse auctions, bid, manage wallet funds, and track purchases.',
+        icon: 'shopping_bag',
+    },
+    {
+        value: 'SELLER',
+        title: 'Selling account',
+        description: 'Open Seller Studio, create listings, publish auctions, and manage payouts.',
+        icon: 'storefront',
+    },
+] as const;
 
-const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchTab }) => {
+const RegisterForm: React.FC<RegisterFormProps> = ({ initialRole = 'BUYER', onSwitchTab }) => {
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '';
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState('BUYER');
+    const [role, setRole] = useState<'BUYER' | 'SELLER'>(initialRole);
     const [loading, setLoading] = useState(false);
     const [oauthBusy, setOauthBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -34,7 +48,9 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchTab }) => {
                 setError(result.message);
                 return;
             }
-            setSuccess('Account created. Please verify your email before logging in.');
+            setSuccess(role === 'BUYER'
+                ? 'Buying account ready. If this email is new, verify it before logging in.'
+                : 'Selling account ready. Use the navbar switch after login to enter Seller Studio.');
             setPassword('');
             // Optionally, you can automatically switch back to login here after a delay
         } catch (err: unknown) {
@@ -77,18 +93,25 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchTab }) => {
                     </button>
                 </div>
             </label>
-            <label className="field">
-                <span>Role</span>
-                <select
-                    className="form-input"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                >
-                    {ROLES.map((r) => (
-                        <option key={r} value={r}>{r}</option>
+            <div className="field">
+                <span>Account mode</span>
+                <div className="account-type-grid" role="radiogroup" aria-label="Choose account mode">
+                    {ROLES.map((item) => (
+                        <button
+                            key={item.value}
+                            type="button"
+                            className={`account-type-card ${role === item.value ? 'account-type-card-active' : ''}`}
+                            onClick={() => setRole(item.value)}
+                            role="radio"
+                            aria-checked={role === item.value}
+                        >
+                            <span className="material-symbols-outlined" aria-hidden="true">{item.icon}</span>
+                            <strong>{item.title}</strong>
+                            <small>{item.description}</small>
+                        </button>
                     ))}
-                </select>
-            </label>
+                </div>
+            </div>
             <button className="primary-button" type="submit" disabled={loading || oauthBusy}>
                 {loading ? 'Registering...' : 'Create Account'}
             </button>

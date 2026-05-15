@@ -20,8 +20,10 @@ export interface AuthContextType {
     accessToken: string | null;
     refreshToken: string | null;
     tokenId: string | null;
+    activeRole: 'BUYER' | 'SELLER' | null;
     login: (payload: AuthLoginResult) => void;
     logout: () => void;
+    switchRole: (role: 'BUYER' | 'SELLER') => void;
     refreshAccessToken: () => Promise<string | null>;
     authenticatedFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }
@@ -31,8 +33,10 @@ export const AuthContext = createContext<AuthContextType>({
     accessToken: null,
     refreshToken: null,
     tokenId: null,
+    activeRole: null,
     login: () => {},
     logout: () => {},
+    switchRole: () => {},
     refreshAccessToken: async () => null,
     authenticatedFetch: async (input, init) => fetch(input, init),
 });

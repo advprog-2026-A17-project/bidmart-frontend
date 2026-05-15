@@ -11,9 +11,19 @@ type UserProfileResponse = {
     shippingAddress?: string | null;
 };
 
-const UNGUARDED_ROUTES = new Set(['/login', '/verify-email', '/profile']);
+const UNGUARDED_ROUTES = new Set(['/login', '/verify-email', '/profile', '/command/profile']);
 
-const isGuardedRoute = (pathname: string): boolean => !UNGUARDED_ROUTES.has(pathname);
+const isPublicMarketplaceRoute = (pathname: string): boolean =>
+    pathname === '/'
+    || pathname === '/marketplace'
+    || pathname === '/auctions'
+    || pathname.startsWith('/auctions/')
+    || pathname === '/active-auctions'
+    || pathname.startsWith('/active-auctions/')
+    || pathname.startsWith('/listings/');
+
+const isGuardedRoute = (pathname: string): boolean =>
+    !UNGUARDED_ROUTES.has(pathname) && !isPublicMarketplaceRoute(pathname);
 
 const isBlank = (value?: string | null): boolean => !value || value.trim() === '';
 
