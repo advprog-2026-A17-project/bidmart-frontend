@@ -383,7 +383,6 @@ const ProfilePage: React.FC = () => {
     }
 
     const hasLinkedProvider = Boolean(oauthProvider);
-    const linkedProviderLabel = oauthProvider ? oauthProvider.toUpperCase() : '';
 
     return (
         <div className="page-wrap">
@@ -521,27 +520,44 @@ const ProfilePage: React.FC = () => {
             <div className="panel section-stack">
                 <h3>Connected Accounts</h3>
                 <p className="text-muted">
-                    Link Google so you can sign in with your Google account.
+                    Manage third-party login providers linked to your BidMart identity.
                 </p>
-                {!googleClientId && (
-                    <div className="text-muted">Google OAuth is not configured.</div>
-                )}
-                {googleClientId && hasLinkedProvider && (
-                    <div className="summary-box">
-                        <strong>{linkedProviderLabel} connected</strong>
-                        <span className="text-muted">You can sign in with this provider.</span>
+                <div className="connected-accounts-list">
+                    <div className="connected-account-item">
+                        <div className="connected-account-info">
+                            <div className="connected-account-icon">
+                                <span className="material-symbols-outlined" style={{ color: '#4285F4' }}>
+                                    account_circle
+                                </span>
+                            </div>
+                            <div className="connected-account-details">
+                                <strong>Google Account</strong>
+                                <span className="text-muted">
+                                    {hasLinkedProvider ? 'Primary login provider' : 'Sign in using your Google credentials'}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        {googleClientId && !hasLinkedProvider ? (
+                            <div className="connected-account-action">
+                                <GoogleLoginButton
+                                    clientId={googleClientId}
+                                    disabled={oauthLinkBusy}
+                                    onError={(message) => setError(message)}
+                                    onClearError={() => setError(null)}
+                                    onBusyChange={setOauthLinkBusy}
+                                    onCredential={handleGoogleLink}
+                                    className="oauth-button-standalone"
+                                    width={220}
+                                />
+                            </div>
+                        ) : hasLinkedProvider ? (
+                            <span className="status-badge status-AVAILABLE">Linked</span>
+                        ) : (
+                            <span className="text-muted">Not configured</span>
+                        )}
                     </div>
-                )}
-                {googleClientId && !hasLinkedProvider && (
-                    <GoogleLoginButton
-                        clientId={googleClientId}
-                        disabled={oauthLinkBusy}
-                        onError={(message) => setError(message)}
-                        onClearError={() => setError(null)}
-                        onBusyChange={setOauthLinkBusy}
-                        onCredential={handleGoogleLink}
-                    />
-                )}
+                </div>
             </div>
 
             <div className="panel section-stack">

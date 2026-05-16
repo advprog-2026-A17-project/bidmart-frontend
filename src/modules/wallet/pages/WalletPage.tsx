@@ -4,6 +4,7 @@ import BackButton from '../../../components/BackButton';
 import { readApiError, gatewayUrl } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { useWalletUI } from '../../../context/WalletUIContext';
 import { useWebSocket } from '../../../hooks/useWebSocket';
 import { normalizeMoneyInput, toAmountCents } from '../../../utils/money';
 import {
@@ -87,7 +88,7 @@ const walletDisplayName = (email?: string): string => {
 };
 
 const WalletPage: React.FC = () => {
-    const { user } = useAuth();
+    const { user, activeRole } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
     const location = useLocation();
@@ -107,7 +108,7 @@ const WalletPage: React.FC = () => {
     const [withdrawAccountNumber, setWithdrawAccountNumber] = useState<string>('');
     const [pendingPayment, setPendingPayment] = useState<PaymentIntent | null>(null);
     const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawalRequestState | null>(null);
-    const [showBalance, setShowBalance] = useState(true);
+    const { showBalance, setShowBalance } = useWalletUI();
     const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw'>('overview');
     const [acceptWalletTerms, setAcceptWalletTerms] = useState(false);
 
@@ -124,7 +125,7 @@ const WalletPage: React.FC = () => {
             return;
         }
         try {
-            const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail`));
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${activeRole}`));
             if (response.status === 404 || response.status === 500) {
                 setWalletNotFound(true);
                 return;
@@ -153,7 +154,7 @@ const WalletPage: React.FC = () => {
             const response = await authenticatedFetch(gatewayUrl('/api/v1/wallet/add'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: user.id }),
+                body: JSON.stringify({ userId: user.id, role: activeRole }),
             });
             if (!response.ok) {
                 setError(`Failed to create wallet: HTTP ${response.status}`);
@@ -288,7 +289,7 @@ const WalletPage: React.FC = () => {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amountCents, paymentMethod }),
+                    body: JSON.stringify({ amountCents, paymentMethod, role: activeRole }),
                 }
             );
             if (!response.ok) {
@@ -389,6 +390,7 @@ const WalletPage: React.FC = () => {
                         amountCents,
                         bankCode: withdrawBankCode,
                         accountNumber: normalizedAccountNumber,
+                        role: activeRole,
                     }),
                 }
             );
@@ -489,7 +491,7 @@ const WalletPage: React.FC = () => {
                                 <span className="metric-label">Active Holds</span>
                                 <span className="material-symbols-outlined metric-icon" aria-hidden="true">lock</span>
                             </div>
-                            <strong>{formatCents(wallet?.heldBalance)}</strong>
+                            <strong>{showBalance ? formatCents(wallet?.heldBalance) : '••••••'}</strong>
                             <small>Reserved for active bids</small>
                         </div>
                         <div className="wallet-summary-card">
@@ -503,10 +505,12 @@ const WalletPage: React.FC = () => {
                     </div>
 
                     <div className="wallet-actions">
-                        <button className={activeTab === 'deposit' ? 'primary-button' : 'secondary-button'} onClick={() => setActiveTab('deposit')}>
-                            <span className="material-symbols-outlined" aria-hidden="true">add_card</span>
-                            Add Funds
-                        </button>
+                        {activeRole !== 'SELLER' && (
+                            <button className={activeTab === 'deposit' ? 'primary-button' : 'secondary-button'} onClick={() => setActiveTab('deposit')}>
+                                <span className="material-symbols-outlined" aria-hidden="true">add_card</span>
+                                Add Funds
+                            </button>
+                        )}
                         <button className={activeTab === 'withdraw' ? 'primary-button' : 'secondary-button'} onClick={() => setActiveTab('withdraw')}>
                             <span className="material-symbols-outlined" aria-hidden="true">payments</span>
                             Withdraw
@@ -517,7 +521,7 @@ const WalletPage: React.FC = () => {
                         </button>
                     </div>
 
-                    {activeTab === 'deposit' && (
+                    {activeTab === 'deposit' && activeRole !== 'SELLER' && (
                         <div className="panel section-stack">
                             <h3>Add Funds</h3>
                             <label className="field">
@@ -640,7 +644,7 @@ const WalletPage: React.FC = () => {
                                                         </span>
                                                     </div>
                                                     <span className="transaction-amount">
-                                                        {formatCents(row.payment.amountCents)}
+                                                        {showBalance ? formatCents(row.payment.amountCents) : '••••••'}
                                                     </span>
                                                 </Link>
                                             );
@@ -660,7 +664,7 @@ const WalletPage: React.FC = () => {
                                                         {new Date(tx.timestamp).toLocaleString()}
                                                     </span>
                                                 </div>
-                                                <span className="transaction-amount">{formatCents(Number(tx.amount))}</span>
+                                                <span className="transaction-amount">{showBalance ? formatCents(Number(tx.amount)) : '••••••'}</span>
                                             </>
                                         );
 

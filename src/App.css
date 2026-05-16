@@ -1753,6 +1753,82 @@ button {
   color: var(--muted);
 }
 
+.notification-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.notification-status {
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.notification-status-read {
+  background: var(--surface-low);
+  color: var(--muted);
+}
+
+.notification-status-unread {
+  background: var(--secondary-soft);
+  color: var(--secondary);
+}
+
+.notification-unread {
+  border-color: rgba(0, 81, 213, 0.35);
+  background: rgba(219, 231, 255, 0.3);
+}
+
+.notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notification-action-button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 4px 8px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-action-button:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+
+.notification-detail {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.notification-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notification-detail-content {
+  display: grid;
+  gap: 6px;
+}
+
+.notification-detail-content p {
+  margin: 0;
+  color: var(--muted);
+}
+
 .notification-error,
 .toast-error {
   background: var(--danger-soft);
@@ -1896,6 +1972,57 @@ button {
 .oauth-button-disabled {
   opacity: 0.6;
   pointer-events: none;
+}
+
+.connected-accounts-list {
+  display: grid;
+  gap: 12px;
+}
+
+.connected-account-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-low);
+  transition: border-color 0.16s ease;
+}
+
+.connected-account-item:hover {
+  border-color: var(--border);
+}
+
+.connected-account-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.connected-account-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+}
+
+.connected-account-details strong {
+  display: block;
+  font-size: 1rem;
+  color: var(--primary);
+}
+
+.connected-account-details span {
+  font-size: 0.82rem;
+}
+
+.oauth-button-standalone {
+  display: block;
+  place-items: flex-start;
 }
 
 .oauth-loading,
