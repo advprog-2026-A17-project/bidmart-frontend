@@ -435,6 +435,12 @@ button {
   box-shadow: 0 0 0 3px rgba(0, 81, 213, 0.14);
 }
 
+.form-input-error,
+.form-input-error:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(186, 26, 26, 0.12);
+}
+
 .form-textarea {
   min-height: 132px;
   resize: vertical;
@@ -460,6 +466,12 @@ button {
   margin-bottom: 8px;
   color: var(--muted);
   font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 0.8rem;
   font-weight: 800;
 }
 
@@ -1264,6 +1276,13 @@ button {
   border-color: var(--secondary);
   background: var(--secondary-soft);
   color: var(--secondary);
+}
+
+.chip-grid-error {
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 6px;
+  background: var(--danger-soft);
 }
 
 .upload-zone {

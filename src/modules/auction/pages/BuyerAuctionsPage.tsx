@@ -2,17 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { apiUrl } from '../../../config/api';
+import { formatMoney } from '../../../utils/money';
 import { useAuctionRealtime } from '../hooks/useAuctionRealtime';
 import { buildAuctionCardMeta, type Auction } from '../utils/auction-card-meta';
 import { parseAuctionsResponse } from '../utils/parse-auctions-response';
 
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
-
-const formatMoney = (value: number): string =>
-    `$${value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })}`;
 
 const BuyerAuctionsPage: React.FC = () => {
     const [auctions, setAuctions] = useState<Auction[]>([]);
@@ -90,7 +85,7 @@ const BuyerAuctionsPage: React.FC = () => {
                 <div className="studio-kpi-card">
                     <span className="material-symbols-outlined" aria-hidden="true">leaderboard</span>
                     <div>
-                        <strong>{topAuction ? formatMoney(topAuction.currentHighestBid ?? topAuction.startingPrice) : '$0.00'}</strong>
+                        <strong>{topAuction ? formatMoney(topAuction.currentHighestBid ?? topAuction.startingPrice) : formatMoney(0)}</strong>
                         <small>Highest active top bid</small>
                     </div>
                 </div>

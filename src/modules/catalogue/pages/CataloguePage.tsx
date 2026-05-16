@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiUrl } from '../../../config/api';
 import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
 import { Link } from 'react-router-dom';
+import { formatMoney, normalizeMoneyInput } from '../../../utils/money';
 
 interface CatalogueItem {
     id: number | string;
@@ -37,12 +38,6 @@ const CataloguePage: React.FC = () => {
         maxPrice: '',
     });
     const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
-
-    const formatMoney = (value: number | undefined) =>
-        `$${(value ?? 0).toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        })}`;
 
     const parseCatalogueItems = (payload: unknown): CatalogueItem[] => {
         if (Array.isArray(payload)) {
@@ -206,6 +201,7 @@ const CataloguePage: React.FC = () => {
                             value={searchParams.minPrice}
                             min={0}
                             onChange={(e) => setSearchParams((p) => ({ ...p, minPrice: e.target.value }))}
+                            onBlur={() => setSearchParams((p) => ({ ...p, minPrice: p.minPrice ? normalizeMoneyInput(p.minPrice) : '' }))}
                         />
                     </label>
                     <label className="field">
@@ -217,6 +213,7 @@ const CataloguePage: React.FC = () => {
                             value={searchParams.maxPrice}
                             min={0}
                             onChange={(e) => setSearchParams((p) => ({ ...p, maxPrice: e.target.value }))}
+                            onBlur={() => setSearchParams((p) => ({ ...p, maxPrice: p.maxPrice ? normalizeMoneyInput(p.maxPrice) : '' }))}
                         />
                     </label>
                     <label className="field">
