@@ -8,6 +8,7 @@ import { apiUrl } from '../../../config/api';
 import { readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { formatMoney, normalizeMoneyInput, toMoneyAmount } from '../../../utils/money';
 
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 
@@ -33,12 +34,6 @@ const detailTitle = (id?: string): string =>
 
 const openAuctionCount = (auctions: Auction[]): number =>
     auctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)).length;
-
-const formatMoney = (value: number): string =>
-    `$${value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })}`;
 
 const hasReachedEndTime = (auction: Auction): boolean =>
     new Date(auction.endTime).getTime() <= Date.now();
@@ -72,7 +67,7 @@ const AuctionDetailPage: React.FC = () => {
     const authenticatedFetch = useAuthenticatedFetch();
     const [auctions, setAuctions] = useState<Auction[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [bidInputs, setBidInputs] = useState<{ [key: string]: number }>({});
+    const [bidInputs, setBidInputs] = useState<{ [key: string]: string }>({});
     const [loading, setLoading] = useState<boolean>(true);
 
     const fetchAuctions = useCallback(async () => {
@@ -93,10 +88,10 @@ const AuctionDetailPage: React.FC = () => {
 
             setAuctions(data);
 
-            const initialInputs: { [key: string]: number } = {};
+            const initialInputs: { [key: string]: string } = {};
             data.forEach(auction => {
                 const currentHighest = auction.currentHighestBid !== null ? auction.currentHighestBid : auction.startingPrice;
-                initialInputs[auction.id] = currentHighest + auction.minimumIncrement;
+                initialInputs[auction.id] = normalizeMoneyInput(currentHighest + auction.minimumIncrement);
             });
 
             setBidInputs(prev => ({ ...initialInputs, ...prev }));
@@ -122,11 +117,11 @@ const AuctionDetailPage: React.FC = () => {
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
 
     const handleBidChange = (auctionId: string, value: string) => {
-        setBidInputs(prev => ({ ...prev, [auctionId]: parseFloat(value) }));
+        setBidInputs(prev => ({ ...prev, [auctionId]: value }));
     };
 
     const placeBid = async (auctionId: string) => {
-        const amount = bidInputs[auctionId];
+        const amount = toMoneyAmount(bidInputs[auctionId]);
         if (!amount) return;
         if (!user) {
             setError('Please sign in before placing a bid.');
@@ -272,11 +267,12 @@ const AuctionDetailPage: React.FC = () => {
                                 <input
                                     type="number"
                                     className="form-input"
-                                    value={bidInputs[selectedAuction.id] || selectedMeta.minNextBid}
+                                    value={bidInputs[selectedAuction.id] || normalizeMoneyInput(selectedMeta.minNextBid)}
                                     step={selectedAuction.minimumIncrement}
                                     min={selectedMeta.minNextBid}
                                     disabled={selectedMeta.isClosed}
                                     onChange={(e) => handleBidChange(selectedAuction.id, e.target.value)}
+                                    onBlur={() => handleBidChange(selectedAuction.id, normalizeMoneyInput(bidInputs[selectedAuction.id] ?? selectedMeta.minNextBid))}
                                 />
                             </label>
                             <button
@@ -294,7 +290,7 @@ const AuctionDetailPage: React.FC = () => {
                                         type="button"
                                         className="quick-bid-button"
                                         disabled={selectedMeta.isClosed}
-                                        onClick={() => handleBidChange(selectedAuction.id, String(option.amount))}
+                                        onClick={() => handleBidChange(selectedAuction.id, normalizeMoneyInput(option.amount))}
                                     >
                                         <span>+ {formatMoney(option.increment)}</span>
                                         <strong>{formatMoney(option.amount)}</strong>

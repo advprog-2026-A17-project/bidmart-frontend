@@ -5,6 +5,7 @@ import { readApiError, gatewayUrl } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { useWebSocket } from '../../../hooks/useWebSocket';
+import { normalizeMoneyInput, toAmountCents } from '../../../utils/money';
 import {
     formatCents,
     paymentExpiryMs,
@@ -66,7 +67,6 @@ const PAYMENT_METHODS = [
 const toErrorMessage = (err: unknown): string =>
     err instanceof Error ? err.message : 'Unknown error';
 
-const toAmountCents = (value: string): number => Math.round(Number(value || 0) * 100);
 const timestampMs = (value?: string | null): number => {
     if (!value) {
         return 0;
@@ -530,6 +530,7 @@ const WalletPage: React.FC = () => {
                                     min={0}
                                     step="0.01"
                                     onChange={(e) => setTopUpAmount(e.target.value)}
+                                    onBlur={() => setTopUpAmount((value) => value ? normalizeMoneyInput(value) : '')}
                                 />
                             </label>
                             <label className="field">
@@ -566,6 +567,7 @@ const WalletPage: React.FC = () => {
                                     min={0}
                                     step="0.01"
                                     onChange={(e) => setWithdrawAmount(e.target.value)}
+                                    onBlur={() => setWithdrawAmount((value) => value ? normalizeMoneyInput(value) : '')}
                                 />
                             </label>
                             <label className="field">
