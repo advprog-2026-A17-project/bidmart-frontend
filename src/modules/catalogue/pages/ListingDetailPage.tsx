@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { apiUrl } from '../../../config/api';
+import { formatMoney } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta, type Auction } from '../../auction/utils/auction-card-meta';
 import { parseAuctionsResponse } from '../../auction/utils/parse-auctions-response';
@@ -20,12 +21,6 @@ type ListingDetail = {
     endTime?: string | null;
     hasBids?: boolean;
 };
-
-const formatMoney = (value?: number | null): string =>
-    `$${(value ?? 0).toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })}`;
 
 const fallbackImage = (id: string | number): string =>
     `https://picsum.photos/seed/${encodeURIComponent(String(id))}/960/720`;
