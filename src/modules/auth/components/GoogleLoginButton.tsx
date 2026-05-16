@@ -13,6 +13,8 @@ interface GoogleLoginButtonProps {
     onClearError?: () => void;
     onBusyChange?: (busy: boolean) => void;
     onCredential?: (credential: string) => Promise<void>;
+    className?: string;
+    width?: number;
 }
 
 const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
@@ -22,6 +24,8 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
     onClearError,
     onBusyChange,
     onCredential,
+    className = '',
+    width = 320,
 }) => {
     const { login } = useAuth();
     const navigate = useNavigate();
@@ -111,15 +115,15 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
             size: 'large',
             text: 'continue_with',
             shape: 'pill',
-            width: 320,
+            width: width,
         });
         initializedRef.current = true;
-    }, [clientId, handleCredential, onError, ready]);
+    }, [clientId, handleCredential, onError, ready, width]);
 
     const isDisabled = disabled || !ready;
 
     return (
-        <div className={`oauth-button ${isDisabled ? 'oauth-button-disabled' : ''}`}>
+        <div className={`oauth-button ${className} ${isDisabled ? 'oauth-button-disabled' : ''}`}>
             <div ref={buttonRef} />
             {!ready && <div className="oauth-loading">Loading Google...</div>}
         </div>

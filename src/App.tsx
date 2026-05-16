@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useState, useEffect, type ReactElement } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, NavLink, useNavigate } from 'react-router-dom';
 import AuctionDetailPage from './modules/auction/pages/AuctionDetailPage';
 import BuyerAuctionsPage from './modules/auction/pages/BuyerAuctionsPage';
@@ -13,17 +13,73 @@ import ProfilePage from './modules/auth/pages/ProfilePage';
 import ProfileGuard from './modules/auth/components/ProfileGuard';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
+import { useAuthenticatedFetch } from './context/useAuthenticatedFetch';
+import { WalletUIProvider, useWalletUI } from './context/WalletUIContext';
+import { useWebSocket } from './hooks/useWebSocket';
+import { gatewayUrl } from './config/apiClient';
+import { formatCents } from './modules/wallet/utils/payment';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import './App.css';
 import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
 
 const Navbar = () => {
     const { user, activeRole, switchRole, logout } = useAuth();
+    const authenticatedFetch = useAuthenticatedFetch();
+    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
     const hasBuyer = user?.roles?.some((role) => role.name === 'BUYER') ?? false;
     const hasSeller = user?.roles?.some((role) => role.name === 'SELLER') ?? false;
     const isSeller = activeRole === 'SELLER';
     const navigate = useNavigate();
     const roleLabel = activeRole ?? user?.roles?.[0]?.name ?? 'Guest';
+
+    const [walletBalance, setWalletBalance] = useState<number | null>(null);
+    const { showBalance, setShowBalance } = useWalletUI();
+
+    useEffect(() => {
+        if (!user) {
+            setWalletBalance(null);
+            return;
+        }
+
+        let active = true;
+
+        const fetchWallet = async () => {
+            try {
+                const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${activeRole}`));
+                if (response.ok) {
+                    const data = await response.json();
+                    if (active) {
+                        setWalletBalance(data.wallet?.activeBalance ?? data.activeBalance ?? null);
+                    }
+                } else if (response.status === 404 || response.status === 500) {
+                    if (active) setWalletBalance(null);
+                }
+            } catch (err) {
+                console.error('Failed to fetch wallet for navbar:', err);
+            }
+        };
+
+        void fetchWallet();
+
+        if (isConnected) {
+            const destination = '/user/queue/notifications';
+            subscribe(destination, (payload) => {
+                const event = payload as { type?: string; payload?: { type?: string } };
+                const type = String(event.payload?.type ?? event.type ?? '');
+                if (['BID_PLACED', 'OUTBID', 'AUCTION_WON', 'AUCTION_ENDED', 'ORDER_CREATED'].includes(type)) {
+                    void fetchWallet();
+                }
+            });
+            return () => {
+                active = false;
+                unsubscribe(destination);
+            };
+        }
+
+        return () => {
+            active = false;
+        };
+    }, [user, authenticatedFetch, isConnected, subscribe, unsubscribe]);
 
     const handleSwitchRole = (role: 'BUYER' | 'SELLER') => {
         switchRole(role);
@@ -79,6 +135,25 @@ const Navbar = () => {
             <div className="app-nav-right">
                 {user ? (
                     <>
+                        {walletBalance !== null && (
+                            <div className="navbar-wallet-balance" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem' }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>account_balance_wallet</span>
+                                <strong style={{ minWidth: '80px' }}>
+                                    {showBalance ? formatCents(walletBalance) : '••••••'}
+                                </strong>
+                                <button
+                                    type="button"
+                                    className="icon-button"
+                                    style={{ padding: '0.2rem' }}
+                                    onClick={() => setShowBalance(prev => !prev)}
+                                    aria-label={showBalance ? 'Hide balance' : 'Show balance'}
+                                >
+                                    <span className="material-symbols-outlined" style={{ fontSize: '1.2rem' }}>
+                                        {showBalance ? 'visibility_off' : 'visibility'}
+                                    </span>
+                                </button>
+                            </div>
+                        )}
                         {hasBuyer && isSeller && (
                             <button type="button" className="account-switch-button" onClick={() => handleSwitchRole('BUYER')}>
                                 <span className="material-symbols-outlined" aria-hidden="true">shopping_bag</span>
@@ -177,12 +252,14 @@ function App() {
     return (
         <GlobalErrorBoundary>
             <AuthProvider>
-                <Router>
-                    <div className="app-shell">
-                        <Navbar />
-                        <AppLayout />
-                    </div>
-                </Router>
+                <WalletUIProvider>
+                    <Router>
+                        <div className="app-shell">
+                            <Navbar />
+                            <AppLayout />
+                        </div>
+                    </Router>
+                </WalletUIProvider>
             </AuthProvider>
         </GlobalErrorBoundary>
     );
