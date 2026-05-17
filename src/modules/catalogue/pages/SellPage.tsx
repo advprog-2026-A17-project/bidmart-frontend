@@ -43,7 +43,8 @@ type AuctionFormState = {
     startingBid: string;
     reservePrice: string;
     minimumIncrement: string;
-    duration: number;
+    startTime: string;
+    endTime: string;
 };
 
 type StudioNavItem = {
@@ -76,7 +77,6 @@ const CONDITIONS = [
     { value: 'used', label: 'Used' },
 ];
 
-const AUCTION_DURATIONS = [1, 3, 5, 7, 10];
 const MAX_IMAGE_BYTES = 600 * 1024;
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD', 'CANCELLED']);
 const LOCKED_AUCTION_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'ENDED', 'WON', 'UNSOLD', 'CANCELLED']);
@@ -91,18 +91,33 @@ const emptyListingForm: ListingFormState = {
     images: [],
 };
 
-const emptyAuctionForm: AuctionFormState = {
-    listingId: '',
-    startingBid: '',
-    reservePrice: '',
-    minimumIncrement: '1',
-    duration: 7,
-};
-
 const toListingAmount = (value: string): number => toMoneyAmount(value);
 const fromListingAmount = (value?: number | null): string => normalizeMoneyInput(value);
 const toErrorMessage = (err: unknown): string =>
     err instanceof Error ? err.message : 'Unknown error';
+const toDateTimeLocalValue = (date: Date): string => {
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+};
+const dateTimeLocalToUnixSeconds = (value: string): number | null => {
+    const parsed = new Date(value);
+    const timestamp = parsed.getTime();
+    if (Number.isNaN(timestamp)) return null;
+    return Math.floor(timestamp / 1000);
+};
+const createEmptyAuctionForm = (): AuctionFormState => {
+    const now = new Date();
+    now.setSeconds(0, 0);
+    const end = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return {
+        listingId: '',
+        startingBid: '',
+        reservePrice: '',
+        minimumIncrement: '1',
+        startTime: toDateTimeLocalValue(now),
+        endTime: toDateTimeLocalValue(end),
+    };
+};
 const normalizeCondition = (condition?: string | null): string => {
     const normalized = (condition ?? '')
         .trim()
@@ -157,7 +172,7 @@ const SellPage: React.FC = () => {
     const roleSummary = user?.roles?.map((role) => role.name).join(', ') ?? 'No active role';
     const [activeView, setActiveView] = useState<StudioView>('dashboard');
     const [listingForm, setListingForm] = useState<ListingFormState>(emptyListingForm);
-    const [auctionForm, setAuctionForm] = useState<AuctionFormState>(emptyAuctionForm);
+    const [auctionForm, setAuctionForm] = useState<AuctionFormState>(() => createEmptyAuctionForm());
     const [listings, setListings] = useState<ListingRecord[]>([]);
     const [sellerAuctions, setSellerAuctions] = useState<Auction[]>([]);
     const [editingListingId, setEditingListingId] = useState<string | null>(null);
@@ -484,14 +499,24 @@ const SellPage: React.FC = () => {
             setError('Only seller accounts can create auctions.');
             return;
         }
-        if (!auctionForm.listingId || !auctionForm.startingBid || !auctionForm.reservePrice || !auctionForm.minimumIncrement) {
-            setError('Select a published listing and complete auction pricing before creating an auction.');
+        if (!auctionForm.listingId || !auctionForm.startingBid || !auctionForm.reservePrice || !auctionForm.minimumIncrement || !auctionForm.startTime || !auctionForm.endTime) {
+            setError('Select a published listing and complete auction pricing and timing before creating an auction.');
+            return;
+        }
+
+        const startTime = dateTimeLocalToUnixSeconds(auctionForm.startTime);
+        const endTime = dateTimeLocalToUnixSeconds(auctionForm.endTime);
+        if (startTime === null || endTime === null) {
+            setError('Enter a valid auction start and end time.');
+            return;
+        }
+        if (endTime <= startTime) {
+            setError('Auction end time must be after the start time.');
             return;
         }
 
         setError(null);
         setNotice(null);
-        const now = Math.floor(Date.now() / 1000);
         const listingId: string = auctionForm.listingId;
 
         try {
@@ -505,8 +530,8 @@ const SellPage: React.FC = () => {
                     starting_price_cents: toAmountCents(auctionForm.startingBid),
                     reserve_price_cents: toAmountCents(auctionForm.reservePrice || auctionForm.startingBid),
                     minimum_increment_cents: toAmountCents(auctionForm.minimumIncrement || '1'),
-                    startTime: now,
-                    endTime: now + auctionForm.duration * 24 * 60 * 60,
+                    startTime,
+                    endTime,
                 }),
             });
             if (!auctionResponse.ok) {
@@ -516,7 +541,7 @@ const SellPage: React.FC = () => {
             const auctionId = String(auction.id);
             await markAuctionCreated(listingId, auctionId);
             setCreatedAuctionId(auctionId);
-            setAuctionForm(emptyAuctionForm);
+            setAuctionForm(createEmptyAuctionForm());
             setNotice('Auction created.');
             await refreshStudio();
             setActiveView('auction-manage');
@@ -1044,24 +1069,33 @@ const SellPage: React.FC = () => {
                                 onBlur={() => setAuctionForm((previous) => ({ ...previous, minimumIncrement: normalizeMoneyInput(previous.minimumIncrement) }))}
                             />
                         </label>
-                        <div>
-                            <div className="field-label">Auction Duration</div>
-                            <div className="chip-grid">
-                                {AUCTION_DURATIONS.map((duration) => (
-                                    <button
-                                        key={duration}
-                                        type="button"
-                                        className={`chip ${auctionForm.duration === duration ? 'chip-active' : ''}`}
-                                        onClick={() => setAuctionForm((previous) => ({ ...previous, duration }))}
-                                    >
-                                        {duration} day{duration > 1 ? 's' : ''}
-                                    </button>
-                                ))}
-                            </div>
+                        <div className="seller-form-two-col">
+                            <label className="field">
+                                Start Time
+                                <input
+                                    className="form-input"
+                                    type="datetime-local"
+                                    value={auctionForm.startTime}
+                                    onChange={(event) => setAuctionForm((previous) => ({ ...previous, startTime: event.target.value }))}
+                                />
+                            </label>
+                            <label className="field">
+                                End Time
+                                <input
+                                    className="form-input"
+                                    type="datetime-local"
+                                    value={auctionForm.endTime}
+                                    min={auctionForm.startTime}
+                                    onChange={(event) => setAuctionForm((previous) => ({ ...previous, endTime: event.target.value }))}
+                                />
+                            </label>
                         </div>
                         <div className="summary-box">
                             <div>Critical pricing fields are locked once the auction is live.</div>
-                            <div>Estimated end: {new Date(Date.now() + auctionForm.duration * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
+                            <div>
+                                Scheduled: {auctionForm.startTime ? new Date(auctionForm.startTime).toLocaleString() : '--'} to{' '}
+                                {auctionForm.endTime ? new Date(auctionForm.endTime).toLocaleString() : '--'}
+                            </div>
                         </div>
                         <div className="panel-footer">
                             <button type="button" className="primary-button" onClick={createAuction}>
