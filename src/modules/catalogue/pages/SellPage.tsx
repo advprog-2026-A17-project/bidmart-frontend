@@ -19,9 +19,12 @@ type ListingRecord = {
     condition?: string | null;
     sellerId?: string | null;
     startingPrice?: number | null;
+    reservePrice?: number | null;
     currentPrice?: number | null;
+    minimumIncrement?: number | null;
     imageUrl?: string | null;
     status?: string | null;
+    startTime?: string | null;
     endTime?: string | null;
     hasBids?: boolean;
 };
@@ -160,7 +163,7 @@ const parseListingsResponse = (payload: unknown): ListingRecord[] => {
 };
 
 const isListingAuctionReady = (listing: ListingRecord): boolean =>
-    (listing.status ?? '').toUpperCase() === 'ACTIVE';
+    ['DRAFT', 'ACTIVE'].includes((listing.status ?? '').toUpperCase());
 
 const isAuctionLocked = (auction: Auction): boolean =>
     LOCKED_AUCTION_STATUSES.has(auction.status);
@@ -329,17 +332,6 @@ const SellPage: React.FC = () => {
         }
     };
 
-    const markAuctionCreated = async (listingId: string, auctionId: string) => {
-        const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/auction-created`), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ auctionId }),
-        });
-        if (!response.ok) {
-            throw new Error(await readApiError(response, 'Listing auction marker failed'));
-        }
-    };
-
     const resetListingForm = () => {
         setEditingListingId(null);
         setListingForm(emptyListingForm);
@@ -365,6 +357,21 @@ const SellPage: React.FC = () => {
         startingPrice: toListingAmount(form.startingBid),
         currentPrice: toListingAmount(form.startingBid),
         imageUrl: form.imageUrl.trim() || form.images[0] || null,
+    });
+
+    const createAuctionListingPayload = (listing: ListingRecord) => ({
+        title: listing.title,
+        description: listing.description,
+        category: listing.category ?? '',
+        condition: normalizeCondition(listing.condition),
+        sellerId: user?.id,
+        startingPrice: toListingAmount(auctionForm.startingBid),
+        reservePrice: toListingAmount(auctionForm.reservePrice || auctionForm.startingBid),
+        currentPrice: toListingAmount(auctionForm.startingBid),
+        minimumIncrement: toListingAmount(auctionForm.minimumIncrement || '1'),
+        startTime: auctionForm.startTime,
+        endTime: auctionForm.endTime,
+        imageUrl: listing.imageUrl ?? '',
     });
 
     const validateListingForm = (): ListingFormErrors => {
@@ -431,13 +438,27 @@ const SellPage: React.FC = () => {
             const listingId = String(saved.id);
 
             if (publishAfterCreate && !isEditing) {
-                await publishCreatedListing(listingId);
+                setAuctionForm((previous) => ({
+                    ...previous,
+                    listingId,
+                    startingBid: fromListingAmount(saved.startingPrice ?? toListingAmount(listingForm.startingBid)),
+                    reservePrice: fromListingAmount(saved.reservePrice ?? saved.startingPrice ?? toListingAmount(listingForm.startingBid)),
+                    minimumIncrement: fromListingAmount(saved.minimumIncrement ?? 1),
+                    startTime: saved.startTime ? toDateTimeLocalValue(new Date(saved.startTime)) : previous.startTime,
+                    endTime: saved.endTime ? toDateTimeLocalValue(new Date(saved.endTime)) : previous.endTime,
+                }));
             }
 
-            setNotice(isEditing ? 'Listing updated.' : publishAfterCreate ? 'Listing created and published.' : 'Listing draft created.');
+            setNotice(
+                isEditing
+                    ? 'Listing updated.'
+                    : publishAfterCreate
+                        ? 'Listing draft created. Complete the auction schedule and publish from Auction Setup.'
+                        : 'Listing draft created.'
+            );
             resetListingForm();
             await fetchSellerListings();
-            setActiveView('listing-manage');
+            setActiveView(publishAfterCreate && !isEditing ? 'auction-create' : 'listing-manage');
         } catch (err: unknown) {
             setError(toErrorMessage(err));
         }
@@ -527,6 +548,29 @@ const SellPage: React.FC = () => {
         const listingId: string = auctionForm.listingId;
 
         try {
+            const listing = selectedListing;
+            if (!listing) {
+                throw new Error('Select a listing before configuring the auction.');
+            }
+
+            const status = (listing.status ?? '').toUpperCase();
+            if (status !== 'DRAFT' && status !== 'ACTIVE') {
+                throw new Error(`Listing status ${status || 'UNKNOWN'} cannot be prepared for auction.`);
+            }
+
+            const syncResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(createAuctionListingPayload(listing)),
+            });
+            if (!syncResponse.ok) {
+                throw new Error(await readApiError(syncResponse, 'Listing auction setup failed'));
+            }
+
+            if (status === 'DRAFT') {
+                await publishCreatedListing(listingId);
+            }
+
             const auctionResponse = await authenticatedFetch(gatewayUrl('/api/v1/auctions'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -546,7 +590,6 @@ const SellPage: React.FC = () => {
             }
             const auction = await auctionResponse.json() as { id: string | number };
             const auctionId = String(auction.id);
-            await markAuctionCreated(listingId, auctionId);
             setCreatedAuctionId(auctionId);
             setAuctionForm(createEmptyAuctionForm());
             setNotice('Auction created.');
@@ -735,7 +778,7 @@ const SellPage: React.FC = () => {
                                     {sellerAuctions.map((auction) => {
                                         const meta = buildAuctionCardMeta(auction);
                                         return (
-                                            <Link key={auction.id} className="analytics-row" to={`/active-auctions/${auction.id}`}>
+                                            <Link key={auction.id} className="analytics-row" to={`/listings/${auction.id}`}>
                                                 <span>{listingTitleById(auction.listingId)}</span>
                                                 <strong>{bidLabel(meta)}</strong>
                                                 <span>{formatMoney(meta.minNextBid)}</span>
@@ -748,7 +791,7 @@ const SellPage: React.FC = () => {
                             ) : (
                                 <div className="empty-state compact-empty">
                                     <strong>No seller auctions yet.</strong>
-                                    <span className="text-muted">Create an auction from a published listing to start collecting bid data.</span>
+                                    <span className="text-muted">Select a draft or active listing, complete the auction rules, and publish the bid session from here.</span>
                                 </div>
                             )}
 
@@ -884,7 +927,7 @@ const SellPage: React.FC = () => {
                                 </button>
                                 {!editingListingId && (
                                     <button type="button" className="primary-button" onClick={() => saveListing(true)}>
-                                        Publish Listing
+                                        Continue to Auction Setup
                                     </button>
                                 )}
                                 {editingListingId && (
@@ -947,8 +990,8 @@ const SellPage: React.FC = () => {
                                 {listings.map((listing) => {
                                     const status = (listing.status ?? 'UNKNOWN').toUpperCase();
                                     const locked = listing.hasBids || status === 'AUCTION_CREATED' || status === 'SOLD' || status === 'UNSOLD';
-                                    const canToggleActive = status === 'ACTIVE' || status === 'DRAFT';
-                                    const toggleLabel = status === 'ACTIVE' ? 'Deactivate' : 'Activate';
+                                    const canToggleActive = status === 'ACTIVE';
+                                    const toggleLabel = 'Deactivate';
                                     return (
                                         <article key={listing.id} className="management-card">
                                             <div>
@@ -1009,7 +1052,7 @@ const SellPage: React.FC = () => {
                             </div>
                         </div>
                         <label className="field">
-                            Published Listing
+                            Listing Draft or Active Listing
                             <select
                                 className="form-input"
                                 value={auctionForm.listingId}
@@ -1023,7 +1066,7 @@ const SellPage: React.FC = () => {
                                     }));
                                 }}
                             >
-                                <option value="">Select an ACTIVE listing without an auction</option>
+                                <option value="">Select a DRAFT or ACTIVE listing without an auction</option>
                                 {auctionReadyListings.map((listing) => (
                                     <option key={listing.id} value={String(listing.id)}>
                                         {listing.title}
@@ -1163,7 +1206,7 @@ const SellPage: React.FC = () => {
                                                 </div>
                                             </div>
                                             <div className="management-actions">
-                                                <Link className="secondary-button" to={`/active-auctions/${auction.id}`}>Open Room</Link>
+                                                <Link className="secondary-button" to={`/listings/${auction.id}`}>Open Room</Link>
                                                 <button type="button" className="secondary-button" disabled={locked}>
                                                     Edit Draft
                                                 </button>
