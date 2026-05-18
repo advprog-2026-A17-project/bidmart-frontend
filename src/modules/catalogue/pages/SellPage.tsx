@@ -1136,7 +1136,7 @@ const SellPage: React.FC = () => {
                                 {sellerAuctions.map((auction) => {
                                     const meta = buildAuctionCardMeta(auction);
                                     const locked = isAuctionLocked(auction);
-                                    const canClose = hasReachedEndTime(auction) && !meta.isClosed;
+                                    const canClose = hasReachedEndTime(auction) && !CLOSED_STATUSES.has(auction.status);
                                     return (
                                         <article key={auction.id} className="management-card">
                                             <div>

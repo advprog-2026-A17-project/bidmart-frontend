@@ -7,6 +7,7 @@ import ListingDetailPage from './modules/catalogue/pages/ListingDetailPage';
 import SellPage from './modules/catalogue/pages/SellPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
 import PaymentDetailPage from './modules/wallet/pages/PaymentDetailPage';
+import OrdersPage from './modules/orders/pages/OrdersPage';
 import NotificationCenter from './modules/notifications/components/NotificationCenter';
 import AuthPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
@@ -110,6 +111,9 @@ const Navbar = () => {
                         </NavLink>
                         <NavLink to="/wallet" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Wallet
+                        </NavLink>
+                        <NavLink to="/orders" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Orders
                         </NavLink>
                         <NavLink to="/profile" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Profile
@@ -241,6 +245,7 @@ const AppLayout = () => {
                         <Route path="/sell" element={<Navigate to={isSeller ? '/seller-studio' : '/'} replace />} />
                         <Route path="/wallet" element={<WalletPage />} />
                         <Route path="/wallet/payments/:paymentId" element={<PaymentDetailPage />} />
+                        <Route path="/orders" element={<OrdersPage />} />
                     </Routes>
                 </ProfileGuard>
             </main>
