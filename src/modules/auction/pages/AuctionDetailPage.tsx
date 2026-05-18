@@ -12,6 +12,15 @@ import { formatMoney, normalizeMoneyInput, toMoneyAmount } from '../../../utils/
 
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 
+type ListingSummary = {
+    id: string | number;
+    title?: string | null;
+    description?: string | null;
+    category?: string | null;
+    condition?: string | null;
+    imageUrl?: string | null;
+};
+
 const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) {
         return error.message;
@@ -37,6 +46,12 @@ const openAuctionCount = (auctions: Auction[]): number =>
 
 const hasReachedEndTime = (auction: Auction): boolean =>
     new Date(auction.endTime).getTime() <= Date.now();
+
+const fallbackListingImage = (listingId: string): string =>
+    `https://picsum.photos/seed/${encodeURIComponent(listingId)}/960/720`;
+
+const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
+    meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
 
 const AuctionSkeleton = () => (
     <div className="auction-layout skeleton-grid" aria-busy="true" aria-label="Loading auctions">
@@ -68,6 +83,7 @@ const AuctionDetailPage: React.FC = () => {
     const [auctions, setAuctions] = useState<Auction[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [bidInputs, setBidInputs] = useState<{ [key: string]: string }>({});
+    const [listingsById, setListingsById] = useState<Record<string, ListingSummary>>({});
     const [loading, setLoading] = useState<boolean>(true);
 
     const fetchAuctions = useCallback(async () => {
@@ -90,11 +106,30 @@ const AuctionDetailPage: React.FC = () => {
 
             const initialInputs: { [key: string]: string } = {};
             data.forEach(auction => {
-                const currentHighest = auction.currentHighestBid !== null ? auction.currentHighestBid : auction.startingPrice;
-                initialInputs[auction.id] = normalizeMoneyInput(currentHighest + auction.minimumIncrement);
+                initialInputs[auction.id] = normalizeMoneyInput(buildAuctionCardMeta(auction).minNextBid);
             });
 
             setBidInputs(prev => ({ ...initialInputs, ...prev }));
+
+            const listingIds = Array.from(new Set(data.map((auction) => auction.listingId)));
+            const listingEntries = await Promise.all(
+                listingIds.map(async (listingId): Promise<[string, ListingSummary] | null> => {
+                    try {
+                        const listingResponse = await fetch(apiUrl(`/api/v1/catalogue/listings/${encodeURIComponent(listingId)}`));
+                        if (!listingResponse.ok) {
+                            return null;
+                        }
+                        const listing = await listingResponse.json() as ListingSummary | null;
+                        if (!listing) {
+                            return null;
+                        }
+                        return [String(listing.id ?? listingId), listing];
+                    } catch {
+                        return null;
+                    }
+                })
+            );
+            setListingsById(Object.fromEntries(listingEntries.filter((entry): entry is [string, ListingSummary] => Boolean(entry))));
         } catch (err: unknown) {
             console.error('Fetch execution failed:', err);
             setError(`Failed to load auctions: ${getErrorMessage(err)}`);
@@ -169,9 +204,12 @@ const AuctionDetailPage: React.FC = () => {
 
     const selectedAuction = auctions[0];
     const selectedMeta = selectedAuction ? buildAuctionCardMeta(selectedAuction) : null;
-    const thumbnailSeeds = selectedAuction
-        ? [selectedAuction.id, `${selectedAuction.id}-2`, `${selectedAuction.id}-3`]
-        : [];
+    const selectedListing = selectedAuction ? listingsById[selectedAuction.listingId] : undefined;
+    const selectedImage = selectedAuction
+        ? selectedListing?.imageUrl?.trim() || fallbackListingImage(selectedAuction.listingId)
+        : '';
+    const listingTitle = (auction: Auction): string =>
+        listingsById[auction.listingId]?.title?.trim() || 'Auction Listing';
 
     let content: React.ReactNode;
     if (loading) {
@@ -179,8 +217,8 @@ const AuctionDetailPage: React.FC = () => {
     } else if (!selectedAuction || !selectedMeta) {
         content = <div className="empty-state">No matching auction found.</div>;
     } else {
-        const quickBidOptions = [1, 2, 5].map((multiplier) => {
-            const amount = selectedMeta.currentHighest + selectedAuction.minimumIncrement * multiplier;
+        const quickBidOptions = [0, 1, 4].map((multiplier) => {
+            const amount = selectedMeta.minNextBid + selectedAuction.minimumIncrement * multiplier;
             return {
                 increment: selectedAuction.minimumIncrement * multiplier,
                 amount,
@@ -195,8 +233,8 @@ const AuctionDetailPage: React.FC = () => {
                 <section className="auction-asset-panel">
                     <div className="auction-image-main">
                         <img
-                            src={`https://picsum.photos/seed/${selectedAuction.id}/960/720`}
-                            alt={`Listing ${selectedAuction.listingId}`}
+                            src={selectedImage}
+                            alt={selectedListing?.title || 'Auction listing'}
                         />
                         <div className="auction-image-badges">
                             <span className={`status-badge status-${selectedAuction.status}`}>{selectedMeta.statusLabel}</span>
@@ -207,14 +245,12 @@ const AuctionDetailPage: React.FC = () => {
                         </div>
                     </div>
                     <div className="auction-thumbs">
-                        {thumbnailSeeds.map((seed) => (
-                            <img key={seed} src={`https://picsum.photos/seed/${seed}/240/180`} alt="Auction" />
-                        ))}
+                        <img src={selectedImage} alt={selectedListing?.title || 'Auction listing preview'} />
                     </div>
                     <div className="auction-detail-copy">
-                        <p className="eyebrow">Lot #{selectedAuction.listingId}</p>
-                        <h2>Institutional Auction Asset</h2>
-                        <p className="text-muted">Auction ID: {selectedAuction.id}</p>
+                        <p className="eyebrow">{selectedListing?.category || 'Live Auction'}</p>
+                        <h2>{selectedListing?.title || 'Auction Listing'}</h2>
+                        <p className="text-muted">{selectedListing?.description || 'Listing details are available from the catalogue page.'}</p>
                         <div className="auction-spec-grid">
                             <div>
                                 <span>Start Price</span>
@@ -259,7 +295,7 @@ const AuctionDetailPage: React.FC = () => {
                             </div>
                             <div className="current-bid-block">
                                 <span>Current Bid</span>
-                                <strong>{formatMoney(selectedMeta.currentHighest)}</strong>
+                                <strong>{bidLabel(selectedMeta)}</strong>
                                 <small>Minimum next bid: {formatMoney(selectedMeta.minNextBid)}</small>
                             </div>
                             <label className="field">
@@ -292,7 +328,7 @@ const AuctionDetailPage: React.FC = () => {
                                         disabled={selectedMeta.isClosed}
                                         onClick={() => handleBidChange(selectedAuction.id, normalizeMoneyInput(option.amount))}
                                     >
-                                        <span>+ {formatMoney(option.increment)}</span>
+                                        <span>{option.increment === 0 ? 'Minimum' : `+ ${formatMoney(option.increment)}`}</span>
                                         <strong>{formatMoney(option.amount)}</strong>
                                     </button>
                                 ))}
@@ -329,10 +365,10 @@ const AuctionDetailPage: React.FC = () => {
                                 return (
                                     <div key={auction.id} className="auction-history-row">
                                         <div>
-                                            <strong>Lot #{auction.listingId}</strong>
+                                            <strong>{listingTitle(auction)}</strong>
                                             <span>{meta.timeLeftLabel}</span>
                                         </div>
-                                        <strong>{formatMoney(meta.currentHighest)}</strong>
+                                        <strong>{bidLabel(meta)}</strong>
                                     </div>
                                 );
                             })}

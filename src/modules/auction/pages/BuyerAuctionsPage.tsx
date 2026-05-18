@@ -9,6 +9,9 @@ import { parseAuctionsResponse } from '../utils/parse-auctions-response';
 
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 
+const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
+    meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
+
 const BuyerAuctionsPage: React.FC = () => {
     const [auctions, setAuctions] = useState<Auction[]>([]);
     const [loading, setLoading] = useState(true);
@@ -47,8 +50,8 @@ const BuyerAuctionsPage: React.FC = () => {
     );
     const topAuction = useMemo(
         () => [...activeAuctions].sort((a, b) => {
-            const aBid = a.currentHighestBid ?? a.startingPrice;
-            const bBid = b.currentHighestBid ?? b.startingPrice;
+            const aBid = a.currentHighestBid ?? 0;
+            const bBid = b.currentHighestBid ?? 0;
             return bBid - aBid;
         })[0],
         [activeAuctions]
@@ -85,7 +88,7 @@ const BuyerAuctionsPage: React.FC = () => {
                 <div className="studio-kpi-card">
                     <span className="material-symbols-outlined" aria-hidden="true">leaderboard</span>
                     <div>
-                        <strong>{topAuction ? formatMoney(topAuction.currentHighestBid ?? topAuction.startingPrice) : formatMoney(0)}</strong>
+                        <strong>{topAuction ? bidLabel(buildAuctionCardMeta(topAuction)) : formatMoney(0)}</strong>
                         <small>Highest active top bid</small>
                     </div>
                 </div>
@@ -122,14 +125,14 @@ const BuyerAuctionsPage: React.FC = () => {
                                     </span>
                                 </div>
                                 <div>
-                                    <p className="eyebrow">Lot #{auction.listingId}</p>
+                                    <p className="eyebrow">Live Auction</p>
                                     <h2>Auction Room</h2>
-                                    <p className="text-muted">Auction ID: {auction.id}</p>
+                                    <p className="text-muted">Open the room for listing details, timing, and bid controls.</p>
                                 </div>
                                 <div className="listing-price-grid compact-price-grid">
                                     <div>
                                         <span>Top Bid</span>
-                                        <strong>{formatMoney(meta.currentHighest)}</strong>
+                                        <strong>{bidLabel(meta)}</strong>
                                     </div>
                                     <div>
                                         <span>Next Bid</span>

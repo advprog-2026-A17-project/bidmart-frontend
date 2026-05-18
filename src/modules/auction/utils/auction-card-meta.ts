@@ -11,8 +11,9 @@ const parseAuctionDate = (value: string): Date => {
 };
 
 export const buildAuctionCardMeta = (auction: Auction) => {
-    const currentHighest = auction.currentHighestBid !== null ? auction.currentHighestBid : auction.startingPrice;
-    const minNextBid = currentHighest + auction.minimumIncrement;
+    const hasBids = auction.currentHighestBid !== null;
+    const currentHighest = hasBids ? auction.currentHighestBid! : auction.startingPrice;
+    const minNextBid = hasBids ? currentHighest + auction.minimumIncrement : auction.startingPrice;
     const statusLabel = auction.status.charAt(0) + auction.status.slice(1).toLowerCase();
     const endDate = parseAuctionDate(auction.endTime);
     const now = Date.now();
@@ -25,6 +26,7 @@ export const buildAuctionCardMeta = (auction: Auction) => {
 
     return {
         currentHighest,
+        hasBids,
         minNextBid,
         statusLabel,
         isClosed,

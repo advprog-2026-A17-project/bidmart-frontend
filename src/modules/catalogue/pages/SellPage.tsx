@@ -81,6 +81,9 @@ const MAX_IMAGE_BYTES = 600 * 1024;
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD', 'CANCELLED']);
 const LOCKED_AUCTION_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'ENDED', 'WON', 'UNSOLD', 'CANCELLED']);
 
+const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
+    meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
+
 const emptyListingForm: ListingFormState = {
     title: '',
     description: '',
@@ -258,14 +261,14 @@ const SellPage: React.FC = () => {
     );
     const topSellerAuction = useMemo(
         () => [...sellerAuctions].sort((a, b) => {
-            const aBid = a.currentHighestBid ?? a.startingPrice;
-            const bBid = b.currentHighestBid ?? b.startingPrice;
+            const aBid = a.currentHighestBid ?? 0;
+            const bBid = b.currentHighestBid ?? 0;
             return bBid - aBid;
         })[0],
         [sellerAuctions]
     );
     const totalTopBidValue = useMemo(
-        () => activeSellerAuctions.reduce((sum, auction) => sum + (auction.currentHighestBid ?? auction.startingPrice), 0),
+        () => activeSellerAuctions.reduce((sum, auction) => sum + (auction.currentHighestBid ?? 0), 0),
         [activeSellerAuctions]
     );
     const reserveMetCount = useMemo(
@@ -283,6 +286,10 @@ const SellPage: React.FC = () => {
     const selectedListing = useMemo(
         () => listings.find((listing) => String(listing.id) === auctionForm.listingId),
         [auctionForm.listingId, listings]
+    );
+    const listingTitleById = useCallback(
+        (listingId: string) => listings.find((listing) => String(listing.id) === listingId)?.title || 'Auction Listing',
+        [listings]
     );
 
     const handleImageUpload = async (files: FileList | null) => {
@@ -729,8 +736,8 @@ const SellPage: React.FC = () => {
                                         const meta = buildAuctionCardMeta(auction);
                                         return (
                                             <Link key={auction.id} className="analytics-row" to={`/active-auctions/${auction.id}`}>
-                                                <span>#{auction.listingId}</span>
-                                                <strong>{formatMoney(meta.currentHighest)}</strong>
+                                                <span>{listingTitleById(auction.listingId)}</span>
+                                                <strong>{bidLabel(meta)}</strong>
                                                 <span>{formatMoney(meta.minNextBid)}</span>
                                                 <span>{meta.statusLabel}</span>
                                                 <span>{meta.timeLeftLabel}</span>
@@ -747,9 +754,9 @@ const SellPage: React.FC = () => {
 
                             {topSellerAuction && (
                                 <div className="top-auction-callout">
-                                    <span className="metric-label">Best performing lot</span>
-                                    <strong>Lot #{topSellerAuction.listingId}</strong>
-                                    <span>{formatMoney(topSellerAuction.currentHighestBid ?? topSellerAuction.startingPrice)} top bid</span>
+                                    <span className="metric-label">Best performing auction</span>
+                                    <strong>{listingTitleById(topSellerAuction.listingId)}</strong>
+                                    <span>{bidLabel(buildAuctionCardMeta(topSellerAuction))} top bid</span>
                                 </div>
                             )}
                         </section>
@@ -1134,13 +1141,13 @@ const SellPage: React.FC = () => {
                                         <article key={auction.id} className="management-card">
                                             <div>
                                                 <span className={`status-badge status-${auction.status}`}>{meta.statusLabel}</span>
-                                                <h3>Lot #{auction.listingId}</h3>
-                                                <p className="text-muted">Auction ID: {auction.id}</p>
+                                                <h3>{listingTitleById(auction.listingId)}</h3>
+                                                <p className="text-muted">Auction room for this published listing.</p>
                                             </div>
                                             <div className="listing-price-grid">
                                                 <div>
                                                     <span>Top Bid</span>
-                                                    <strong>{formatMoney(meta.currentHighest)}</strong>
+                                                    <strong>{bidLabel(meta)}</strong>
                                                 </div>
                                                 <div>
                                                     <span>Reserve</span>
