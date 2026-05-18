@@ -32,7 +32,7 @@ const orderStatusLabel = (order: OrderRecord): string =>
     order.shippingStatus || order.status;
 
 const OrdersPage: React.FC = () => {
-    const { user } = useAuth();
+    const { user, activeRole } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const [orders, setOrders] = useState<OrderRecord[]>([]);
     const [listingsById, setListingsById] = useState<Record<string, ListingSummary>>({});
@@ -112,7 +112,7 @@ const OrdersPage: React.FC = () => {
             <section className="page-head studio-head">
                 <div>
                     <BackButton fallback="/active-auctions" />
-                    <p className="eyebrow">Buyer Workspace</p>
+                    <p className="eyebrow">{activeRole === 'SELLER' ? 'Seller Workspace' : 'Buyer Workspace'}</p>
                     <h1>Orders</h1>
                     <p>Track auctions you won after the seller settles them.</p>
                 </div>
@@ -168,8 +168,12 @@ const OrdersPage: React.FC = () => {
                                         <strong>{formatMoney(Number(order.finalPrice || 0))}</strong>
                                     </div>
                                     <div>
-                                        <span>Shipping</span>
-                                        <strong>{order.carrier ? `${order.carrier} ${order.trackingNumber ?? ''}` : 'Pending'}</strong>
+                                        <span>Courier</span>
+                                        <strong>{order.carrier || 'Not assigned'}</strong>
+                                    </div>
+                                    <div>
+                                        <span>Tracking No.</span>
+                                        <strong>{order.trackingNumber || 'Pending'}</strong>
                                     </div>
                                     <div>
                                         <span>Address</span>
@@ -181,6 +185,7 @@ const OrdersPage: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="management-actions">
+                                    <Link className="secondary-button" to={`/orders/${order.id}`}>View Details</Link>
                                     <Link className="secondary-button" to={`/active-auctions/${order.auctionId}`}>Auction</Link>
                                     <Link className="secondary-button" to={`/listings/${order.listingId}`}>Listing</Link>
                                     {isBuyer && order.status === 'SHIPPED' && (
