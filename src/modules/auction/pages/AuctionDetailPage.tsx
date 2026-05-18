@@ -21,6 +21,16 @@ type ListingSummary = {
     imageUrl?: string | null;
 };
 
+type BidHistoryItem = {
+    id: string;
+    bidderId?: string;
+    bidder_id?: string;
+    bidAmount?: number;
+    bid_amount_cents?: number;
+    bidTime?: string;
+    bid_time?: number;
+};
+
 const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) {
         return error.message;
@@ -46,6 +56,9 @@ const openAuctionCount = (auctions: Auction[]): number =>
 
 const hasReachedEndTime = (auction: Auction): boolean =>
     new Date(auction.endTime).getTime() <= Date.now();
+
+const hasSettledStatus = (auction: Auction): boolean =>
+    CLOSED_STATUSES.has(auction.status);
 
 const fallbackListingImage = (listingId: string): string =>
     `https://picsum.photos/seed/${encodeURIComponent(listingId)}/960/720`;
@@ -84,6 +97,7 @@ const AuctionDetailPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [bidInputs, setBidInputs] = useState<{ [key: string]: string }>({});
     const [listingsById, setListingsById] = useState<Record<string, ListingSummary>>({});
+    const [bidsByAuctionId, setBidsByAuctionId] = useState<Record<string, BidHistoryItem[]>>({});
     const [loading, setLoading] = useState<boolean>(true);
 
     const fetchAuctions = useCallback(async () => {
@@ -130,6 +144,22 @@ const AuctionDetailPage: React.FC = () => {
                 })
             );
             setListingsById(Object.fromEntries(listingEntries.filter((entry): entry is [string, ListingSummary] => Boolean(entry))));
+
+            const bidEntries = await Promise.all(
+                data.map(async (auction): Promise<[string, BidHistoryItem[]]> => {
+                    try {
+                        const bidResponse = await fetch(apiUrl(`/api/v1/auctions/${encodeURIComponent(auction.id)}/bids`));
+                        if (!bidResponse.ok) {
+                            return [auction.id, []];
+                        }
+                        const bidPayload = await bidResponse.json() as BidHistoryItem[] | { items?: BidHistoryItem[] };
+                        return [auction.id, Array.isArray(bidPayload) ? bidPayload : bidPayload.items ?? []];
+                    } catch {
+                        return [auction.id, []];
+                    }
+                })
+            );
+            setBidsByAuctionId(Object.fromEntries(bidEntries));
         } catch (err: unknown) {
             console.error('Fetch execution failed:', err);
             setError(`Failed to load auctions: ${getErrorMessage(err)}`);
@@ -225,8 +255,9 @@ const AuctionDetailPage: React.FC = () => {
             };
         });
         const liveHistoryRows = auctions.slice(0, 5);
+        const bidHistoryRows = bidsByAuctionId[selectedAuction.id] ?? [];
         const isSeller = user?.id === selectedAuction.sellerId;
-        const canSettleAuction = isSeller && hasReachedEndTime(selectedAuction) && !selectedMeta.isClosed;
+        const canSettleAuction = isSeller && hasReachedEndTime(selectedAuction) && !hasSettledStatus(selectedAuction);
 
         content = (
             <div className="auction-command-grid">
@@ -354,26 +385,63 @@ const AuctionDetailPage: React.FC = () => {
                     <section className="auction-history-panel">
                         <div className="section-title-row">
                             <div>
-                                <p className="eyebrow">Live Desk</p>
-                                <h2>Auction Watchlist</h2>
+                                <p className="eyebrow">Auction Activity</p>
+                                <h2>Bid History</h2>
                             </div>
                             <span className="live-dot" aria-hidden="true" />
                         </div>
                         <div className="auction-history-list">
-                            {liveHistoryRows.map((auction) => {
-                                const meta = buildAuctionCardMeta(auction);
-                                return (
-                                    <div key={auction.id} className="auction-history-row">
-                                        <div>
-                                            <strong>{listingTitle(auction)}</strong>
-                                            <span>{meta.timeLeftLabel}</span>
+                            {bidHistoryRows.length > 0 ? (
+                                bidHistoryRows.map((bid) => {
+                                    const amount = bid.bidAmount ?? (typeof bid.bid_amount_cents === 'number' ? bid.bid_amount_cents / 100 : 0);
+                                    const bidder = bid.bidderId ?? bid.bidder_id ?? 'Unknown bidder';
+                                    const timestamp = bid.bidTime ?? (bid.bid_time ? new Date(bid.bid_time * 1000).toISOString() : '');
+                                    return (
+                                        <div key={bid.id} className="auction-history-row">
+                                            <div>
+                                                <strong>{bidder === user?.id ? 'You' : 'Bidder'}</strong>
+                                                <span>{timestamp ? new Date(timestamp).toLocaleString() : 'Bid recorded'}</span>
+                                            </div>
+                                            <strong>{formatMoney(amount)}</strong>
                                         </div>
-                                        <strong>{bidLabel(meta)}</strong>
+                                    );
+                                })
+                            ) : (
+                                <div className="auction-history-row">
+                                    <div>
+                                        <strong>No bids yet</strong>
+                                        <span>This room will show bids as they arrive.</span>
                                     </div>
-                                );
-                            })}
+                                    <strong>{formatMoney(selectedMeta.minNextBid)}</strong>
+                                </div>
+                            )}
                         </div>
                     </section>
+
+                    {!id && liveHistoryRows.length > 0 && (
+                        <section className="auction-history-panel">
+                            <div className="section-title-row">
+                                <div>
+                                    <p className="eyebrow">Live Desk</p>
+                                    <h2>Auction Watchlist</h2>
+                                </div>
+                            </div>
+                            <div className="auction-history-list">
+                                {liveHistoryRows.map((auction) => {
+                                    const meta = buildAuctionCardMeta(auction);
+                                    return (
+                                        <div key={auction.id} className="auction-history-row">
+                                            <div>
+                                                <strong>{listingTitle(auction)}</strong>
+                                                <span>{meta.timeLeftLabel}</span>
+                                            </div>
+                                            <strong>{bidLabel(meta)}</strong>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </section>
+                    )}
                 </div>
             </div>
         );
