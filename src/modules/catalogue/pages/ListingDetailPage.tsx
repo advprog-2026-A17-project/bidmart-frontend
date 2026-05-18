@@ -25,6 +25,9 @@ type ListingDetail = {
 const fallbackImage = (id: string | number): string =>
     `https://picsum.photos/seed/${encodeURIComponent(String(id))}/960/720`;
 
+const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
+    meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
+
 const ListingDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const [listing, setListing] = useState<ListingDetail | null>(null);
@@ -173,7 +176,7 @@ const ListingDetailPage: React.FC = () => {
                         <div className="linked-auction-panel">
                             <div>
                                 <span className="metric-label">Live Auction</span>
-                                <strong>{formatMoney(auctionMeta.currentHighest)}</strong>
+                                <strong>{bidLabel(auctionMeta)}</strong>
                                 <small>{auctionMeta.timeLeftLabel} · Minimum next bid {formatMoney(auctionMeta.minNextBid)}</small>
                             </div>
                             <Link className="primary-button" to={`/active-auctions/${auction.id}`}>
