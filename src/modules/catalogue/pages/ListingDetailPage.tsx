@@ -2,25 +2,44 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { apiUrl } from '../../../config/api';
-import { formatMoney } from '../../../utils/money';
+import { readApiError } from '../../../config/apiClient';
+import { useAuth } from '../../../context/useAuth';
+import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { formatMoney, normalizeMoneyInput, toMoneyAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
-import { buildAuctionCardMeta, type Auction } from '../../auction/utils/auction-card-meta';
-import { parseAuctionsResponse } from '../../auction/utils/parse-auctions-response';
+import { buildAuctionCardMeta } from '../../auction/utils/auction-card-meta';
+import { biddingListingPath } from '../../auction/utils/bidding-paths';
+import { activeListingStatuses, catalogueListingToAuction } from '../utils/listing-to-auction';
 
 type ListingDetail = {
     id: string | number;
     title: string;
     description?: string | null;
     startingPrice?: number | null;
+    reservePrice?: number | null;
     currentPrice?: number | null;
+    minimumIncrement?: number | null;
     imageUrl?: string | null;
     category?: string | null;
     condition?: string | null;
     sellerId?: string | null;
     status?: string | null;
+    startTime?: string | null;
     endTime?: string | null;
     hasBids?: boolean;
 };
+
+type BidHistoryItem = {
+    id: string;
+    bidderId?: string;
+    bidder_id?: string;
+    bidAmount?: number;
+    bid_amount_cents?: number;
+    bidTime?: string;
+    bid_time?: number;
+};
+
+const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 
 const fallbackImage = (id: string | number): string =>
     `https://picsum.photos/seed/${encodeURIComponent(String(id))}/960/720`;
@@ -28,15 +47,38 @@ const fallbackImage = (id: string | number): string =>
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
     meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
 
+const hasReachedEndTime = (endTime?: string | null): boolean =>
+    endTime ? new Date(endTime).getTime() <= Date.now() : false;
+
+const ListingDetailSkeleton = () => (
+    <motion.div className="auction-command-grid skeleton-grid" aria-busy="true" aria-label="Loading listing">
+        <section className="auction-asset-panel skeleton-card">
+            <motion.div className="listing-detail-media skeleton-block" />
+            <span className="skeleton-line skeleton-line-large" />
+            <span className="skeleton-line" />
+        </section>
+        <aside className="bid-console skeleton-card">
+            <span className="skeleton-line skeleton-line-medium" />
+            <span className="skeleton-line skeleton-line-large" />
+            <span className="skeleton-button" />
+        </aside>
+    </motion.div>
+);
+
 const ListingDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
+    const { user } = useAuth();
+    const authenticatedFetch = useAuthenticatedFetch();
     const [listing, setListing] = useState<ListingDetail | null>(null);
-    const [auction, setAuction] = useState<Auction | null>(null);
+    const [bids, setBids] = useState<BidHistoryItem[]>([]);
+    const [bidInput, setBidInput] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    const listingId = id ? String(id) : '';
+
     const fetchListing = useCallback(async () => {
-        if (!id) {
+        if (!listingId) {
             setError('Missing listing id.');
             setLoading(false);
             return;
@@ -46,11 +88,7 @@ const ListingDetailPage: React.FC = () => {
             setLoading(true);
             setError(null);
 
-            const [listingResponse, auctionsResponse] = await Promise.all([
-                fetch(apiUrl(`/api/v1/catalogue/listings/${encodeURIComponent(id)}`)),
-                fetch(apiUrl('/api/v1/auctions')),
-            ]);
-
+            const listingResponse = await fetch(apiUrl(`/api/v1/catalogue/listings/${encodeURIComponent(listingId)}`));
             if (!listingResponse.ok) {
                 throw new Error(`Listing lookup failed with status ${listingResponse.status}`);
             }
@@ -60,32 +98,43 @@ const ListingDetailPage: React.FC = () => {
                 throw new Error('Listing was not found.');
             }
 
-            let matchingAuction: Auction | null = null;
-            if (auctionsResponse.ok) {
-                const auctionsPayload: unknown = await auctionsResponse.json();
-                matchingAuction = parseAuctionsResponse(auctionsPayload)
-                    .find((item) => String(item.listingId) === String(listingPayload.id)) ?? null;
-            }
-
             setListing(listingPayload);
-            setAuction(matchingAuction);
+
+            const meta = buildAuctionCardMeta(catalogueListingToAuction(listingPayload));
+            setBidInput(normalizeMoneyInput(meta.minNextBid));
+
+            if (activeListingStatuses.has((listingPayload.status ?? '').toUpperCase())) {
+                try {
+                    const bidResponse = await fetch(apiUrl(biddingListingPath(listingId, '/bids')));
+                    if (bidResponse.ok) {
+                        const bidPayload = await bidResponse.json() as BidHistoryItem[] | { items?: BidHistoryItem[] };
+                        setBids(Array.isArray(bidPayload) ? bidPayload : bidPayload.items ?? []);
+                    } else {
+                        setBids([]);
+                    }
+                } catch {
+                    setBids([]);
+                }
+            } else {
+                setBids([]);
+            }
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Unable to load listing.');
             setListing(null);
-            setAuction(null);
+            setBids([]);
         } finally {
             setLoading(false);
         }
-    }, [id]);
+    }, [listingId]);
 
     useEffect(() => {
-        fetchListing();
+        void fetchListing();
     }, [fetchListing]);
 
-    const realtimeDestinations = useMemo(() => {
-        if (!id) return [];
-        return auction ? [`/topic/listings/${id}`, `/topic/auctions/${auction.id}`] : [`/topic/listings/${id}`];
-    }, [auction, id]);
+    const realtimeDestinations = useMemo(
+        () => (listingId ? [`/topic/listings/${listingId}`, `/topic/auctions/${listingId}`] : []),
+        [listingId]
+    );
     const handleRealtimeEvent = useCallback(() => {
         void fetchListing();
     }, [fetchListing]);
@@ -96,27 +145,68 @@ const ListingDetailPage: React.FC = () => {
         return listing.imageUrl?.trim() || fallbackImage(listing.id);
     }, [listing]);
 
-    const auctionMeta = auction ? buildAuctionCardMeta(auction) : null;
+    const listingMeta = listing ? buildAuctionCardMeta(catalogueListingToAuction(listing)) : null;
+    const isLive = listing ? activeListingStatuses.has((listing.status ?? '').toUpperCase()) : false;
+    const isSeller = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId);
+    const canSettle = Boolean(
+        isSeller &&
+        listing &&
+        listingMeta &&
+        hasReachedEndTime(listing.endTime) &&
+        !CLOSED_STATUSES.has((listing.status ?? '').toUpperCase())
+    );
+
+    const placeBid = async () => {
+        const amount = toMoneyAmount(bidInput);
+        if (!amount || !listingId) return;
+        if (!user) {
+            setError('Please sign in before placing a bid.');
+            return;
+        }
+
+        try {
+            const response = await authenticatedFetch(apiUrl(biddingListingPath(listingId, '/bids')), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bidderId: user.id, bidAmount: amount }),
+            });
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Bid placement failed'));
+            }
+            setError(null);
+            await fetchListing();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Bid placement failed.');
+        }
+    };
+
+    const settleListing = async () => {
+        if (!listingId) return;
+        try {
+            const response = await authenticatedFetch(apiUrl(biddingListingPath(listingId, '/close')), {
+                method: 'POST',
+            });
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Settlement failed'));
+            }
+            setError(null);
+            await fetchListing();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Settlement failed.');
+        }
+    };
 
     if (loading) {
         return (
             <div className="page-wrap">
-                <div className="listing-detail-layout skeleton-grid" aria-busy="true" aria-label="Loading listing">
-                    <div className="listing-detail-media skeleton-block" />
-                    <div className="panel section-stack skeleton-card">
-                        <span className="skeleton-line skeleton-line-short" />
-                        <span className="skeleton-line skeleton-line-large" />
-                        <span className="skeleton-line" />
-                        <span className="skeleton-button" />
-                    </div>
-                </div>
+                <ListingDetailSkeleton />
             </div>
         );
     }
 
-    if (error || !listing) {
+    if (!listing || !listingMeta) {
         return (
-            <div className="page-wrap">
+            <motion.div className="page-wrap">
                 <section className="panel center-content">
                     <span className="material-symbols-outlined section-title-icon" aria-hidden="true">search_off</span>
                     <h1>Listing not found</h1>
@@ -125,81 +215,179 @@ const ListingDetailPage: React.FC = () => {
                         Back to Marketplace
                     </Link>
                 </section>
-            </div>
+            </motion.div>
         );
     }
+
+    const quickBidOptions = [0, 1, 4].map((multiplier) => {
+        const increment = (listing.minimumIncrement ?? 1) * multiplier;
+        return {
+            increment,
+            amount: listingMeta.minNextBid + increment,
+        };
+    });
 
     return (
         <div className="page-wrap">
             <BackButton fallback="/" />
-            <section className="listing-detail-layout">
-                <div className="listing-detail-media">
-                    <img
-                        src={imageSrc}
-                        alt={listing.title}
-                        onError={(event) => {
-                            event.currentTarget.onerror = null;
-                            event.currentTarget.src = fallbackImage(listing.id);
-                        }}
-                    />
-                    <div className="listing-detail-badges">
-                        {listing.category && <span className="category-badge">{listing.category}</span>}
-                        {listing.status && <span className={`status-badge status-${listing.status}`}>{listing.status}</span>}
-                    </div>
-                </div>
+            {error && <motion.div className="toast-error">{error}</motion.div>}
 
-                <aside className="listing-detail-summary panel">
-                    <p className="eyebrow">Marketplace Listing</p>
-                    <h1>{listing.title}</h1>
-                    <p className="text-muted">{listing.description || 'No description provided by the seller.'}</p>
-
-                    <div className="listing-price-grid">
-                        <div>
-                            <span>Starting Price</span>
-                            <strong>{formatMoney(listing.startingPrice)}</strong>
-                        </div>
-                        <div>
-                            <span>Current Price</span>
-                            <strong>{formatMoney(listing.currentPrice ?? listing.startingPrice)}</strong>
-                        </div>
-                        <div>
-                            <span>Seller</span>
-                            <strong>{listing.sellerId ?? 'Unknown'}</strong>
-                        </div>
-                        <div>
-                            <span>Condition</span>
-                            <strong>{listing.condition ?? 'Not specified'}</strong>
+            <section className="auction-command-grid">
+                <section className="auction-asset-panel">
+                    <div className="listing-detail-media">
+                        <img
+                            src={imageSrc}
+                            alt={listing.title}
+                            onError={(event) => {
+                                event.currentTarget.onerror = null;
+                                event.currentTarget.src = fallbackImage(listing.id);
+                            }}
+                        />
+                        <div className="listing-detail-badges">
+                            {listing.category && <span className="category-badge">{listing.category}</span>}
+                            {listing.status && <span className={`status-badge status-${listing.status}`}>{listing.status}</span>}
                         </div>
                     </div>
-
-                    {auction && auctionMeta ? (
-                        <div className="linked-auction-panel">
+                    <div className="auction-detail-copy">
+                        <p className="eyebrow">{listing.category || 'Marketplace Listing'}</p>
+                        <h1>{listing.title}</h1>
+                        <p className="text-muted">{listing.description || 'No description provided by the seller.'}</p>
+                        <div className="auction-spec-grid">
                             <div>
-                                <span className="metric-label">Live Auction</span>
-                                <strong>{bidLabel(auctionMeta)}</strong>
-                                <small>{auctionMeta.timeLeftLabel} · Minimum next bid {formatMoney(auctionMeta.minNextBid)}</small>
+                                <span>Starting Price</span>
+                                <strong>{formatMoney(listing.startingPrice)}</strong>
                             </div>
-                            <Link className="primary-button" to={`/active-auctions/${auction.id}`}>
-                                <span className="material-symbols-outlined" aria-hidden="true">gavel</span>
-                                Open Auction Room
-                            </Link>
-                        </div>
+                            <div>
+                                <span>Reserve</span>
+                                <strong>{formatMoney(listing.reservePrice ?? listing.startingPrice)}</strong>
+                            </div>
+                            <div>
+                                <span>Increment</span>
+                                <strong>{formatMoney(listing.minimumIncrement ?? 1)}</strong>
+                            </div>
+                            <div>
+                                <span>Ends</span>
+                                <strong>{listingMeta.timeLeftLabel}</strong>
+                            </motion.div>
+                        </motion.div>
+                    </motion.div>
+                </section>
+
+                <div className="auction-side-stack">
+                    {isLive ? (
+                        <aside className="bid-console">
+                            <div className={`bid-console-status ${listingMeta.isClosed ? 'bid-console-status-closed' : ''}`}>
+                                <span className="material-symbols-outlined" aria-hidden="true">
+                                    {listingMeta.isClosed ? 'lock' : 'gavel'}
+                                </span>
+                                {listingMeta.isClosed ? 'Listing closed' : 'Open for bidding'}
+                            </div>
+                            <div className="bid-console-body">
+                                <div className="current-bid-block">
+                                    <span>Current bid</span>
+                                    <strong>{bidLabel(listingMeta)}</strong>
+                                    <small>Minimum next bid: {formatMoney(listingMeta.minNextBid)}</small>
+                                </div>
+                                <label className="field">
+                                    <span>Your amount</span>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        value={bidInput}
+                                        step={listing.minimumIncrement ?? 1}
+                                        min={listingMeta.minNextBid}
+                                        disabled={listingMeta.isClosed}
+                                        onChange={(event) => setBidInput(event.target.value)}
+                                        onBlur={() => setBidInput(normalizeMoneyInput(bidInput))}
+                                    />
+                                </label>
+                                <button
+                                    type="button"
+                                    className="primary-button"
+                                    onClick={placeBid}
+                                    disabled={listingMeta.isClosed || !user}
+                                >
+                                    {listingMeta.isClosed ? 'Closed' : user ? 'Place Bid' : 'Sign in to Bid'}
+                                </button>
+                                <div className="quick-bid-grid">
+                                    {quickBidOptions.map((option) => (
+                                        <button
+                                            key={option.amount}
+                                            type="button"
+                                            className="quick-bid-button"
+                                            disabled={listingMeta.isClosed}
+                                            onClick={() => setBidInput(normalizeMoneyInput(option.amount))}
+                                        >
+                                            <span>{option.increment === 0 ? 'Minimum' : `+ ${formatMoney(option.increment)}`}</span>
+                                            <strong>{formatMoney(option.amount)}</strong>
+                                        </button>
+                                    ))}
+                                </div>
+                                {isSeller && (
+                                    <div className="seller-settlement-box">
+                                        <p className="text-muted">Settlement is available after the listing end time.</p>
+                                        <button
+                                            type="button"
+                                            className="secondary-button"
+                                            onClick={settleListing}
+                                            disabled={!canSettle}
+                                        >
+                                            Settle Listing
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </aside>
                     ) : (
-                        <div className="linked-auction-panel inactive">
-                            <div>
-                                <span className="metric-label">Auction Status</span>
-                                <strong>No auction room yet</strong>
-                                <small>The seller has a listing, but no active auction has been created for it.</small>
-                            </div>
-                            <Link className="secondary-button" to="/active-auctions">
-                                View Active Auctions
-                            </Link>
-                        </div>
+                        <aside className="panel section-stack">
+                            <p className="eyebrow">Listing status</p>
+                            <h2>{listing.status === 'DRAFT' ? 'Not published yet' : 'Not open for bidding'}</h2>
+                            <p className="text-muted">
+                                {listing.status === 'DRAFT'
+                                    ? 'This listing is still a draft.'
+                                    : 'Bidding is only available while the listing is live.'}
+                            </p>
+                        </aside>
                     )}
-                    <span className={isConnected ? 'connection-live' : 'connection-idle'}>
-                        {isConnected ? 'Live updates' : 'Realtime offline'}
-                    </span>
-                </aside>
+
+                    <section className="auction-history-panel">
+                        <div className="section-title-row">
+                            <div>
+                                <p className="eyebrow">Bid history</p>
+                                <h2>Recent bids</h2>
+                            </div>
+                            <span className={isConnected ? 'connection-live' : 'connection-idle'}>
+                                {isConnected ? 'Live' : 'Offline'}
+                            </span>
+                        </div>
+                        <div className="auction-history-list">
+                            {bids.length > 0 ? (
+                                bids.map((bid) => {
+                                    const amount = bid.bidAmount ?? (typeof bid.bid_amount_cents === 'number' ? bid.bid_amount_cents / 100 : 0);
+                                    const bidder = bid.bidderId ?? bid.bidder_id ?? 'Bidder';
+                                    const timestamp = bid.bidTime ?? (bid.bid_time ? new Date(bid.bid_time * 1000).toISOString() : '');
+                                    return (
+                                        <div key={bid.id} className="auction-history-row">
+                                            <motion.div>
+                                                <strong>{bidder === user?.id ? 'You' : 'Bidder'}</strong>
+                                                <span>{timestamp ? new Date(timestamp).toLocaleString() : 'Bid recorded'}</span>
+                                            </motion.div>
+                                            <strong>{formatMoney(amount)}</strong>
+                                        </motion.div>
+                                    );
+                                })
+                            ) : (
+                                <div className="auction-history-row">
+                                    <div>
+                                        <strong>No bids yet</strong>
+                                        <span>Be the first to bid when the listing is live.</span>
+                                    </div>
+                                    <strong>{formatMoney(listingMeta.minNextBid)}</strong>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+                </div>
             </section>
         </div>
     );
