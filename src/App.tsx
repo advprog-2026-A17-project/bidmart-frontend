@@ -8,6 +8,7 @@ import SellPage from './modules/catalogue/pages/SellPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
 import PaymentDetailPage from './modules/wallet/pages/PaymentDetailPage';
 import OrdersPage from './modules/orders/pages/OrdersPage';
+import OrderDetailPage from './modules/orders/pages/OrderDetailPage';
 import NotificationCenter from './modules/notifications/components/NotificationCenter';
 import AuthPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
@@ -126,6 +127,9 @@ const Navbar = () => {
                         </NavLink>
                         <NavLink to="/active-auctions" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Active Auctions
+                        </NavLink>
+                        <NavLink to="/orders" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Orders
                         </NavLink>
                         <NavLink to="/wallet" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Wallet
@@ -246,6 +250,7 @@ const AppLayout = () => {
                         <Route path="/wallet" element={<WalletPage />} />
                         <Route path="/wallet/payments/:paymentId" element={<PaymentDetailPage />} />
                         <Route path="/orders" element={<OrdersPage />} />
+                        <Route path="/orders/:orderId" element={<OrderDetailPage />} />
                     </Routes>
                 </ProfileGuard>
             </main>
