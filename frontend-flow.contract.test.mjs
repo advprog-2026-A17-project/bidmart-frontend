@@ -52,12 +52,12 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(globalErrorBoundary, /role="alert"/);
   assert.match(globalErrorBoundary, /toast-error/);
   assert.match(sellPage, /\/api\/v1\/catalogue\/listings/);
-  assert.match(sellPage, /\/api\/v1\/auctions/);
+  assert.doesNotMatch(sellPage, /\/api\/v1\/auctions/);
   assert.doesNotMatch(sellPage, /categoryId/);
   assert.match(sellPage, /readImageFile/);
   assert.match(sellPage, /type="file"/);
-  assert.match(sellPage, /toggleListingActive/);
-  assert.match(sellPage, /\/deactivate/);
+  assert.match(sellPage, /publishDraftListing/);
+  assert.doesNotMatch(sellPage, /\/deactivate/);
   assert.match(listingDetail, /\/close/);
   assert.match(walletPage, /\/detail/);
   assert.match(listingDetail, /useAuctionRealtime/);
@@ -74,12 +74,12 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
   const app = read('./src/App.tsx');
 
   assert.match(sellPage, /publishCreatedListing/);
-  assert.match(sellPage, /createAuctionListingPayload/);
-  assert.match(sellPage, /toggleListingActive/);
+  assert.match(sellPage, /createListingPayload/);
+  assert.match(sellPage, /publishDraftListing/);
   assert.match(sellPage, /\/publish/);
   assert.doesNotMatch(sellPage, /auction-created/);
-  assert.match(sellPage, /Continue to Auction Setup/);
-  assert.match(sellPage, /auctionType:\s*'ENGLISH'/);
+  assert.doesNotMatch(sellPage, /Continue to Auction Setup/);
+  assert.doesNotMatch(sellPage, /auctionType:\s*'ENGLISH'/);
 
   assert.match(walletPage, /toAmountCents/);
   assert.match(walletPage, /Wallet Account/);

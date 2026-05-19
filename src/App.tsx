@@ -10,6 +10,7 @@ import OrderDetailPage from './modules/orders/pages/OrderDetailPage';
 import NotificationCenter from './modules/notifications/components/NotificationCenter';
 import AuthPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
+import AdminAuthPage from './modules/auth/pages/AdminAuthPage';
 import ProfileGuard from './modules/auth/components/ProfileGuard';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
@@ -28,6 +29,7 @@ const Navbar = () => {
     const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
     const hasBuyer = user?.roles?.some((role) => role.name === 'BUYER') ?? false;
     const hasSeller = user?.roles?.some((role) => role.name === 'SELLER') ?? false;
+    const hasAdmin = user?.roles?.some((role) => role.name === 'ADMIN') ?? false;
     const isSeller = activeRole === 'SELLER';
     const navigate = useNavigate();
     const roleLabel = activeRole ?? user?.roles?.[0]?.name ?? 'Guest';
@@ -124,6 +126,11 @@ const Navbar = () => {
                         <NavLink to="/profile" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Profile
                         </NavLink>
+                        {hasAdmin && (
+                            <NavLink to="/admin/auth" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                                Admin Auth
+                            </NavLink>
+                        )}
                     </>
                 ) : (
                     <>
@@ -139,6 +146,11 @@ const Navbar = () => {
                         <NavLink to="/profile" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Profile
                         </NavLink>
+                        {hasAdmin && (
+                            <NavLink to="/admin/auth" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                                Admin Auth
+                            </NavLink>
+                        )}
                     </>
                 )}
             </div>
@@ -261,6 +273,7 @@ const AppLayout = () => {
                         <Route path="/command/wallet" element={<Navigate to="/wallet" replace />} />
                         <Route path="/command/profile" element={<Navigate to="/profile" replace />} />
                         <Route path="/profile" element={<ProfilePage />} />
+                        <Route path="/admin/auth" element={<AdminAuthPage />} />
                         <Route path="/sell" element={<Navigate to={isSeller ? '/seller-studio' : '/'} replace />} />
                         <Route path="/wallet" element={<WalletPage />} />
                         <Route path="/wallet/payments/:paymentId" element={<PaymentDetailPage />} />
