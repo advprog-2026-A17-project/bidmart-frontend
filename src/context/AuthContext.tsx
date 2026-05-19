@@ -195,6 +195,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }) => {
         setUser((previous) => {
             if (!previous) return previous;
+            const nextDisplayName = profile.displayName ?? previous.displayName ?? null;
+            const nextAvatarUrl = profile.avatarUrl ?? previous.avatarUrl ?? null;
+            const nextShippingAddress = profile.shippingAddress ?? previous.shippingAddress ?? null;
+            const unchanged =
+                (previous.displayName ?? null) === nextDisplayName
+                && (previous.avatarUrl ?? null) === nextAvatarUrl
+                && (previous.shippingAddress ?? null) === nextShippingAddress;
+            if (unchanged) {
+                return previous;
+            }
             return {
                 ...previous,
                 ...profile,
