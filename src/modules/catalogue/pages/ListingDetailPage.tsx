@@ -51,9 +51,9 @@ const hasReachedEndTime = (endTime?: string | null): boolean =>
     endTime ? new Date(endTime).getTime() <= Date.now() : false;
 
 const ListingDetailSkeleton = () => (
-    <motion.div className="auction-command-grid skeleton-grid" aria-busy="true" aria-label="Loading listing">
+    <div className="auction-command-grid skeleton-grid" aria-busy="true" aria-label="Loading listing">
         <section className="auction-asset-panel skeleton-card">
-            <motion.div className="listing-detail-media skeleton-block" />
+            <div className="listing-detail-media skeleton-block" />
             <span className="skeleton-line skeleton-line-large" />
             <span className="skeleton-line" />
         </section>
@@ -62,7 +62,7 @@ const ListingDetailSkeleton = () => (
             <span className="skeleton-line skeleton-line-large" />
             <span className="skeleton-button" />
         </aside>
-    </motion.div>
+    </div>
 );
 
 const ListingDetailPage: React.FC = () => {
@@ -206,7 +206,7 @@ const ListingDetailPage: React.FC = () => {
 
     if (!listing || !listingMeta) {
         return (
-            <motion.div className="page-wrap">
+            <div className="page-wrap">
                 <section className="panel center-content">
                     <span className="material-symbols-outlined section-title-icon" aria-hidden="true">search_off</span>
                     <h1>Listing not found</h1>
@@ -215,7 +215,7 @@ const ListingDetailPage: React.FC = () => {
                         Back to Marketplace
                     </Link>
                 </section>
-            </motion.div>
+            </div>
         );
     }
 
@@ -230,7 +230,7 @@ const ListingDetailPage: React.FC = () => {
     return (
         <div className="page-wrap">
             <BackButton fallback="/" />
-            {error && <motion.div className="toast-error">{error}</motion.div>}
+            {error && <div className="toast-error">{error}</div>}
 
             <section className="auction-command-grid">
                 <section className="auction-asset-panel">
@@ -268,9 +268,9 @@ const ListingDetailPage: React.FC = () => {
                             <div>
                                 <span>Ends</span>
                                 <strong>{listingMeta.timeLeftLabel}</strong>
-                            </motion.div>
-                        </motion.div>
-                    </motion.div>
+                            </div>
+                        </div>
+                    </div>
                 </section>
 
                 <div className="auction-side-stack">
@@ -368,12 +368,12 @@ const ListingDetailPage: React.FC = () => {
                                     const timestamp = bid.bidTime ?? (bid.bid_time ? new Date(bid.bid_time * 1000).toISOString() : '');
                                     return (
                                         <div key={bid.id} className="auction-history-row">
-                                            <motion.div>
+                                            <div>
                                                 <strong>{bidder === user?.id ? 'You' : 'Bidder'}</strong>
                                                 <span>{timestamp ? new Date(timestamp).toLocaleString() : 'Bid recorded'}</span>
-                                            </motion.div>
+                                            </div>
                                             <strong>{formatMoney(amount)}</strong>
-                                        </motion.div>
+                                        </div>
                                     );
                                 })
                             ) : (
