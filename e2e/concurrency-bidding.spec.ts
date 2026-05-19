@@ -94,7 +94,7 @@ test('concurrency bidding test - multiple buyers placing bids simultaneously', a
     throw new Error(`Listing publish failed: ${publishResponse.status()} ${await publishResponse.text()}`);
   }
   const now = Math.floor(Date.now() / 1000);
-  const auctionResponse = await postWithRetry(request, `${getGatewayBaseUrl()}/api/v1/auctions`, {
+  const auctionResponse = await postWithRetry(request, `${getGatewayBaseUrl()}/api/v1/listings`, {
     headers: { Authorization: `Bearer ${seller.token}` },
     data: {
       listingId,
@@ -108,7 +108,7 @@ test('concurrency bidding test - multiple buyers placing bids simultaneously', a
     },
   });
   if (!auctionResponse.ok()) {
-    throw new Error(`Auction create failed: ${auctionResponse.status()} ${await auctionResponse.text()}`);
+    throw new Error(`Bidding session create failed: ${auctionResponse.status()} ${await auctionResponse.text()}`);
   }
 
   // 4. Setup concurrent buyer pages
