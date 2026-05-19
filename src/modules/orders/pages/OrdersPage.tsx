@@ -111,14 +111,14 @@ const OrdersPage: React.FC = () => {
         <div className="page-wrap">
             <section className="page-head studio-head">
                 <div>
-                    <BackButton fallback="/active-auctions" />
+                    <BackButton fallback={activeRole === 'SELLER' ? '/seller-studio' : '/'} />
                     <p className="eyebrow">{activeRole === 'SELLER' ? 'Seller Workspace' : 'Buyer Workspace'}</p>
                     <h1>Orders</h1>
                     <p>Track auctions you won after the seller settles them.</p>
                 </div>
-                <Link className="secondary-button" to="/active-auctions">
+                <Link className="secondary-button" to="/">
                     <span className="material-symbols-outlined" aria-hidden="true">gavel</span>
-                    Active Auctions
+                    Marketplace
                 </Link>
             </section>
 
@@ -186,8 +186,7 @@ const OrdersPage: React.FC = () => {
                                 </div>
                                 <div className="management-actions">
                                     <Link className="secondary-button" to={`/orders/${order.id}`}>View Details</Link>
-                                    <Link className="secondary-button" to={`/active-auctions/${order.auctionId}`}>Auction</Link>
-                                    <Link className="secondary-button" to={`/listings/${order.listingId}`}>Listing</Link>
+                                    <Link className="secondary-button" to={`/listings/${order.listingId ?? order.auctionId}`}>View Listing</Link>
                                     {isBuyer && order.status === 'SHIPPED' && (
                                         <button type="button" className="primary-button" onClick={() => confirmReceipt(order.id)}>
                                             Confirm Receipt
@@ -203,8 +202,8 @@ const OrdersPage: React.FC = () => {
                     <span className="material-symbols-outlined section-title-icon" aria-hidden="true">receipt_long</span>
                     <h2>No orders yet</h2>
                     <p className="text-muted">Won auctions appear here after the seller settles the auction.</p>
-                    <Link className="primary-button" to="/active-auctions">
-                        Browse Auctions
+                    <Link className="primary-button" to="/">
+                        Browse Marketplace
                     </Link>
                 </section>
             )}
