@@ -95,11 +95,21 @@ const CataloguePage: React.FC = () => {
     };
 
     const renderTimeLeft = (endTime: string, status: string) => {
-        const diff = new Date(endTime).getTime() - nowMs;
-        const normalizedStatus = status.toUpperCase();
-        if (diff <= 0 && (normalizedStatus === 'ACTIVE' || normalizedStatus === 'EXTENDED' || normalizedStatus === 'AVAILABLE')) {
-            return 'Live';
-        }
+        const normalizedStatus = (status ?? '').toUpperCase();
+        const ACTIVE_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE']);
+        const CLOSED_STATUSES_LOCAL = new Set(['CLOSED', 'ENDED', 'WON', 'UNSOLD']);
+
+        // If backend says it's definitively closed, always show 'Ended'
+        if (CLOSED_STATUSES_LOCAL.has(normalizedStatus)) return 'Ended';
+
+        if (!endTime) return 'Live';
+        const endMs = new Date(endTime).getTime();
+        if (!Number.isFinite(endMs)) return 'Live';
+        const diff = endMs - nowMs;
+
+        // If time has passed but status is still active → awaiting settlement, show 'Live'
+        if (diff <= 0 && ACTIVE_STATUSES.has(normalizedStatus)) return 'Live';
+
         if (diff <= 0) return 'Ended';
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));

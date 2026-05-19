@@ -8,7 +8,7 @@ import { buildAuctionCardMeta, type Auction } from '../utils/auction-card-meta';
 import { parseAuctionsResponse } from '../utils/parse-auctions-response';
 import { useNowTick } from '../../../hooks/useNowTick';
 
-const CLOSED_STATUSES = new Set(['CLOSED', 'ENDED', 'WON', 'UNSOLD', 'CANCELLED']);
+const CLOSED_STATUSES = new Set(['CLOSED', 'ENDED', 'WON', 'UNSOLD']);
 
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
     meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
