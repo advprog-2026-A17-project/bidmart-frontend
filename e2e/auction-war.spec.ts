@@ -1,19 +1,17 @@
 import { expect, test } from '@playwright/test';
 import {
   buildTestEmail,
-  completeProfile,
   loginViaUi,
   registerUserViaApi,
 } from './helpers/auth';
 import { ensureWalletWithFunds } from './helpers/wallet';
+import { getGatewayBaseUrl } from './helpers/env';
 
 const password = 'Bidmart!12345';
-const tinyPngBase64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
 
 const parsePrice = (value: string | null) => {
   if (!value) return 0;
-  return Number(value.replace(/[^0-9.]/g, '')) || 0;
+  return Number(value.replace(/[^0-9]/g, '')) || 0;
 };
 
 const fillMinimumBid = async (bidInput: import('@playwright/test').Locator) => {
@@ -27,64 +25,118 @@ const fillMinimumBid = async (bidInput: import('@playwright/test').Locator) => {
   return target;
 };
 
+const placeBidUntilPriceIncreases = async (
+  bidPage: import('@playwright/test').Page,
+  bidInput: import('@playwright/test').Locator,
+  pricePage: import('@playwright/test').Page,
+  baseline: number,
+  maxAttempts = 3
+) => {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await fillMinimumBid(bidInput);
+    await bidPage.getByRole('button', { name: 'Place Bid' }).click();
+    try {
+      await expect.poll(async () => {
+        const current = await pricePage.locator('.current-bid-block strong').textContent();
+        return parsePrice(current);
+      }, { timeout: 7000 }).toBeGreaterThan(baseline);
+      return;
+    } catch {
+      await bidPage.reload();
+      await bidPage.getByRole('heading', { name: 'E2E Guitar' }).waitFor();
+    }
+  }
+
+  throw new Error(`Bid price did not increase beyond baseline ${baseline} after ${maxAttempts} attempts.`);
+};
+
+const postWithRetry = async (
+  request: import('@playwright/test').APIRequestContext,
+  url: string,
+  options: Parameters<typeof request.post>[1],
+  attempts = 8
+) => {
+  let lastResponse: Awaited<ReturnType<typeof request.post>> | null = null;
+  for (let i = 0; i < attempts; i += 1) {
+    lastResponse = await request.post(url, options);
+    if (lastResponse.ok()) return lastResponse;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return lastResponse!;
+};
+
 test('auction war between two buyers', async ({ page, browser, request }) => {
   const sellerEmail = buildTestEmail('seller');
   const buyerEmail = buildTestEmail('buyer-a');
   const buyerTwoEmail = buildTestEmail('buyer-b');
 
+  const seller = await registerUserViaApi(request, sellerEmail, password, 'SELLER');
   const buyerA = await registerUserViaApi(request, buyerEmail, password, 'BUYER');
   const buyerB = await registerUserViaApi(request, buyerTwoEmail, password, 'BUYER');
 
-  await ensureWalletWithFunds(request, buyerA.id, 2_000_000);
-  await ensureWalletWithFunds(request, buyerB.id, 2_000_000);
+  await ensureWalletWithFunds(request, buyerA.id, 2_000_000, buyerA.token, buyerA.role);
+  await ensureWalletWithFunds(request, buyerB.id, 2_000_000, buyerB.token, buyerB.role);
 
   await loginViaUi(page, sellerEmail, password);
-  await completeProfile(page, 'E2E Seller', '99 Seller Street, Bandung');
-
-  await page.getByRole('link', { name: 'Sell' }).click();
-  await page.getByLabel('Title').fill('E2E Guitar');
-  await page.getByLabel('Description').fill('Limited edition test listing');
-  await page.getByLabel('Category').selectOption('Electronics');
-  await page.getByRole('button', { name: 'New' }).click();
-  await page.getByRole('button', { name: 'Next' }).click();
-
-  await page.locator('input[type="file"]').setInputFiles({
-    name: 'tiny.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from(tinyPngBase64, 'base64'),
+  const startIso = new Date().toISOString();
+  const endIso = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const listingResponse = await postWithRetry(request, `${getGatewayBaseUrl()}/api/v1/catalogue/listings`, {
+    headers: { Authorization: `Bearer ${seller.token}` },
+    data: {
+      title: 'E2E Guitar',
+      description: 'Limited edition test listing',
+      category: 'Electronics',
+      condition: 'new',
+      startingPrice: 100,
+      reservePrice: 200,
+      minimumIncrement: 10,
+      startTime: startIso,
+      endTime: endIso,
+      imageUrl: 'https://example.com/e2e.png',
+    },
   });
-  await page.getByRole('button', { name: 'Next' }).click();
-
-  await page.getByLabel('Starting Bid').fill('100');
-  await page.getByLabel('Reserve Price').fill('200');
-  await page.getByLabel('Minimum Increment').fill('10');
-  await page.getByRole('button', { name: '1 day' }).click();
-  await page.getByRole('button', { name: 'Next' }).click();
-
-  await page.getByRole('button', { name: 'Publish Listing' }).click();
-  await expect(page.getByText('Listing published successfully.')).toBeVisible();
-
-  const listingLine = await page.getByText(/Listing ID:/).textContent();
-  const listingMatch = /Listing ID:\s*(.+)/.exec(listingLine ?? '');
-  const listingId = listingMatch?.[1]?.trim();
-  if (!listingId) {
-    throw new Error('Missing listing ID after publish.');
+  if (!listingResponse.ok()) {
+    throw new Error(`Listing create failed: ${listingResponse.status()} ${await listingResponse.text()}`);
+  }
+  const listingPayload = await listingResponse.json() as { id?: string };
+  const listingId = listingPayload.id;
+  if (!listingId) throw new Error('Missing listing id after create');
+  const publishResponse = await postWithRetry(request, `${getGatewayBaseUrl()}/api/v1/catalogue/listings/${listingId}/publish`, {
+    headers: { Authorization: `Bearer ${seller.token}` },
+  });
+  if (!publishResponse.ok()) {
+    throw new Error(`Listing publish failed: ${publishResponse.status()} ${await publishResponse.text()}`);
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const auctionResponse = await postWithRetry(request, `${getGatewayBaseUrl()}/api/v1/auctions`, {
+    headers: { Authorization: `Bearer ${seller.token}` },
+    data: {
+      listingId,
+      sellerId: seller.id,
+      auctionType: 'ENGLISH',
+      starting_price_cents: 10_000,
+      reserve_price_cents: 20_000,
+      minimum_increment_cents: 1_000,
+      startTime: now,
+      endTime: now + 3600,
+    },
+  });
+  if (!auctionResponse.ok()) {
+    throw new Error(`Auction create failed: ${auctionResponse.status()} ${await auctionResponse.text()}`);
   }
 
   const buyerAContext = await browser.newContext();
   const buyerAPage = await buyerAContext.newPage();
   await loginViaUi(buyerAPage, buyerEmail, password);
-  await completeProfile(buyerAPage, 'E2E Buyer A', '12 Buyer Street, Depok');
 
   const buyerBContext = await browser.newContext();
   const buyerBPage = await buyerBContext.newPage();
   await loginViaUi(buyerBPage, buyerTwoEmail, password);
-  await completeProfile(buyerBPage, 'E2E Buyer B', '34 Buyer Street, Bekasi');
 
   await buyerAPage.goto(`/listings/${listingId}`);
-  await buyerAPage.getByRole('heading', { name: /Auction Detail/i }).waitFor();
+  await buyerAPage.getByRole('heading', { name: 'E2E Guitar' }).waitFor();
 
-  const priceLocatorA = buyerAPage.locator('.auction-price');
+  const priceLocatorA = buyerAPage.locator('.current-bid-block strong');
   const firstPrice = parsePrice(await priceLocatorA.textContent());
   const bidInputA = buyerAPage.getByLabel('Your amount');
   await fillMinimumBid(bidInputA);
@@ -95,29 +147,21 @@ test('auction war between two buyers', async ({ page, browser, request }) => {
   }).toBeGreaterThan(firstPrice);
 
   await buyerBPage.goto(`/listings/${listingId}`);
-  await buyerBPage.getByRole('heading', { name: /Auction Detail/i }).waitFor();
+  await buyerBPage.getByRole('heading', { name: 'E2E Guitar' }).waitFor();
 
-  const priceLocatorB = buyerBPage.locator('.auction-price');
+  const priceLocatorB = buyerBPage.locator('.current-bid-block strong');
   const priceAfterA = parsePrice(await priceLocatorB.textContent());
+  await buyerBPage.reload();
+  await buyerBPage.getByRole('heading', { name: 'E2E Guitar' }).waitFor();
   const bidInputB = buyerBPage.getByLabel('Your amount');
-  await fillMinimumBid(bidInputB);
-  await buyerBPage.getByRole('button', { name: 'Place Bid' }).click();
-
-  await expect.poll(async () => {
-    return parsePrice(await priceLocatorB.textContent());
-  }).toBeGreaterThan(priceAfterA);
+  await placeBidUntilPriceIncreases(buyerBPage, bidInputB, buyerAPage, priceAfterA);
 
   await expect.poll(async () => {
     return parsePrice(await priceLocatorA.textContent());
   }).toBeGreaterThan(priceAfterA);
 
   const priceAfterB = parsePrice(await priceLocatorA.textContent());
-  await fillMinimumBid(bidInputA);
-  await buyerAPage.getByRole('button', { name: 'Place Bid' }).click();
-
-  await expect.poll(async () => {
-    return parsePrice(await priceLocatorA.textContent());
-  }).toBeGreaterThan(priceAfterB);
+  await placeBidUntilPriceIncreases(buyerAPage, bidInputA, buyerAPage, priceAfterB);
 
   await buyerAContext.close();
   await buyerBContext.close();

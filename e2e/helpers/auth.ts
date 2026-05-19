@@ -19,9 +19,16 @@ export const registerUserViaApi = async (
   password: string,
   role: 'BUYER' | 'SELLER'
 ) => {
-  const response = await request.post(`${getGatewayBaseUrl()}/api/v1/auth/register`, {
+  let response = await request.post(`${getGatewayBaseUrl()}/api/v1/auth/register`, {
     data: { email, password, role },
   });
+  // Dockerized auth service can still be warming up when the first E2E starts.
+  for (let attempt = 0; attempt < 5 && !response.ok(); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    response = await request.post(`${getGatewayBaseUrl()}/api/v1/auth/register`, {
+      data: { email, password, role },
+    });
+  }
 
   expect(response.ok()).toBeTruthy();
   const payload = await response.json() as { id?: string; email?: string } | null;
@@ -29,7 +36,15 @@ export const registerUserViaApi = async (
     throw new Error('Register response missing user id.');
   }
   await ensureAuthUserVerified(email);
-  return { id: payload.id, email: payload.email ?? email };
+  const loginResponse = await request.post(`${getGatewayBaseUrl()}/api/v1/auth/login`, {
+    data: { email, password },
+  });
+  expect(loginResponse.ok()).toBeTruthy();
+  const loginPayload = await loginResponse.json() as { accessToken?: string } | null;
+  if (!loginPayload?.accessToken) {
+    throw new Error('Login response missing access token.');
+  }
+  return { id: payload.id, email: payload.email ?? email, role, token: loginPayload.accessToken };
 };
 
 export const registerUserViaUi = async (
@@ -42,9 +57,13 @@ export const registerUserViaUi = async (
   await page.locator('.auth-tabs').getByRole('button', { name: 'register', exact: true }).click();
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
-  await page.getByLabel('Role').selectOption(role);
+  if (role === 'SELLER') {
+    await page.getByRole('radio', { name: /selling account/i }).click();
+  } else {
+    await page.getByRole('radio', { name: /buying account/i }).click();
+  }
   await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page.getByText('Account created. Please verify your email before logging in.')).toBeVisible();
+  await expect(page.getByText(/account ready/i)).toBeVisible();
   await ensureAuthUserVerified(email);
 };
 
@@ -74,7 +93,10 @@ export const loginViaUi = async (page: Page, email: string, password: string) =>
   await page.getByLabel('Email Address').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log In' }).click();
-  await page.waitForURL('**/profile');
+  await page.waitForURL((url) => {
+    const pathname = new URL(url.toString()).pathname;
+    return pathname === '/' || pathname === '/profile';
+  });
 };
 
 export const completeProfile = async (
@@ -82,18 +104,33 @@ export const completeProfile = async (
   displayName: string,
   shippingAddress: string
 ) => {
-  await page.getByRole('heading', { name: 'Profile', exact: true, level: 1 }).waitFor();
-  const displayNameInput = page.getByLabel('Display name');
+  const authState = await page.evaluate(() => ({
+    accessToken: window.localStorage.getItem('access_token'),
+    authUser: window.localStorage.getItem('auth_user'),
+  }));
 
-  if (!(await displayNameInput.isEnabled())) {
-    const editButton = page.getByRole('button', { name: 'Edit Profile' });
-    await editButton.waitFor();
-    await editButton.click();
-    await expect(displayNameInput).toBeEnabled();
+  const parsedUser = authState.authUser ? JSON.parse(authState.authUser) as { email?: string } : null;
+  if (!authState.accessToken || !parsedUser?.email) {
+    throw new Error('Missing authenticated user state for profile completion.');
   }
 
-  await displayNameInput.fill(displayName);
-  await page.getByLabel('Shipping address').fill(shippingAddress);
-  await page.getByRole('button', { name: 'Save Profile' }).click();
-  await expect(page.getByText('Profile updated successfully.')).toBeVisible();
+  const response = await page.request.put(`${getGatewayBaseUrl()}/api/v1/auth/profile`, {
+    headers: {
+      Authorization: `Bearer ${authState.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    data: {
+      email: parsedUser.email,
+      displayName,
+      shippingAddress,
+      avatarUrl: null,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+
+  await page.goto('/profile');
+  await page.getByRole('heading', { name: 'Profile', exact: true, level: 1 }).waitFor();
+  await expect(page.getByText('Loading profile details...')).toBeHidden({ timeout: 20_000 });
+  await expect(page.getByLabel('Display name')).toHaveValue(displayName);
+  await expect(page.getByLabel('Shipping address')).toHaveValue(shippingAddress);
 };

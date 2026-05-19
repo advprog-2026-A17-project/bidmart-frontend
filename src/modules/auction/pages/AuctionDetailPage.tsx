@@ -9,6 +9,7 @@ import { readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney, normalizeMoneyInput, toMoneyAmount } from '../../../utils/money';
+import { useNowTick } from '../../../hooks/useNowTick';
 
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 
@@ -54,8 +55,8 @@ const detailTitle = (id?: string): string =>
 const openAuctionCount = (auctions: Auction[]): number =>
     auctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)).length;
 
-const hasReachedEndTime = (auction: Auction): boolean =>
-    new Date(auction.endTime).getTime() <= Date.now();
+const hasReachedEndTime = (auction: Auction, nowMs: number): boolean =>
+    new Date(auction.endTime).getTime() <= nowMs;
 
 const hasSettledStatus = (auction: Auction): boolean =>
     CLOSED_STATUSES.has(auction.status);
@@ -99,6 +100,7 @@ const AuctionDetailPage: React.FC = () => {
     const [listingsById, setListingsById] = useState<Record<string, ListingSummary>>({});
     const [bidsByAuctionId, setBidsByAuctionId] = useState<Record<string, BidHistoryItem[]>>({});
     const [loading, setLoading] = useState<boolean>(true);
+    const nowMs = useNowTick();
 
     const fetchAuctions = useCallback(async () => {
         try {
@@ -233,7 +235,7 @@ const AuctionDetailPage: React.FC = () => {
     };
 
     const selectedAuction = auctions[0];
-    const selectedMeta = selectedAuction ? buildAuctionCardMeta(selectedAuction) : null;
+    const selectedMeta = selectedAuction ? buildAuctionCardMeta(selectedAuction, nowMs) : null;
     const selectedListing = selectedAuction ? listingsById[selectedAuction.listingId] : undefined;
     const selectedImage = selectedAuction
         ? selectedListing?.imageUrl?.trim() || fallbackListingImage(selectedAuction.listingId)
@@ -257,7 +259,7 @@ const AuctionDetailPage: React.FC = () => {
         const liveHistoryRows = auctions.slice(0, 5);
         const bidHistoryRows = bidsByAuctionId[selectedAuction.id] ?? [];
         const isSeller = user?.id === selectedAuction.sellerId;
-        const canSettleAuction = isSeller && hasReachedEndTime(selectedAuction) && !hasSettledStatus(selectedAuction);
+        const canSettleAuction = isSeller && hasReachedEndTime(selectedAuction, nowMs) && !hasSettledStatus(selectedAuction);
 
         content = (
             <div className="auction-command-grid">
@@ -428,7 +430,7 @@ const AuctionDetailPage: React.FC = () => {
                             </div>
                             <div className="auction-history-list">
                                 {liveHistoryRows.map((auction) => {
-                                    const meta = buildAuctionCardMeta(auction);
+                                    const meta = buildAuctionCardMeta(auction, nowMs);
                                     return (
                                         <div key={auction.id} className="auction-history-row">
                                             <div>

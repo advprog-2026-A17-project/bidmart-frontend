@@ -144,7 +144,7 @@ const WalletPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [authenticatedFetch, user]);
+    }, [activeRole, authenticatedFetch, user]);
 
     const createWallet = async () => {
         setActionLoading(true);
@@ -187,8 +187,13 @@ const WalletPage: React.FC = () => {
         const destination = '/user/queue/notifications';
         subscribe(destination, (payload) => {
             const event = payload as { type?: string; payload?: { type?: string } };
-            const type = String(event.payload?.type ?? event.type ?? '');
-            if (['BID_PLACED', 'OUTBID', 'AUCTION_WON', 'AUCTION_ENDED', 'ORDER_CREATED'].includes(type)) {
+            const type = String(event.payload?.type ?? event.type ?? '').toUpperCase();
+            if (
+                ['BID_PLACED', 'OUTBID', 'AUCTION_WON', 'AUCTION_ENDED', 'ORDER_CREATED'].includes(type) ||
+                type.includes('WALLET') ||
+                type.includes('PAYMENT') ||
+                type.includes('WITHDRAW')
+            ) {
                 void fetchWallet();
             }
         });

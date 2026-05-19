@@ -33,7 +33,7 @@ const formatSessionDate = (dateString: string | undefined | null) => {
 };
 
 const ProfilePage: React.FC = () => {
-    const { user, logout } = useAuth() as { user: { email: string } | null; logout: () => void };
+    const { user, logout, updateUserProfile } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '';
     const [sessions, setSessions] = useState<Session[]>([]);
@@ -93,6 +93,11 @@ const ProfilePage: React.FC = () => {
                 setDisplayName(fetchedName);
                 setAvatarUrl(fetchedAvatar);
                 setShippingAddress(fetchedAddress);
+                updateUserProfile({
+                    displayName: fetchedName || null,
+                    avatarUrl: fetchedAvatar || null,
+                    shippingAddress: fetchedAddress || null,
+                });
                 setOauthProvider(payload.oauthProvider ?? null);
                 setIsTwoFactorEnabled(payload.twoFactorEnabled === true);
                 
@@ -117,7 +122,7 @@ const ProfilePage: React.FC = () => {
         return () => {
             active = false;
         };
-    }, [authenticatedFetch, user]);
+    }, [authenticatedFetch, updateUserProfile, user]);
 
     useEffect(() => {
         if (!user) return;
@@ -175,6 +180,11 @@ const ProfilePage: React.FC = () => {
             setDisplayName(updatedName);
             setAvatarUrl(updatedAvatar);
             setShippingAddress(updatedAddress);
+            updateUserProfile({
+                displayName: updatedName || null,
+                avatarUrl: updatedAvatar || null,
+                shippingAddress: updatedAddress || null,
+            });
             setIsTwoFactorEnabled(payload.twoFactorEnabled === true);
             
             setOriginalProfile({
