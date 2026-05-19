@@ -11,7 +11,7 @@ import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney, normalizeMoneyInput, toMoneyAmount } from '../../../utils/money';
 import { useNowTick } from '../../../hooks/useNowTick';
 
-const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
+const CLOSED_STATUSES = new Set(['CLOSED', 'ENDED', 'WON', 'UNSOLD']);
 
 type ListingSummary = {
     id: string | number;
