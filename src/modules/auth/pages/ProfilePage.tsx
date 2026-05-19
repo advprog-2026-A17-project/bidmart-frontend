@@ -78,7 +78,7 @@ const ProfilePage: React.FC = () => {
             setError(null);
             try {
                 const response = await authenticatedFetch(
-                    gatewayUrl(`/api/v1/auth/profile?email=${encodeURIComponent(user.email)}`)
+                    gatewayUrl('/api/v1/auth/profile')
                 );
                 if (!response.ok) {
                     throw new Error(await readApiError(response, 'Profile lookup failed'));
@@ -126,7 +126,7 @@ const ProfilePage: React.FC = () => {
 
     useEffect(() => {
         if (!user) return;
-        authenticatedFetch(gatewayUrl(`/api/v1/auth/sessions?email=${encodeURIComponent(user.email)}`))
+        authenticatedFetch(gatewayUrl('/api/v1/auth/sessions'))
             .then(async (response) => {
                 if (!response.ok) throw new Error(await readApiError(response, 'Session lookup failed'));
                 return response.json();

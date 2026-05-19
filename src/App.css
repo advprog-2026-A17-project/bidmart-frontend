@@ -2399,6 +2399,42 @@ button {
   overflow-x: auto;
 }
 
+.panel-stack {
+    display: grid;
+    gap: 1rem;
+}
+
+.form-grid {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.form-grid label {
+    display: grid;
+    gap: 0.4rem;
+    font-weight: 600;
+}
+
+.form-grid input {
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid #d4d7de;
+}
+
+.danger-button {
+    background: #b42318;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.65rem 0.9rem;
+    font-weight: 600;
+}
+
+.danger-button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
 .analytics-row {
   display: grid;
   grid-template-columns: 1fr 1.1fr 1.1fr 0.9fr 1.1fr;

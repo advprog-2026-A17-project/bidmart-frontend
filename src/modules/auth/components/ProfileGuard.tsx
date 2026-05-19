@@ -55,7 +55,7 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
             setError(null);
             try {
                 const response = await authenticatedFetch(
-                    gatewayUrl(`/api/v1/auth/profile?email=${encodeURIComponent(user.email)}`)
+                    gatewayUrl('/api/v1/auth/profile')
                 );
 
                 if (!response.ok) {
