@@ -144,6 +144,13 @@ const parseListingsResponse = (payload: unknown): ListingRecord[] => {
     return [];
 };
 
+const asIsoDate = (input?: string | null): string | null => {
+    if (!input) return null;
+    const parsed = new Date(input);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toISOString();
+};
+
 const SellPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
@@ -290,6 +297,26 @@ const SellPage: React.FC = () => {
         }
     };
 
+    const ensureBiddingSessionForListing = async (listing: ListingRecord) => {
+        const response = await authenticatedFetch(gatewayUrl('/api/v1/listings'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                listingId: String(listing.id),
+                sellerId: listing.sellerId ?? user?.id,
+                auctionType: 'ENGLISH',
+                startingPrice: listing.startingPrice,
+                reservePrice: listing.reservePrice ?? listing.startingPrice,
+                minimumIncrement: listing.minimumIncrement ?? 1,
+                startTime: asIsoDate(listing.startTime),
+                endTime: asIsoDate(listing.endTime),
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(await readApiError(response, 'Bidding session sync failed'));
+        }
+    };
+
     const publishCreatedListing = async (listingId: string) => {
         const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/publish`), {
             method: 'POST',
@@ -297,6 +324,13 @@ const SellPage: React.FC = () => {
         if (!response.ok) {
             throw new Error(await readApiError(response, 'Listing publish failed'));
         }
+
+        const listingResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
+        if (!listingResponse.ok) {
+            throw new Error(await readApiError(listingResponse, 'Published listing fetch failed'));
+        }
+        const listing = await listingResponse.json() as ListingRecord;
+        await ensureBiddingSessionForListing(listing);
     };
 
     const resetListingForm = () => {
