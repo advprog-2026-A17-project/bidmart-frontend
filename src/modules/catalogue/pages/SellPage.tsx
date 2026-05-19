@@ -360,7 +360,6 @@ const SellPage: React.FC = () => {
         minimumIncrement: toListingAmount(form.minimumIncrement || '1'),
         startTime: form.startTime,
         endTime: form.endTime,
-        currentPrice: toListingAmount(form.startingBid),
         imageUrl: form.imageUrl.trim() || form.images[0] || null,
     });
 
@@ -840,7 +839,7 @@ const SellPage: React.FC = () => {
                                         value={listingForm.reservePrice}
                                         onChange={(event) => updateListingField('reservePrice', event.target.value)}
                                         onBlur={() => updateListingField('reservePrice', normalizeMoneyInput(listingForm.reservePrice))}
-                                        placeholder="Optional reserve"
+                                        placeholder="Minimum price to sell"
                                     />
                                     {listingFormErrors.reservePrice && <span className="field-error">{listingFormErrors.reservePrice}</span>}
                                 </label>
