@@ -81,7 +81,7 @@ test('auction war between two buyers', async ({ page, browser, request }) => {
   await loginViaUi(buyerBPage, buyerTwoEmail, password);
   await completeProfile(buyerBPage, 'E2E Buyer B', '34 Buyer Street, Bekasi');
 
-  await buyerAPage.goto(`/auctions/${listingId}`);
+  await buyerAPage.goto(`/listings/${listingId}`);
   await buyerAPage.getByRole('heading', { name: /Auction Detail/i }).waitFor();
 
   const priceLocatorA = buyerAPage.locator('.auction-price');
@@ -94,7 +94,7 @@ test('auction war between two buyers', async ({ page, browser, request }) => {
     return parsePrice(await priceLocatorA.textContent());
   }).toBeGreaterThan(firstPrice);
 
-  await buyerBPage.goto(`/auctions/${listingId}`);
+  await buyerBPage.goto(`/listings/${listingId}`);
   await buyerBPage.getByRole('heading', { name: /Auction Detail/i }).waitFor();
 
   const priceLocatorB = buyerBPage.locator('.auction-price');

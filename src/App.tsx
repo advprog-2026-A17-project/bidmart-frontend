@@ -1,7 +1,5 @@
 import { useState, useEffect, type ReactElement } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate, NavLink, useNavigate } from 'react-router-dom';
-import AuctionDetailPage from './modules/auction/pages/AuctionDetailPage';
-import BuyerAuctionsPage from './modules/auction/pages/BuyerAuctionsPage';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, NavLink, useNavigate, useParams } from 'react-router-dom';
 import CataloguePage from './modules/catalogue/pages/CataloguePage';
 import ListingDetailPage from './modules/catalogue/pages/ListingDetailPage';
 import SellPage from './modules/catalogue/pages/SellPage';
@@ -125,9 +123,6 @@ const Navbar = () => {
                         <NavLink to="/" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`} end>
                             Marketplace
                         </NavLink>
-                        <NavLink to="/active-auctions" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
-                            Active Auctions
-                        </NavLink>
                         <NavLink to="/orders" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Orders
                         </NavLink>
@@ -219,6 +214,11 @@ const RoleHome = () => {
     return activeRole === 'SELLER' ? <Navigate to="/seller-studio" replace /> : <CataloguePage />;
 };
 
+const RedirectToListing = () => {
+    const { id } = useParams();
+    return <Navigate to={id ? `/listings/${id}` : '/'} replace />;
+};
+
 const AppLayout = () => {
     const { user, activeRole } = useAuth();
     const isSeller = activeRole === 'SELLER';
@@ -234,10 +234,10 @@ const AppLayout = () => {
                         <Route path="/listings/:id" element={<ListingDetailPage />} />
                         <Route path="/login" element={<AuthPage />} />
                         <Route path="/verify-email" element={<VerifyEmailPage />} />
-                        <Route path="/auctions" element={<Navigate to="/active-auctions" replace />} />
-                        <Route path="/auctions/:id" element={<AuctionDetailPage />} />
-                        <Route path="/active-auctions" element={<BuyerAuctionsPage />} />
-                        <Route path="/active-auctions/:id" element={<AuctionDetailPage />} />
+                        <Route path="/auctions" element={<Navigate to="/" replace />} />
+                        <Route path="/auctions/:id" element={<RedirectToListing />} />
+                        <Route path="/active-auctions" element={<Navigate to="/" replace />} />
+                        <Route path="/active-auctions/:id" element={<RedirectToListing />} />
                         <Route path="/seller-studio" element={sellerOnly(<SellPage />)} />
                         <Route path="/command" element={<Navigate to="/seller-studio" replace />} />
                         <Route path="/command/auctions" element={<Navigate to="/seller-studio" replace />} />
