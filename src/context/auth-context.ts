@@ -5,6 +5,9 @@ export interface AuthUser {
     email: string;
     enabled: boolean;
     roles: { id: string; name: string }[];
+    displayName?: string | null;
+    avatarUrl?: string | null;
+    shippingAddress?: string | null;
 }
 
 export interface AuthLoginResult {
@@ -24,6 +27,11 @@ export interface AuthContextType {
     login: (payload: AuthLoginResult) => void;
     logout: () => void;
     switchRole: (role: 'BUYER' | 'SELLER') => void;
+    updateUserProfile: (profile: {
+        displayName?: string | null;
+        avatarUrl?: string | null;
+        shippingAddress?: string | null;
+    }) => void;
     refreshAccessToken: () => Promise<string | null>;
     authenticatedFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }
@@ -37,6 +45,7 @@ export const AuthContext = createContext<AuthContextType>({
     login: () => {},
     logout: () => {},
     switchRole: () => {},
+    updateUserProfile: () => {},
     refreshAccessToken: async () => null,
     authenticatedFetch: async (input, init) => fetch(input, init),
 });

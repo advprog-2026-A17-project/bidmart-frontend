@@ -45,8 +45,8 @@ export const getWalletBaseUrl = () => {
     return stripTrailingSlash(override);
   }
 
-  const port = process.env.WALLET_PORT?.trim() || '8083';
-  return `http://localhost:${port}`;
+  // Use port 8000 (Gateway) because 8083 is not exposed to host
+  return 'http://localhost:8000';
 };
 
 export const getAuthDbConfig = () => ({

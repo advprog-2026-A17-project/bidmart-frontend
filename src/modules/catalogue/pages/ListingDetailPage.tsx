@@ -10,6 +10,7 @@ import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta } from '../../auction/utils/auction-card-meta';
 import { biddingListingPath } from '../../auction/utils/bidding-paths';
 import { activeListingStatuses, catalogueListingToAuction } from '../utils/listing-to-auction';
+import { useNowTick } from '../../../hooks/useNowTick';
 
 type ListingDetail = {
     id: string | number;
@@ -40,6 +41,7 @@ type BidHistoryItem = {
 };
 
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
+const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE', 'CLOSED', 'WON', 'UNSOLD']);
 
 const fallbackImage = (id: string | number): string =>
     `https://picsum.photos/seed/${encodeURIComponent(String(id))}/960/720`;
@@ -47,8 +49,8 @@ const fallbackImage = (id: string | number): string =>
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
     meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
 
-const hasReachedEndTime = (endTime?: string | null): boolean =>
-    endTime ? new Date(endTime).getTime() <= Date.now() : false;
+const hasReachedEndTime = (endTime: string | null | undefined, nowMs: number): boolean =>
+    endTime ? new Date(endTime).getTime() <= nowMs : false;
 
 const ListingDetailSkeleton = () => (
     <div className="auction-command-grid skeleton-grid" aria-busy="true" aria-label="Loading listing">
@@ -74,6 +76,7 @@ const ListingDetailPage: React.FC = () => {
     const [bidInput, setBidInput] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const nowMs = useNowTick();
 
     const listingId = id ? String(id) : '';
 
@@ -145,14 +148,20 @@ const ListingDetailPage: React.FC = () => {
         return listing.imageUrl?.trim() || fallbackImage(listing.id);
     }, [listing]);
 
-    const listingMeta = listing ? buildAuctionCardMeta(catalogueListingToAuction(listing)) : null;
+    const listingMeta = listing ? buildAuctionCardMeta(catalogueListingToAuction(listing), nowMs) : null;
     const isLive = listing ? activeListingStatuses.has((listing.status ?? '').toUpperCase()) : false;
     const isSeller = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId);
+    const canViewListing = Boolean(
+        listing && (
+            isSeller ||
+            PUBLIC_LISTING_STATUSES.has((listing.status ?? '').toUpperCase())
+        )
+    );
     const canSettle = Boolean(
         isSeller &&
         listing &&
         listingMeta &&
-        hasReachedEndTime(listing.endTime) &&
+        hasReachedEndTime(listing.endTime, nowMs) &&
         !CLOSED_STATUSES.has((listing.status ?? '').toUpperCase())
     );
 
@@ -204,7 +213,7 @@ const ListingDetailPage: React.FC = () => {
         );
     }
 
-    if (!listing || !listingMeta) {
+    if (!listing || !listingMeta || !canViewListing) {
         return (
             <div className="page-wrap">
                 <section className="panel center-content">
@@ -254,7 +263,7 @@ const ListingDetailPage: React.FC = () => {
                         <p className="text-muted">{listing.description || 'No description provided by the seller.'}</p>
                         <div className="auction-spec-grid">
                             <div>
-                                <span>Starting Price</span>
+                                <span>Starting Price (IDR)</span>
                                 <strong>{formatMoney(listing.startingPrice)}</strong>
                             </div>
                             <div>

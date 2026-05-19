@@ -33,6 +33,7 @@ const orderStatusLabel = (order: OrderRecord): string =>
 
 const OrdersPage: React.FC = () => {
     const { user, activeRole } = useAuth();
+    const isSellerView = activeRole === 'SELLER';
     const authenticatedFetch = useAuthenticatedFetch();
     const [orders, setOrders] = useState<OrderRecord[]>([]);
     const [listingsById, setListingsById] = useState<Record<string, ListingSummary>>({});
@@ -114,7 +115,7 @@ const OrdersPage: React.FC = () => {
                     <BackButton fallback={activeRole === 'SELLER' ? '/seller-studio' : '/'} />
                     <p className="eyebrow">{activeRole === 'SELLER' ? 'Seller Workspace' : 'Buyer Workspace'}</p>
                     <h1>Orders</h1>
-                    <p>Track auctions you won after the seller settles them.</p>
+                    <p>{isSellerView ? 'Monitor buyer orders, shipping progress, and settlement status for your sold listings.' : 'Track auctions you won after the seller settles them.'}</p>
                 </div>
                 <Link className="secondary-button" to="/">
                     <span className="material-symbols-outlined" aria-hidden="true">gavel</span>
@@ -130,7 +131,7 @@ const OrdersPage: React.FC = () => {
                     <span className="material-symbols-outlined" aria-hidden="true">inventory_2</span>
                     <div>
                         <strong>{loading ? '--' : orders.length}</strong>
-                        <small>Won auction orders</small>
+                        <small>{isSellerView ? 'Orders to fulfill' : 'Won auction orders'}</small>
                     </div>
                 </div>
                 <div className="studio-kpi-card">
@@ -201,7 +202,11 @@ const OrdersPage: React.FC = () => {
                 <section className="panel center-content">
                     <span className="material-symbols-outlined section-title-icon" aria-hidden="true">receipt_long</span>
                     <h2>No orders yet</h2>
-                    <p className="text-muted">Won auctions appear here after the seller settles the auction.</p>
+                    <p className="text-muted">
+                        {isSellerView
+                            ? 'Orders from your sold listings will appear here after auction settlement.'
+                            : 'Won auctions appear here after the seller settles the auction.'}
+                    </p>
                     <Link className="primary-button" to="/">
                         Browse Marketplace
                     </Link>
