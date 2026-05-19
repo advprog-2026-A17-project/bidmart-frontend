@@ -108,7 +108,7 @@ test('auction war between two buyers', async ({ page, browser, request }) => {
     throw new Error(`Listing publish failed: ${publishResponse.status()} ${await publishResponse.text()}`);
   }
   const now = Math.floor(Date.now() / 1000);
-  const auctionResponse = await postWithRetry(request, `${getGatewayBaseUrl()}/api/v1/auctions`, {
+  const auctionResponse = await postWithRetry(request, `${getGatewayBaseUrl()}/api/v1/listings`, {
     headers: { Authorization: `Bearer ${seller.token}` },
     data: {
       listingId,
@@ -122,7 +122,7 @@ test('auction war between two buyers', async ({ page, browser, request }) => {
     },
   });
   if (!auctionResponse.ok()) {
-    throw new Error(`Auction create failed: ${auctionResponse.status()} ${await auctionResponse.text()}`);
+    throw new Error(`Bidding session create failed: ${auctionResponse.status()} ${await auctionResponse.text()}`);
   }
 
   const buyerAContext = await browser.newContext();
@@ -139,12 +139,7 @@ test('auction war between two buyers', async ({ page, browser, request }) => {
   const priceLocatorA = buyerAPage.locator('.current-bid-block strong');
   const firstPrice = parsePrice(await priceLocatorA.textContent());
   const bidInputA = buyerAPage.getByLabel('Your amount');
-  await fillMinimumBid(bidInputA);
-  await buyerAPage.getByRole('button', { name: 'Place Bid' }).click();
-
-  await expect.poll(async () => {
-    return parsePrice(await priceLocatorA.textContent());
-  }).toBeGreaterThan(firstPrice);
+  await placeBidUntilPriceIncreases(buyerAPage, bidInputA, buyerAPage, firstPrice);
 
   await buyerBPage.goto(`/listings/${listingId}`);
   await buyerBPage.getByRole('heading', { name: 'E2E Guitar' }).waitFor();

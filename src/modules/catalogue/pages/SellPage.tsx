@@ -4,13 +4,13 @@ import BackButton from '../../../components/BackButton';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
-import { formatMoney, normalizeMoneyInput, toAmountCents, toMoneyAmount } from '../../../utils/money';
+import { formatMoney, normalizeMoneyInput, toMoneyAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta, type Auction } from '../../auction/utils/auction-card-meta';
-import { parseAuctionsResponse } from '../../auction/utils/parse-auctions-response';
 import { useNowTick } from '../../../hooks/useNowTick';
+import { catalogueListingToAuction } from '../utils/listing-to-auction';
 
-type StudioView = 'dashboard' | 'listing-create' | 'listing-manage' | 'auction-create' | 'auction-manage';
+type StudioView = 'dashboard' | 'listing-create' | 'listing-manage';
 
 type ListingRecord = {
     id: string | number;
@@ -106,12 +106,6 @@ const emptyListingForm: ListingFormState = {
     imageUrl: '',
     images: [],
 };
-const dateTimeLocalToUnixSeconds = (value: string): number | null => {
-    const parsed = new Date(value);
-    const timestamp = parsed.getTime();
-    if (Number.isNaN(timestamp)) return null;
-    return Math.floor(timestamp / 1000);
-};
 const normalizeCondition = (condition?: string | null): string => {
     const normalized = (condition ?? '')
         .trim()
@@ -166,7 +160,6 @@ const SellPage: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(true);
     const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(true);
     const [analyticsError, setAnalyticsError] = useState<string | null>(null);
-    const [createdAuctionId] = useState<string | null>(null);
     const [listingFormErrors, setListingFormErrors] = useState<ListingFormErrors>({});
     const nowMs = useNowTick();
 
@@ -205,13 +198,10 @@ const SellPage: React.FC = () => {
         try {
             setAnalyticsLoading(true);
             setAnalyticsError(null);
-            const response = await fetch(gatewayUrl('/api/v1/auctions'));
-            if (!response.ok) {
-                throw new Error(`Auction analytics failed with status ${response.status}`);
-            }
-            const payload: unknown = await response.json();
             setSellerAuctions(
-                parseAuctionsResponse(payload).filter((auction) => auction.sellerId === user.id)
+                listings
+                    .filter((listing) => String(listing.sellerId) === user.id)
+                    .map((listing) => catalogueListingToAuction(listing as unknown as Record<string, unknown>))
             );
         } catch (err: unknown) {
             setAnalyticsError(toErrorMessage(err));
@@ -219,24 +209,25 @@ const SellPage: React.FC = () => {
         } finally {
             setAnalyticsLoading(false);
         }
-    }, [isSeller, user]);
+    }, [isSeller, listings, user]);
 
     const refreshStudio = useCallback(async () => {
-        await Promise.all([fetchSellerListings(), fetchSellerAuctions()]);
-    }, [fetchSellerAuctions, fetchSellerListings]);
+        await fetchSellerListings();
+    }, [fetchSellerListings]);
 
     useEffect(() => {
         refreshStudio();
     }, [refreshStudio]);
 
-    const realtimeDestinations = useMemo(
-        () => user ? ['/topic/auctions', `/topic/sellers/${user.id}/auctions`] : [],
-        [user]
-    );
+    const realtimeDestinations = useMemo(() => user ? ['/topic/listings'] : [], [user]);
     const handleRealtimeEvent = useCallback(() => {
         void refreshStudio();
     }, [refreshStudio]);
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
+
+    useEffect(() => {
+        void fetchSellerAuctions();
+    }, [fetchSellerAuctions]);
 
     const existingListingIds = useMemo(
         () => new Set(listings.map((listing) => String(listing.id))),
@@ -305,41 +296,6 @@ const SellPage: React.FC = () => {
         });
         if (!response.ok) {
             throw new Error(await readApiError(response, 'Listing publish failed'));
-        }
-    };
-
-    const createAuctionRecord = async (listingId: string, source: {
-        startingPrice: number;
-        reservePrice: number;
-        minimumIncrement: number;
-        startTime: string;
-        endTime: string;
-    }) => {
-        if (!user?.id) {
-            throw new Error('Seller account is required before creating an auction.');
-        }
-        const startTime = dateTimeLocalToUnixSeconds(source.startTime);
-        const endTime = dateTimeLocalToUnixSeconds(source.endTime);
-        if (startTime === null || endTime === null) {
-            throw new Error('Auction start and end times are required before publishing.');
-        }
-
-        const response = await authenticatedFetch(gatewayUrl('/api/v1/auctions'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                listingId,
-                sellerId: user.id,
-                auctionType: 'ENGLISH',
-                starting_price_cents: toAmountCents(source.startingPrice),
-                reserve_price_cents: toAmountCents(source.reservePrice),
-                minimum_increment_cents: toAmountCents(source.minimumIncrement),
-                startTime,
-                endTime,
-            }),
-        });
-        if (!response.ok) {
-            throw new Error(await readApiError(response, 'Auction creation failed'));
         }
     };
 
@@ -463,18 +419,11 @@ const SellPage: React.FC = () => {
 
             if (publishImmediate) {
                 await publishCreatedListing(listingId);
-                await createAuctionRecord(listingId, {
-                    startingPrice: saved.startingPrice ?? toListingAmount(listingForm.startingBid),
-                    reservePrice: saved.reservePrice ?? saved.startingPrice ?? toListingAmount(listingForm.reservePrice || listingForm.startingBid),
-                    minimumIncrement: saved.minimumIncrement ?? toListingAmount(listingForm.minimumIncrement || '1'),
-                    startTime: saved.startTime ? toDateTimeLocalValue(new Date(saved.startTime)) : listingForm.startTime,
-                    endTime: saved.endTime ? toDateTimeLocalValue(new Date(saved.endTime)) : listingForm.endTime,
-                });
             }
 
             setNotice(
                 publishImmediate
-                    ? 'Listing published and auction started.'
+                    ? 'Listing published.'
                     : isEditing
                         ? 'Listing draft updated.'
                         : 'Listing draft created.'
@@ -524,17 +473,17 @@ const SellPage: React.FC = () => {
         }
     };
 
-    const closeAuction = async (auctionId: string) => {
+    const closeAuction = async (listingId: string) => {
         setError(null);
         setNotice(null);
         try {
-            const response = await authenticatedFetch(gatewayUrl(`/api/v1/auctions/${auctionId}/close`), {
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/listings/${listingId}/close`), {
                 method: 'POST',
             });
             if (!response.ok) {
                 throw new Error(await readApiError(response, 'Auction close failed'));
             }
-            setNotice('Auction close requested.');
+            setNotice('Listing close requested.');
             await refreshStudio();
         } catch (err: unknown) {
             setError(toErrorMessage(err));
@@ -545,8 +494,6 @@ const SellPage: React.FC = () => {
         const listingId = String(listing.id);
         const startingPrice = listing.startingPrice ?? 0;
         const reservePrice = listing.reservePrice ?? listing.startingPrice ?? 0;
-        const minimumIncrement = listing.minimumIncrement ?? 1;
-
         if (startingPrice <= 0) {
             setError('Starting price must be greater than 0 before publishing.');
             setNotice(null);
@@ -567,14 +514,7 @@ const SellPage: React.FC = () => {
         setNotice(null);
         try {
             await publishCreatedListing(listingId);
-            await createAuctionRecord(listingId, {
-                startingPrice,
-                reservePrice,
-                minimumIncrement,
-                startTime: toDateTimeLocalValue(new Date(listing.startTime)),
-                endTime: toDateTimeLocalValue(new Date(listing.endTime)),
-            });
-            setNotice('Listing published and auction started.');
+            setNotice('Listing published.');
             await refreshStudio();
         } catch (err: unknown) {
             setError(toErrorMessage(err));
@@ -661,7 +601,7 @@ const SellPage: React.FC = () => {
                         <BackButton fallback="/" />
                         <p className="eyebrow">Seller Studio</p>
                         <h1>{navGroups.flatMap((group) => group.items).find((item) => item.id === activeView)?.label}</h1>
-                        <p>Manage product records separately from bidding sessions so each workflow stays clear.</p>
+                        <p>Manage listing-auctions in a single workflow aligned with the platform specification.</p>
                     </div>
                     <button type="button" className="secondary-button" onClick={refreshStudio}>
                         <span className="material-symbols-outlined" aria-hidden="true">refresh</span>
@@ -748,7 +688,7 @@ const SellPage: React.FC = () => {
                             ) : (
                                 <div className="empty-state compact-empty">
                                     <strong>No seller auctions yet.</strong>
-                                    <span className="text-muted">Select a draft or active listing, complete the auction rules, and publish the bid session from here.</span>
+                                    <span className="text-muted">Create a listing, configure auction rules, and publish from one place.</span>
                                 </div>
                             )}
 
@@ -1059,7 +999,6 @@ const SellPage: React.FC = () => {
                     </section>
                 )}
 
-                {createdAuctionId && <span className="visually-hidden">Last auction ID: {createdAuctionId}</span>}
             </main>
         </div>
     );
