@@ -10,8 +10,8 @@ test('buyer can register, verify, login, and complete profile', async ({ page })
   await loginViaUi(page, email, password);
   await completeProfile(page, 'E2E Buyer', '123 Test Street, Jakarta');
 
-  await page.getByRole('link', { name: 'Explore' }).click();
-  await expect(page.getByRole('heading', { name: 'Explore Auctions' })).toBeVisible();
+  await page.getByRole('link', { name: 'Marketplace' }).click();
+  await page.waitForURL('**/');
 
   await page.getByRole('button', { name: 'Open notifications' }).click();
   await expect(page.getByText('No notifications yet.')).toBeVisible();

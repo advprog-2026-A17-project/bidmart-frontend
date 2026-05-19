@@ -31,6 +31,8 @@ const Navbar = () => {
     const isSeller = activeRole === 'SELLER';
     const navigate = useNavigate();
     const roleLabel = activeRole ?? user?.roles?.[0]?.name ?? 'Guest';
+    const displayName = user?.displayName?.trim() || user?.email;
+    const avatarUrl = user?.avatarUrl?.trim() || null;
 
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
     const { showBalance, setShowBalance } = useWalletUI();
@@ -65,8 +67,13 @@ const Navbar = () => {
             const destination = '/user/queue/notifications';
             subscribe(destination, (payload) => {
                 const event = payload as { type?: string; payload?: { type?: string } };
-                const type = String(event.payload?.type ?? event.type ?? '');
-                if (['BID_PLACED', 'OUTBID', 'AUCTION_WON', 'AUCTION_ENDED', 'ORDER_CREATED'].includes(type)) {
+                const type = String(event.payload?.type ?? event.type ?? '').toUpperCase();
+                if (
+                    ['BID_PLACED', 'OUTBID', 'AUCTION_WON', 'AUCTION_ENDED', 'ORDER_CREATED'].includes(type) ||
+                    type.includes('WALLET') ||
+                    type.includes('PAYMENT') ||
+                    type.includes('WITHDRAW')
+                ) {
                     void fetchWallet();
                 }
             });
@@ -79,7 +86,7 @@ const Navbar = () => {
         return () => {
             active = false;
         };
-    }, [user, authenticatedFetch, isConnected, subscribe, unsubscribe]);
+    }, [user, activeRole, authenticatedFetch, isConnected, subscribe, unsubscribe]);
 
     const handleSwitchRole = (role: 'BUYER' | 'SELLER') => {
         switchRole(role);
@@ -183,8 +190,16 @@ const Navbar = () => {
                         )}
                         <NotificationCenter />
                         <span className="app-user-pill">
-                            <span className="material-symbols-outlined app-user-icon" aria-hidden="true">account_circle</span>
-                            <span className="app-user-email">{user.email}</span>
+                            {avatarUrl ? (
+                                <img
+                                    src={avatarUrl}
+                                    alt={displayName ? `${displayName} avatar` : 'User avatar'}
+                                    style={{ width: '24px', height: '24px', borderRadius: '999px', objectFit: 'cover' }}
+                                />
+                            ) : (
+                                <span className="material-symbols-outlined app-user-icon" aria-hidden="true">account_circle</span>
+                            )}
+                            <span className="app-user-email">{displayName}</span>
                             {user.roles?.length > 0 && (
                                 <span className="app-role-pill">
                                     {roleLabel}

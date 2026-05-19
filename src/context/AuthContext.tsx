@@ -188,6 +188,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPersistentItem('active_role', role);
     }, [user]);
 
+    const updateUserProfile = useCallback((profile: {
+        displayName?: string | null;
+        avatarUrl?: string | null;
+        shippingAddress?: string | null;
+    }) => {
+        setUser((previous) => {
+            if (!previous) return previous;
+            return {
+                ...previous,
+                ...profile,
+            };
+        });
+    }, []);
+
     const contextValue = useMemo(() => ({
         user,
         accessToken,
@@ -197,9 +211,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         switchRole,
+        updateUserProfile,
         refreshAccessToken,
         authenticatedFetch,
-    }), [accessToken, activeRole, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, switchRole, tokenId, user]);
+    }), [accessToken, activeRole, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, switchRole, tokenId, updateUserProfile, user]);
 
     return (
         <AuthContext.Provider value={contextValue}>

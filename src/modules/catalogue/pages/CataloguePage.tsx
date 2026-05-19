@@ -3,6 +3,7 @@ import { apiUrl } from '../../../config/api';
 import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
 import { Link } from 'react-router-dom';
 import { formatMoney, normalizeMoneyInput } from '../../../utils/money';
+import { useNowTick } from '../../../hooks/useNowTick';
 
 interface CatalogueItem {
     id: number | string;
@@ -16,6 +17,7 @@ interface CatalogueItem {
     endTime: string;
     hasBids: boolean;
 }
+const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE']);
 
 interface SearchParams {
     keyword: string;
@@ -38,6 +40,7 @@ const CataloguePage: React.FC = () => {
         maxPrice: '',
     });
     const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
+    const nowMs = useNowTick();
 
     const parseCatalogueItems = (payload: unknown): CatalogueItem[] => {
         if (Array.isArray(payload)) {
@@ -91,8 +94,12 @@ const CataloguePage: React.FC = () => {
         setAppliedParams(empty);
     };
 
-    const renderTimeLeft = (endTime: string) => {
-        const diff = new Date(endTime).getTime() - Date.now();
+    const renderTimeLeft = (endTime: string, status: string) => {
+        const diff = new Date(endTime).getTime() - nowMs;
+        const normalizedStatus = status.toUpperCase();
+        if (diff <= 0 && (normalizedStatus === 'ACTIVE' || normalizedStatus === 'EXTENDED' || normalizedStatus === 'AVAILABLE')) {
+            return 'Live';
+        }
         if (diff <= 0) return 'Ended';
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -117,15 +124,17 @@ const CataloguePage: React.FC = () => {
         target.src = buildFallbackImage(itemId);
     };
 
-    const visibleItems = [...items].sort((a, b) => {
-        if (sortBy === 'price-asc') return a.currentPrice - b.currentPrice;
-        if (sortBy === 'price-desc') return b.currentPrice - a.currentPrice;
-        return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
-    });
-    const liveItems = items.filter((item) => item.status === 'ACTIVE' || item.status === 'AVAILABLE');
+    const visibleItems = [...items]
+        .filter((item) => PUBLIC_LISTING_STATUSES.has((item.status ?? '').toUpperCase()))
+        .sort((a, b) => {
+            if (sortBy === 'price-asc') return a.currentPrice - b.currentPrice;
+            if (sortBy === 'price-desc') return b.currentPrice - a.currentPrice;
+            return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
+        });
+    const liveItems = visibleItems;
     const featuredItem = visibleItems[0];
     const hotLots = visibleItems.slice(1, 4);
-    const categoryCount = new Set(items.map((item) => item.category).filter(Boolean)).size;
+    const categoryCount = new Set(visibleItems.map((item) => item.category).filter(Boolean)).size;
 
     const catalogueSkeleton = (
         <ul className="catalog-grid skeleton-grid" aria-busy="true" aria-label="Loading listings">
@@ -175,7 +184,7 @@ const CataloguePage: React.FC = () => {
                     </div>
                     <div>
                         <span className="metric-label">Ending Next</span>
-                        <strong>{loading || !featuredItem ? '--' : renderTimeLeft(featuredItem.endTime)}</strong>
+                        <strong>{loading || !featuredItem ? '--' : renderTimeLeft(featuredItem.endTime, featuredItem.status)}</strong>
                     </div>
                 </div>
             </section>
@@ -255,7 +264,7 @@ const CataloguePage: React.FC = () => {
                                     <span className="hero-badge">Hero Lot</span>
                                     <span className="time-badge">
                                         <span className="material-symbols-outlined" aria-hidden="true">timer</span>
-                                        {renderTimeLeft(featuredItem.endTime)}
+                                        {renderTimeLeft(featuredItem.endTime, featuredItem.status)}
                                     </span>
                                 </div>
                                 <div className="hero-lot-content">
@@ -291,7 +300,7 @@ const CataloguePage: React.FC = () => {
                                                 <div>
                                                     <span className="time-badge compact">
                                                         <span className="material-symbols-outlined" aria-hidden="true">timer</span>
-                                                        {renderTimeLeft(item.endTime)}
+                                                        {renderTimeLeft(item.endTime, item.status)}
                                                     </span>
                                                     <strong>{item.title}</strong>
                                                     <span className="text-muted">{formatMoney(item.currentPrice)}</span>
@@ -344,7 +353,7 @@ const CataloguePage: React.FC = () => {
                                         <div className="catalog-card-actions">
                                             <span className="time-badge compact">
                                                 <span className="material-symbols-outlined" aria-hidden="true">schedule</span>
-                                                {renderTimeLeft(item.endTime)}
+                                                {renderTimeLeft(item.endTime, item.status)}
                                             </span>
                                             <Link to={`/listings/${item.id}`} className="primary-button card-cta">
                                                 <span className="material-symbols-outlined" aria-hidden="true">gavel</span>

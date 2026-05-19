@@ -6,8 +6,9 @@ import { formatMoney } from '../../../utils/money';
 import { useAuctionRealtime } from '../hooks/useAuctionRealtime';
 import { buildAuctionCardMeta, type Auction } from '../utils/auction-card-meta';
 import { parseAuctionsResponse } from '../utils/parse-auctions-response';
+import { useNowTick } from '../../../hooks/useNowTick';
 
-const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
+const CLOSED_STATUSES = new Set(['CLOSED', 'ENDED', 'WON', 'UNSOLD', 'CANCELLED']);
 
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
     meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
@@ -16,6 +17,7 @@ const BuyerAuctionsPage: React.FC = () => {
     const [auctions, setAuctions] = useState<Auction[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const nowMs = useNowTick();
 
     const fetchAuctions = useCallback(async () => {
         try {
@@ -88,14 +90,14 @@ const BuyerAuctionsPage: React.FC = () => {
                 <div className="studio-kpi-card">
                     <span className="material-symbols-outlined" aria-hidden="true">leaderboard</span>
                     <div>
-                        <strong>{topAuction ? bidLabel(buildAuctionCardMeta(topAuction)) : formatMoney(0)}</strong>
+                        <strong>{topAuction ? bidLabel(buildAuctionCardMeta(topAuction, nowMs)) : formatMoney(0)}</strong>
                         <small>Highest active top bid</small>
                     </div>
                 </div>
                 <div className="studio-kpi-card">
                     <span className="material-symbols-outlined" aria-hidden="true">schedule</span>
                     <div>
-                        <strong>{topAuction ? buildAuctionCardMeta(topAuction).timeLeftLabel : '--'}</strong>
+                        <strong>{topAuction ? buildAuctionCardMeta(topAuction, nowMs).timeLeftLabel : '--'}</strong>
                         <small>Closest high-value room</small>
                     </div>
                 </div>
@@ -114,7 +116,7 @@ const BuyerAuctionsPage: React.FC = () => {
             ) : activeAuctions.length > 0 ? (
                 <ul className="auction-room-grid">
                     {activeAuctions.map((auction) => {
-                        const meta = buildAuctionCardMeta(auction);
+                        const meta = buildAuctionCardMeta(auction, nowMs);
                         return (
                             <li key={auction.id} className="auction-room-card panel">
                                 <div className="auction-room-card-head">

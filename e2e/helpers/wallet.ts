@@ -7,14 +7,18 @@ loadEnv();
 export const ensureWalletWithFunds = async (
   request: APIRequestContext,
   userId: string,
-  amountCents: number
+  amountCents: number,
+  token: string,
+  role: 'BUYER' | 'SELLER' = 'BUYER'
 ) => {
   const baseUrl = getWalletBaseUrl();
-  const walletResponse = await request.get(`${baseUrl}/api/v1/wallet/${userId}`);
+  const headers = { Authorization: `Bearer ${token}` };
+  const walletResponse = await request.get(`${baseUrl}/api/v1/wallet/${userId}?role=${role}`, { headers });
 
   if (walletResponse.status() === 404) {
     const createResponse = await request.post(`${baseUrl}/api/v1/wallet/add`, {
-      data: { userId },
+      headers,
+      data: { userId, role },
     });
     expect(createResponse.ok()).toBeTruthy();
   } else {
@@ -23,7 +27,8 @@ export const ensureWalletWithFunds = async (
 
   if (amountCents > 0) {
     const topUpResponse = await request.post(
-      `${baseUrl}/api/v1/wallet/${userId}/top-up?amount=${amountCents}`
+      `${baseUrl}/api/v1/wallet/${userId}/top-up?amount=${amountCents}&role=${role}`,
+      { headers }
     );
     expect(topUpResponse.ok()).toBeTruthy();
   }

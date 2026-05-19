@@ -10,19 +10,22 @@ const parseAuctionDate = (value: string): Date => {
     return new Date(value);
 };
 
-export const buildAuctionCardMeta = (auction: Auction) => {
+export const buildAuctionCardMeta = (auction: Auction, nowMs = Date.now()) => {
     const hasBids = auction.currentHighestBid !== null;
     const currentHighest = hasBids ? auction.currentHighestBid! : auction.startingPrice;
     const minNextBid = hasBids ? currentHighest + auction.minimumIncrement : auction.startingPrice;
-    const statusLabel = auction.status.charAt(0) + auction.status.slice(1).toLowerCase();
+    const normalizedStatus = (auction.status ?? '').toUpperCase();
+    const statusLabel = normalizedStatus.charAt(0) + normalizedStatus.slice(1).toLowerCase();
     const endDate = parseAuctionDate(auction.endTime);
-    const now = Date.now();
-    const remainingMs = endDate.getTime() - now;
-    const hasEnded = Number.isFinite(remainingMs) && remainingMs <= 0;
-    const isClosed = CLOSED_STATUSES.has(auction.status) || hasEnded;
+    const remainingMs = endDate.getTime() - nowMs;
+    const isClosed = CLOSED_STATUSES.has(normalizedStatus);
     const minutesLeft = Math.max(0, Math.floor(remainingMs / 60000));
     const secondsLeft = Math.max(0, Math.floor((remainingMs % 60000) / 1000));
-    const timeLeftLabel = isClosed ? 'Ended' : `${minutesLeft}m ${secondsLeft}s left`;
+    const timeLeftLabel = isClosed
+        ? 'Ended'
+        : remainingMs <= 0
+            ? 'Live'
+            : `${minutesLeft}m ${secondsLeft}s left`;
 
     return {
         currentHighest,
