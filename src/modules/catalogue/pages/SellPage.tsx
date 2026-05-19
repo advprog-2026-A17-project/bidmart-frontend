@@ -77,7 +77,8 @@ const CONDITIONS = [
 ];
 
 const MAX_IMAGE_BYTES = 600 * 1024;
-const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD', 'CANCELLED']);
+const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
+const LOCKED_AUCTION_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'ENDED', 'WON', 'UNSOLD', 'CANCELLED'] as const);
 
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
     meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
@@ -998,7 +999,7 @@ const SellPage: React.FC = () => {
                             <div className="management-list">
                                 {listings.map((listing) => {
                                     const status = (listing.status ?? 'UNKNOWN').toUpperCase();
-                                    const locked = listing.hasBids || status === 'WON' || status === 'UNSOLD';
+                                    const locked = listing.hasBids || LOCKED_AUCTION_STATUSES.has(status as 'ACTIVE');
                                     const canClose = (status === 'ACTIVE' || status === 'EXTENDED') && listing.endTime && new Date(listing.endTime) <= new Date();
                                     const canPublishDraft = status === 'DRAFT';
                                     
