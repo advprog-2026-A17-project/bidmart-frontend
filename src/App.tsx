@@ -24,7 +24,7 @@ import './App.css';
 import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
 
 const Navbar = () => {
-    const { user, activeRole, switchRole, logout } = useAuth();
+    const { user, activeRole, switchRole, logout, sessionExpiresAt } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
     const hasBuyer = user?.roles?.some((role) => role.name === 'BUYER') ?? false;
@@ -35,6 +35,7 @@ const Navbar = () => {
     const roleLabel = activeRole ?? user?.roles?.[0]?.name ?? 'Guest';
     const displayName = user?.displayName?.trim() || user?.email;
     const avatarUrl = user?.avatarUrl?.trim() || null;
+    const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState<number | null>(null);
 
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
     const { showBalance, setShowBalance } = useWalletUI();
@@ -89,6 +90,34 @@ const Navbar = () => {
             active = false;
         };
     }, [user, activeRole, authenticatedFetch, isConnected, subscribe, unsubscribe]);
+
+    useEffect(() => {
+        if (!sessionExpiresAt || !user) {
+            setSessionRemainingSeconds(null);
+            return;
+        }
+
+        const updateRemaining = () => {
+            const remainingMs = sessionExpiresAt - Date.now();
+            const remainingSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+            setSessionRemainingSeconds(remainingSeconds);
+        };
+
+        updateRemaining();
+        const intervalId = window.setInterval(updateRemaining, 1000);
+        return () => window.clearInterval(intervalId);
+    }, [sessionExpiresAt, user]);
+
+    const formatSessionRemaining = (seconds: number | null) => {
+        if (seconds === null) return null;
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remaining = seconds % 60;
+        if (hours > 0) {
+            return `${hours}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`;
+        }
+        return `${minutes}:${String(remaining).padStart(2, '0')}`;
+    };
 
     const handleSwitchRole = (role: 'BUYER' | 'SELLER') => {
         switchRole(role);
@@ -199,6 +228,12 @@ const Navbar = () => {
                                 <span className="material-symbols-outlined" aria-hidden="true">shopping_bag</span>
                                 Open Buying Account
                             </Link>
+                        )}
+                        {sessionRemainingSeconds !== null && (
+                            <div className={`session-timer ${sessionRemainingSeconds <= 300 ? 'session-timer-warning' : ''}`}>
+                                <span className="material-symbols-outlined" aria-hidden="true">timer</span>
+                                <span>Session ends in {formatSessionRemaining(sessionRemainingSeconds)}</span>
+                            </div>
                         )}
                         <NotificationCenter />
                         <span className="app-user-pill">

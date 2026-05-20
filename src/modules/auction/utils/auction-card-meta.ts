@@ -2,12 +2,15 @@ import type { Auction } from '../contracts/auction-card-ui-contract';
 
 const CLOSED_STATUSES = new Set(['CLOSED', 'ENDED', 'WON', 'UNSOLD']);
 
-const parseAuctionDate = (value: string): Date => {
+const parseAuctionDate = (value: string): Date | null => {
+    if (!value || !value.trim()) return null;
     const numeric = Number(value);
     if (Number.isFinite(numeric)) {
-        return new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric);
+        const parsed = new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
-    return new Date(value);
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
 export const buildAuctionCardMeta = (auction: Auction, nowMs = Date.now()) => {
@@ -17,8 +20,8 @@ export const buildAuctionCardMeta = (auction: Auction, nowMs = Date.now()) => {
     const normalizedStatus = (auction.status ?? '').toUpperCase();
     const statusLabel = normalizedStatus.charAt(0) + normalizedStatus.slice(1).toLowerCase();
     const endDate = parseAuctionDate(auction.endTime);
-    const remainingMs = endDate.getTime() - nowMs;
-    const hasReachedEndTime = Number.isFinite(remainingMs) && remainingMs <= 0;
+    const remainingMs = endDate ? endDate.getTime() - nowMs : Number.POSITIVE_INFINITY;
+    const hasReachedEndTime = endDate ? remainingMs <= 0 : false;
 
     // isClosed is determined ONLY by the backend status, NOT by time comparison.
     // This prevents active auctions from being falsely marked as "Ended" due to
