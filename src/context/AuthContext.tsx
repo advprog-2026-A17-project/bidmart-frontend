@@ -7,6 +7,7 @@ import { getPersistentItem, setPersistentItem, removePersistentItem } from '../u
 const API_PATH_PREFIX = '/api/v1/';
 type AccountRole = 'BUYER' | 'SELLER';
 const SESSION_REFRESH_MIN_INTERVAL_MS = 60000;
+const DEFAULT_SESSION_WINDOW_SECONDS = 900;
 
 const trustedApiPath = (input: RequestInfo | URL): string => {
     const rawUrl = input instanceof Request ? input.url : input.toString();
@@ -91,6 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const savedUser = getPersistentItem('auth_user');
         return resolveActiveRole(savedUser ? JSON.parse(savedUser) as AuthUser : null, savedRole);
     });
+    const sessionWindowSecondsRef = useRef(DEFAULT_SESSION_WINDOW_SECONDS);
 
     useEffect(() => {
         if (user) {
@@ -112,11 +114,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [user, accessToken, refreshToken, sessionExpiresAt, activeRole]);
 
     const login = useCallback((payload: AuthLoginResult) => {
+        sessionWindowSecondsRef.current = payload.expiresIn > 0 ? payload.expiresIn : DEFAULT_SESSION_WINDOW_SECONDS;
+        const accessWindowExpiresAt = Date.now() + (sessionWindowSecondsRef.current * 1000);
+        const refreshWindowExpiresAt = payload.refreshExpiresAt || Number.MAX_SAFE_INTEGER;
+        const nextSessionExpiresAt = Math.min(accessWindowExpiresAt, refreshWindowExpiresAt);
+
         setUser(payload.user);
         setAccessToken(payload.accessToken);
         setRefreshToken(payload.refreshToken);
         setTokenId(extractTokenIdFromJwt(payload.accessToken));
-        setSessionExpiresAt(payload.refreshExpiresAt || null);
+        setSessionExpiresAt(Number.isFinite(nextSessionExpiresAt) ? nextSessionExpiresAt : null);
         setActiveRole(resolveActiveRole(payload.user, getPersistentItem('active_role')));
     }, []);
 

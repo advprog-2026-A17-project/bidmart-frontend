@@ -11,6 +11,7 @@ import { buildAuctionCardMeta } from '../../auction/utils/auction-card-meta';
 import { biddingListingPath } from '../../auction/utils/bidding-paths';
 import { activeListingStatuses, catalogueListingToAuction } from '../utils/listing-to-auction';
 import { useNowTick } from '../../../hooks/useNowTick';
+import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
 
 type ListingDetail = {
     id: string | number;
@@ -56,17 +57,10 @@ type AuctionSnapshotResponse = {
     minimum_increment_cents?: number;
 };
 
-const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE', 'CLOSED', 'WON', 'UNSOLD']);
-
-const fallbackImage = (id: string | number): string =>
-    `https://picsum.photos/seed/${encodeURIComponent(String(id))}/960/720`;
 
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
     meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
-
-const hasReachedEndTime = (endTime: string | null | undefined, nowMs: number): boolean =>
-    endTime ? new Date(endTime).getTime() <= nowMs : false;
 
 const toIsoFromUnixSeconds = (value?: number): string | undefined => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
@@ -76,6 +70,12 @@ const toIsoFromUnixSeconds = (value?: number): string | undefined => {
 const centsToAmount = (value?: number | null): number | undefined => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
     return value / 100;
+};
+
+const toIsoDate = (value?: string | null): string | null => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 };
 
 const ListingDetailSkeleton = () => (
@@ -105,6 +105,28 @@ const ListingDetailPage: React.FC = () => {
     const nowMs = useNowTick();
 
     const listingId = id ? String(id) : '';
+
+    const ensureAuctionSession = useCallback(async (listingPayload: ListingDetail): Promise<boolean> => {
+        try {
+            const response = await authenticatedFetch(apiUrl('/api/v1/listings'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    listingId: String(listingPayload.id),
+                    sellerId: listingPayload.sellerId,
+                    auctionType: 'ENGLISH',
+                    startingPrice: listingPayload.startingPrice,
+                    reservePrice: listingPayload.reservePrice ?? listingPayload.startingPrice,
+                    minimumIncrement: listingPayload.minimumIncrement ?? 1,
+                    startTime: new Date().toISOString(),
+                    endTime: toIsoDate(listingPayload.endTime),
+                }),
+            });
+            return response.ok;
+        } catch {
+            return false;
+        }
+    }, [authenticatedFetch]);
 
     const fetchAuctionSnapshotPatch = useCallback(async (): Promise<Partial<ListingDetail> | null> => {
         if (!listingId) return null;
@@ -156,7 +178,14 @@ const ListingDetailPage: React.FC = () => {
                 throw new Error('Listing was not found.');
             }
 
-            const auctionPatch = await fetchAuctionSnapshotPatch();
+            let auctionPatch = await fetchAuctionSnapshotPatch();
+            const listingIsLive = activeListingStatuses.has((listingPayload.status ?? '').toUpperCase());
+            if (!auctionPatch && listingIsLive) {
+                const ensured = await ensureAuctionSession(listingPayload);
+                if (ensured) {
+                    auctionPatch = await fetchAuctionSnapshotPatch();
+                }
+            }
             const mergedListing = auctionPatch ? { ...listingPayload, ...auctionPatch } : listingPayload;
             setListing(mergedListing);
 
@@ -185,7 +214,7 @@ const ListingDetailPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [fetchAuctionSnapshotPatch, listingId]);
+    }, [ensureAuctionSession, fetchAuctionSnapshotPatch, listingId]);
 
     useEffect(() => {
         void fetchListing();
@@ -222,7 +251,7 @@ const ListingDetailPage: React.FC = () => {
 
     const imageSrc = useMemo(() => {
         if (!listing) return '';
-        return listing.imageUrl?.trim() || fallbackImage(listing.id);
+        return listing.imageUrl?.trim() || NO_IMAGE_PLACEHOLDER;
     }, [listing]);
 
     const listingMeta = listing ? buildAuctionCardMeta(catalogueListingToAuction(listing), nowMs) : null;
@@ -234,14 +263,6 @@ const ListingDetailPage: React.FC = () => {
             PUBLIC_LISTING_STATUSES.has((listing.status ?? '').toUpperCase())
         )
     );
-    const canSettle = Boolean(
-        isSeller &&
-        listing &&
-        listingMeta &&
-        hasReachedEndTime(listing.endTime, nowMs) &&
-        !CLOSED_STATUSES.has((listing.status ?? '').toUpperCase())
-    );
-
     const placeBid = async () => {
         const amount = toMoneyAmount(bidInput);
         if (!amount || !listingId) return;
@@ -249,13 +270,27 @@ const ListingDetailPage: React.FC = () => {
             setError('Please sign in before placing a bid.');
             return;
         }
+        if (isSeller) {
+            setError('Sellers cannot bid on their own listings.');
+            return;
+        }
 
         try {
-            const response = await authenticatedFetch(apiUrl(biddingListingPath(listingId, '/bids')), {
+            let response = await authenticatedFetch(apiUrl(biddingListingPath(listingId, '/bids')), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ bidderId: user.id, bidAmount: amount }),
             });
+            if (response.status === 404 && listing) {
+                const ensured = await ensureAuctionSession(listing);
+                if (ensured) {
+                    response = await authenticatedFetch(apiUrl(biddingListingPath(listingId, '/bids')), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ bidderId: user.id, bidAmount: amount }),
+                    });
+                }
+            }
             if (!response.ok) {
                 throw new Error(await readApiError(response, 'Bid placement failed'));
             }
@@ -263,22 +298,6 @@ const ListingDetailPage: React.FC = () => {
             await fetchListing();
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Bid placement failed.');
-        }
-    };
-
-    const settleListing = async () => {
-        if (!listingId) return;
-        try {
-            const response = await authenticatedFetch(apiUrl(biddingListingPath(listingId, '/close')), {
-                method: 'POST',
-            });
-            if (!response.ok) {
-                throw new Error(await readApiError(response, 'Settlement failed'));
-            }
-            setError(null);
-            await fetchListing();
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Settlement failed.');
         }
     };
 
@@ -326,7 +345,7 @@ const ListingDetailPage: React.FC = () => {
                             alt={listing.title}
                             onError={(event) => {
                                 event.currentTarget.onerror = null;
-                                event.currentTarget.src = fallbackImage(listing.id);
+                                event.currentTarget.src = NO_IMAGE_PLACEHOLDER;
                             }}
                         />
                         <div className="listing-detail-badges">
@@ -360,7 +379,7 @@ const ListingDetailPage: React.FC = () => {
                 </section>
 
                 <div className="auction-side-stack">
-                    {isLive ? (
+                    {isLive && !isSeller ? (
                         <aside className="bid-console">
                             <div className={`bid-console-status ${listingMeta.isClosed ? 'bid-console-status-closed' : ''}`}>
                                 <span className="material-symbols-outlined" aria-hidden="true">
@@ -409,20 +428,16 @@ const ListingDetailPage: React.FC = () => {
                                         </button>
                                     ))}
                                 </div>
-                                {isSeller && (
-                                    <div className="seller-settlement-box">
-                                        <p className="text-muted">Settlement is available after the listing end time.</p>
-                                        <button
-                                            type="button"
-                                            className="secondary-button"
-                                            onClick={settleListing}
-                                            disabled={!canSettle}
-                                        >
-                                            Settle Listing
-                                        </button>
-                                    </div>
-                                )}
                             </div>
+                        </aside>
+                    ) : isLive && isSeller ? (
+                        <aside className="panel section-stack">
+                            <p className="eyebrow">Seller view</p>
+                            <h2>Your auction is live</h2>
+                            <p className="text-muted">
+                                Sellers cannot bid on their own listings. The auction will close automatically when the timer ends,
+                                and the winner/order flow is handled through auction events.
+                            </p>
                         </aside>
                     ) : (
                         <aside className="panel section-stack">
