@@ -108,6 +108,29 @@ const OrdersPage: React.FC = () => {
         }
     };
 
+    if (!user) {
+        return (
+            <div className="page-wrap">
+                <section className="page-head">
+                    <h1>Orders</h1>
+                    <p>Track and manage your auction orders</p>
+                </section>
+
+                <section className="panel access-panel center-content">
+                    <span className="hero-badge">Account Required</span>
+                    <h2>Sign in to view your orders</h2>
+                    <p className="text-muted">
+                        Orders are created automatically after you win an auction or a buyer wins your listing.
+                    </p>
+                    <div className="access-actions">
+                        <Link className="primary-button" to="/login">Sign In or Register</Link>
+                        <Link className="secondary-button" to="/">Explore Auctions</Link>
+                    </div>
+                </section>
+            </div>
+        );
+    }
+
     return (
         <div className="page-wrap">
             <section className="page-head studio-head">
