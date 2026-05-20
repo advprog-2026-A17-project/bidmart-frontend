@@ -76,7 +76,14 @@ export const authenticateAdminViaApi = async (request: APIRequestContext) => {
   });
 
   expect(response.ok()).toBeTruthy();
-  const payload = await response.json() as any;
+  const payload = await response.json() as { 
+    accessToken?: string; 
+    user?: { 
+      id: string; 
+      email?: string; 
+    } 
+  } | null;
+
   if (!payload?.accessToken || !payload?.user?.id) {
     throw new Error('Admin login did not return access token and user id.');
   }
