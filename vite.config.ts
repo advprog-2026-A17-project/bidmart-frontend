@@ -46,7 +46,15 @@ export default defineConfig(() => {
   return {
     plugins: [react()],
     define: {
+      global: 'globalThis',
       'import.meta.env.VITE_API_BASE_URL': JSON.stringify(apiBaseUrl),
+    },
+    optimizeDeps: {
+      esbuildOptions: {
+        define: {
+          global: 'globalThis',
+        },
+      },
     },
     server: {
       proxy: {

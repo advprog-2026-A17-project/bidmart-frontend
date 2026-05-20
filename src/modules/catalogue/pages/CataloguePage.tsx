@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiUrl } from '../../../config/api';
 import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
+import { CATALOGUE_CATEGORIES_TREE_PATH } from '../api/endpoints';
 import { Link } from 'react-router-dom';
+import { formatMoney, normalizeMoneyInput } from '../../../utils/money';
+import { useNowTick } from '../../../hooks/useNowTick';
+import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
+import { flattenCategoryTree, type CategoryNode, type CategoryOption } from '../utils/categories';
 
 interface CatalogueItem {
     id: number | string;
@@ -15,9 +20,11 @@ interface CatalogueItem {
     endTime: string;
     hasBids: boolean;
 }
+const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE']);
 
 interface SearchParams {
     keyword: string;
+    category: string;
     minPrice: string;
     maxPrice: string;
 }
@@ -28,21 +35,19 @@ const CataloguePage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [searchParams, setSearchParams] = useState<SearchParams>({
         keyword: '',
+        category: '',
         minPrice: '',
         maxPrice: '',
     });
     const [appliedParams, setAppliedParams] = useState<SearchParams>({
         keyword: '',
+        category: '',
         minPrice: '',
         maxPrice: '',
     });
     const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
-
-    const formatMoney = (value: number | undefined) =>
-        `$${(value ?? 0).toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        })}`;
+    const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
+    const nowMs = useNowTick();
 
     const parseCatalogueItems = (payload: unknown): CatalogueItem[] => {
         if (Array.isArray(payload)) {
@@ -59,6 +64,7 @@ const CataloguePage: React.FC = () => {
         setError(null);
         const query = new URLSearchParams();
         if (params.keyword) query.append('keyword', params.keyword);
+        if (params.category) query.append('category', params.category);
         if (params.minPrice) query.append('minPrice', params.minPrice);
         if (params.maxPrice) query.append('maxPrice', params.maxPrice);
 
@@ -85,19 +91,55 @@ const CataloguePage: React.FC = () => {
         fetchItems(appliedParams);
     }, [appliedParams, fetchItems]);
 
+    useEffect(() => {
+        let cancelled = false;
+        const fetchCategories = async () => {
+            try {
+                const response = await fetch(apiUrl(CATALOGUE_CATEGORIES_TREE_PATH));
+                if (!response.ok) return;
+                const payload = await response.json() as CategoryNode[];
+                if (!cancelled) {
+                    setCategoryOptions(flattenCategoryTree(payload));
+                }
+            } catch {
+                if (!cancelled) {
+                    setCategoryOptions([]);
+                }
+            }
+        };
+        void fetchCategories();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         setAppliedParams({ ...searchParams });
     };
 
     const handleReset = () => {
-        const empty: SearchParams = { keyword: '', minPrice: '', maxPrice: '' };
+        const empty: SearchParams = { keyword: '', category: '', minPrice: '', maxPrice: '' };
         setSearchParams(empty);
         setAppliedParams(empty);
     };
 
-    const renderTimeLeft = (endTime: string) => {
-        const diff = new Date(endTime).getTime() - Date.now();
+    const renderTimeLeft = (endTime: string, status: string) => {
+        const normalizedStatus = (status ?? '').toUpperCase();
+        const ACTIVE_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE']);
+        const CLOSED_STATUSES_LOCAL = new Set(['CLOSED', 'ENDED', 'WON', 'UNSOLD']);
+
+        // If backend says it's definitively closed, always show 'Ended'
+        if (CLOSED_STATUSES_LOCAL.has(normalizedStatus)) return 'Ended';
+
+        if (!endTime) return 'Live';
+        const endMs = new Date(endTime).getTime();
+        if (!Number.isFinite(endMs)) return 'Live';
+        const diff = endMs - nowMs;
+
+        // If time has passed but status is still active → awaiting settlement, show 'Live'
+        if (diff <= 0 && ACTIVE_STATUSES.has(normalizedStatus)) return 'Live';
+
         if (diff <= 0) return 'Ended';
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -105,32 +147,31 @@ const CataloguePage: React.FC = () => {
         return `${mins}m left`;
     };
 
-    const buildFallbackImage = (itemId: CatalogueItem['id']) =>
-        `https://picsum.photos/seed/${encodeURIComponent(String(itemId))}/640/480`;
-
     const resolveImageSrc = (item: CatalogueItem) => {
         const url = item.imageUrl?.trim();
-        return url ? url : buildFallbackImage(item.id);
+        return url ? url : NO_IMAGE_PLACEHOLDER;
     };
 
     const handleImageError = (
         event: React.SyntheticEvent<HTMLImageElement>,
-        itemId: CatalogueItem['id']
+        _itemId: CatalogueItem['id']
     ) => {
         const target = event.currentTarget;
         target.onerror = null;
-        target.src = buildFallbackImage(itemId);
+        target.src = NO_IMAGE_PLACEHOLDER;
     };
 
-    const visibleItems = [...items].sort((a, b) => {
-        if (sortBy === 'price-asc') return a.currentPrice - b.currentPrice;
-        if (sortBy === 'price-desc') return b.currentPrice - a.currentPrice;
-        return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
-    });
-    const liveItems = items.filter((item) => item.status === 'ACTIVE' || item.status === 'AVAILABLE');
+    const visibleItems = [...items]
+        .filter((item) => PUBLIC_LISTING_STATUSES.has((item.status ?? '').toUpperCase()))
+        .sort((a, b) => {
+            if (sortBy === 'price-asc') return a.currentPrice - b.currentPrice;
+            if (sortBy === 'price-desc') return b.currentPrice - a.currentPrice;
+            return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
+        });
+    const liveItems = visibleItems;
     const featuredItem = visibleItems[0];
     const hotLots = visibleItems.slice(1, 4);
-    const categoryCount = new Set(items.map((item) => item.category).filter(Boolean)).size;
+    const categoryCount = new Set(visibleItems.map((item) => item.category).filter(Boolean)).size;
 
     const catalogueSkeleton = (
         <ul className="catalog-grid skeleton-grid" aria-busy="true" aria-label="Loading listings">
@@ -180,7 +221,7 @@ const CataloguePage: React.FC = () => {
                     </div>
                     <div>
                         <span className="metric-label">Ending Next</span>
-                        <strong>{loading || !featuredItem ? '--' : renderTimeLeft(featuredItem.endTime)}</strong>
+                        <strong>{loading || !featuredItem ? '--' : renderTimeLeft(featuredItem.endTime, featuredItem.status)}</strong>
                     </div>
                 </div>
             </section>
@@ -198,6 +239,21 @@ const CataloguePage: React.FC = () => {
                         />
                     </label>
                     <label className="field">
+                        <span>Category</span>
+                        <select
+                            className="form-input"
+                            value={searchParams.category}
+                            onChange={(e) => setSearchParams((p) => ({ ...p, category: e.target.value }))}
+                        >
+                            <option value="">All categories</option>
+                            {categoryOptions.map((category) => (
+                                <option key={`${category.id}-${category.label}`} value={category.name}>
+                                    {category.label}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="field">
                         <span>Min Price</span>
                         <input
                             className="form-input"
@@ -206,6 +262,7 @@ const CataloguePage: React.FC = () => {
                             value={searchParams.minPrice}
                             min={0}
                             onChange={(e) => setSearchParams((p) => ({ ...p, minPrice: e.target.value }))}
+                            onBlur={() => setSearchParams((p) => ({ ...p, minPrice: p.minPrice ? normalizeMoneyInput(p.minPrice) : '' }))}
                         />
                     </label>
                     <label className="field">
@@ -217,6 +274,7 @@ const CataloguePage: React.FC = () => {
                             value={searchParams.maxPrice}
                             min={0}
                             onChange={(e) => setSearchParams((p) => ({ ...p, maxPrice: e.target.value }))}
+                            onBlur={() => setSearchParams((p) => ({ ...p, maxPrice: p.maxPrice ? normalizeMoneyInput(p.maxPrice) : '' }))}
                         />
                     </label>
                     <label className="field">
@@ -258,7 +316,7 @@ const CataloguePage: React.FC = () => {
                                     <span className="hero-badge">Hero Lot</span>
                                     <span className="time-badge">
                                         <span className="material-symbols-outlined" aria-hidden="true">timer</span>
-                                        {renderTimeLeft(featuredItem.endTime)}
+                                        {renderTimeLeft(featuredItem.endTime, featuredItem.status)}
                                     </span>
                                 </div>
                                 <div className="hero-lot-content">
@@ -294,7 +352,7 @@ const CataloguePage: React.FC = () => {
                                                 <div>
                                                     <span className="time-badge compact">
                                                         <span className="material-symbols-outlined" aria-hidden="true">timer</span>
-                                                        {renderTimeLeft(item.endTime)}
+                                                        {renderTimeLeft(item.endTime, item.status)}
                                                     </span>
                                                     <strong>{item.title}</strong>
                                                     <span className="text-muted">{formatMoney(item.currentPrice)}</span>
@@ -347,7 +405,7 @@ const CataloguePage: React.FC = () => {
                                         <div className="catalog-card-actions">
                                             <span className="time-badge compact">
                                                 <span className="material-symbols-outlined" aria-hidden="true">schedule</span>
-                                                {renderTimeLeft(item.endTime)}
+                                                {renderTimeLeft(item.endTime, item.status)}
                                             </span>
                                             <Link to={`/listings/${item.id}`} className="primary-button card-cta">
                                                 <span className="material-symbols-outlined" aria-hidden="true">gavel</span>

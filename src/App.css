@@ -180,6 +180,30 @@ button {
   gap: 10px;
 }
 
+.session-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-low);
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.session-timer .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.session-timer-warning {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .app-user-pill {
   display: inline-flex;
   align-items: center;
@@ -435,6 +459,12 @@ button {
   box-shadow: 0 0 0 3px rgba(0, 81, 213, 0.14);
 }
 
+.form-input-error,
+.form-input-error:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(186, 26, 26, 0.12);
+}
+
 .form-textarea {
   min-height: 132px;
   resize: vertical;
@@ -460,6 +490,12 @@ button {
   margin-bottom: 8px;
   color: var(--muted);
   font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 0.8rem;
   font-weight: 800;
 }
 
@@ -1266,6 +1302,13 @@ button {
   color: var(--secondary);
 }
 
+.chip-grid-error {
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 6px;
+  background: var(--danger-soft);
+}
+
 .upload-zone {
   position: relative;
   display: grid;
@@ -1734,6 +1777,82 @@ button {
   color: var(--muted);
 }
 
+.notification-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.notification-status {
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.notification-status-read {
+  background: var(--surface-low);
+  color: var(--muted);
+}
+
+.notification-status-unread {
+  background: var(--secondary-soft);
+  color: var(--secondary);
+}
+
+.notification-unread {
+  border-color: rgba(0, 81, 213, 0.35);
+  background: rgba(219, 231, 255, 0.3);
+}
+
+.notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notification-action-button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 4px 8px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-action-button:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+
+.notification-detail {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.notification-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notification-detail-content {
+  display: grid;
+  gap: 6px;
+}
+
+.notification-detail-content p {
+  margin: 0;
+  color: var(--muted);
+}
+
 .notification-error,
 .toast-error {
   background: var(--danger-soft);
@@ -1877,6 +1996,57 @@ button {
 .oauth-button-disabled {
   opacity: 0.6;
   pointer-events: none;
+}
+
+.connected-accounts-list {
+  display: grid;
+  gap: 12px;
+}
+
+.connected-account-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-low);
+  transition: border-color 0.16s ease;
+}
+
+.connected-account-item:hover {
+  border-color: var(--border);
+}
+
+.connected-account-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.connected-account-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+}
+
+.connected-account-details strong {
+  display: block;
+  font-size: 1rem;
+  color: var(--primary);
+}
+
+.connected-account-details span {
+  font-size: 0.82rem;
+}
+
+.oauth-button-standalone {
+  display: block;
+  place-items: flex-start;
 }
 
 .oauth-loading,
@@ -2215,6 +2385,10 @@ button {
   gap: 14px;
 }
 
+.seller-management-panel .management-list {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
 .management-card {
   display: grid;
   gap: 14px;
@@ -2222,6 +2396,21 @@ button {
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   background: var(--surface);
+}
+
+.management-card-image {
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  background: var(--surface-low);
+  border: 1px solid var(--border-soft);
+}
+
+.management-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .management-card h3 {
@@ -2233,6 +2422,12 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.field-hint {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
 }
 
 .visually-hidden {
@@ -2251,6 +2446,42 @@ button {
   display: grid;
   gap: 0;
   overflow-x: auto;
+}
+
+.panel-stack {
+    display: grid;
+    gap: 1rem;
+}
+
+.form-grid {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.form-grid label {
+    display: grid;
+    gap: 0.4rem;
+    font-weight: 600;
+}
+
+.form-grid input {
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid #d4d7de;
+}
+
+.danger-button {
+    background: #b42318;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.65rem 0.9rem;
+    font-weight: 600;
+}
+
+.danger-button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
 }
 
 .analytics-row {

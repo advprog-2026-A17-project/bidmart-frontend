@@ -9,7 +9,10 @@ interface BidmartNotification {
     title: string;
     message: string;
     type: string;
+    status: 'READ' | 'UNREAD';
     read: boolean;
+    sourceEventId?: string;
+    readAt?: string | null;
     createdAt: string;
 }
 
@@ -23,7 +26,10 @@ const notificationFromPayload = (payload: unknown): BidmartNotification => {
         title: String(source.title ?? source.type ?? 'Notification'),
         message: String(source.message ?? ''),
         type: String(source.type ?? 'INFO'),
+        status: source.read ? 'READ' : 'UNREAD',
         read: Boolean(source.read ?? false),
+        sourceEventId: source.sourceEventId ? String(source.sourceEventId) : undefined,
+        readAt: source.readAt ? String(source.readAt) : null,
         createdAt: String(source.createdAt ?? new Date().toISOString()),
     };
 };
@@ -36,8 +42,11 @@ const NotificationCenter = () => {
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
+    const [selectedNotification, setSelectedNotification] = useState<BidmartNotification | null>(null);
+    const [isDetailLoading, setIsDetailLoading] = useState(false);
     const popoverRef = useRef<HTMLDivElement | null>(null);
     const notifications = user ? storedNotifications : [];
+    const unreadCount = notifications.filter((item) => !item.read).length;
 
     const prependNotification = useCallback((payload: unknown) => {
         const next = notificationFromPayload(payload);
@@ -45,8 +54,16 @@ const NotificationCenter = () => {
             if (current.some((item) => item.id === next.id)) {
                 return current;
             }
-            return [next, ...current].slice(0, 5);
+            return [next, ...current].slice(0, 20);
         });
+    }, []);
+
+    const replaceNotification = useCallback((updated: BidmartNotification) => {
+        setStoredNotifications((current) => {
+            const next = current.map((item) => item.id === updated.id ? updated : item);
+            return next.some((item) => item.id === updated.id) ? next : [updated, ...next];
+        });
+        setSelectedNotification((current) => current?.id === updated.id ? updated : current);
     }, []);
 
     useEffect(() => {
@@ -63,7 +80,7 @@ const NotificationCenter = () => {
                     return;
                 }
                 const payload = await response.json() as BidmartNotification[] | { notifications?: BidmartNotification[] };
-                setStoredNotifications(Array.isArray(payload) ? payload.slice(0, 5) : (payload.notifications ?? []).slice(0, 5));
+                setStoredNotifications(Array.isArray(payload) ? payload.slice(0, 20) : (payload.notifications ?? []).slice(0, 20));
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : 'Notification lookup failed');
             } finally {
@@ -99,6 +116,43 @@ const NotificationCenter = () => {
         return () => document.removeEventListener('mousedown', handlePointerDown);
     }, [isOpen]);
 
+    const loadNotificationDetail = useCallback(async (notificationId: string) => {
+        setIsDetailLoading(true);
+        try {
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/notifications/${notificationId}`));
+            if (!response.ok) {
+                setError(await readApiError(response, 'Notification detail lookup failed'));
+                return;
+            }
+            const payload = await response.json();
+            const detail = notificationFromPayload(payload);
+            replaceNotification(detail);
+            setSelectedNotification(detail);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Notification detail lookup failed');
+        } finally {
+            setIsDetailLoading(false);
+        }
+    }, [authenticatedFetch, replaceNotification]);
+
+    const updateReadStatus = useCallback(async (notificationId: string, read: boolean) => {
+        try {
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/notifications/${notificationId}/read-status`), {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ read }),
+            });
+            if (!response.ok) {
+                setError(await readApiError(response, 'Notification status update failed'));
+                return;
+            }
+            const payload = await response.json();
+            replaceNotification(notificationFromPayload(payload));
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Notification status update failed');
+        }
+    }, [authenticatedFetch, replaceNotification]);
+
     if (!user) {
         return null;
     }
@@ -130,8 +184,8 @@ const NotificationCenter = () => {
                         strokeWidth="1.8"
                     />
                 </svg>
-                {notifications.length > 0 && (
-                    <span className="notification-badge">{Math.min(notifications.length, 9)}</span>
+                {unreadCount > 0 && (
+                    <span className="notification-badge">{Math.min(unreadCount, 9)}</span>
                 )}
             </button>
 
@@ -153,15 +207,69 @@ const NotificationCenter = () => {
                             </div>
                         ) : notifications.length > 0 ? (
                             notifications.map((item) => (
-                                <article key={item.id} className={`notification-item notification-${item.type.toLowerCase()}`}>
-                                    <strong>{item.title}</strong>
+                                <article
+                                    key={item.id}
+                                    className={`notification-item notification-${item.type.toLowerCase()} ${item.read ? 'notification-read' : 'notification-unread'}`}
+                                >
+                                    <div className="notification-item-header">
+                                        <strong>{item.title}</strong>
+                                        <span className={`notification-status ${item.read ? 'notification-status-read' : 'notification-status-unread'}`}>
+                                            {item.status}
+                                        </span>
+                                    </div>
                                     <span>{item.message}</span>
+                                    <div className="notification-actions">
+                                        <button
+                                            type="button"
+                                            className="notification-action-button"
+                                            onClick={() => void loadNotificationDetail(item.id)}
+                                        >
+                                            View details
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="notification-action-button"
+                                            onClick={() => void updateReadStatus(item.id, !item.read)}
+                                        >
+                                            Mark as {item.read ? 'unread' : 'read'}
+                                        </button>
+                                    </div>
                                 </article>
                             ))
                         ) : (
                             <div className="notification-empty">No notifications yet.</div>
                         )}
                     </div>
+                    {selectedNotification && (
+                        <section className="notification-detail" aria-label="Notification detail">
+                            <div className="notification-detail-header">
+                                <strong>Detail</strong>
+                                <button
+                                    type="button"
+                                    className="notification-action-button"
+                                    onClick={() => setSelectedNotification(null)}
+                                >
+                                    Close
+                                </button>
+                            </div>
+                            {isDetailLoading ? (
+                                <div className="notification-skeleton" aria-busy="true" aria-label="Loading notification detail">
+                                    <span className="skeleton-line" />
+                                    <span className="skeleton-line skeleton-line-medium" />
+                                </div>
+                            ) : (
+                                <div className="notification-detail-content">
+                                    <p><strong>{selectedNotification.title}</strong></p>
+                                    <p>{selectedNotification.message}</p>
+                                    <p>Status: {selectedNotification.read ? 'READ' : 'UNREAD'}</p>
+                                    <p>Type: {selectedNotification.type}</p>
+                                    <p>Created: {new Date(selectedNotification.createdAt).toLocaleString()}</p>
+                                    {selectedNotification.readAt && <p>Read at: {new Date(selectedNotification.readAt).toLocaleString()}</p>}
+                                    {selectedNotification.sourceEventId && <p>Source event: {selectedNotification.sourceEventId}</p>}
+                                </div>
+                            )}
+                        </section>
+                    )}
                 </section>
             )}
         </div>

@@ -13,21 +13,21 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   const authApi = read('./src/modules/auth/utils/auth-api.ts');
   const appStyles = read('./src/App.css');
   const envExample = read('./.env.example');
-  const auctionDetail = read('./src/modules/auction/pages/AuctionDetailPage.tsx');
+  const listingDetail = read('./src/modules/catalogue/pages/ListingDetailPage.tsx');
   const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
   const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
   const app = read('./src/App.tsx');
   const globalErrorBoundary = read('./src/components/GlobalErrorBoundary.tsx');
   const packageJson = read('./package.json');
 
-  assert.doesNotMatch(auctionDetail, /DUMMY_BIDDER_ID/);
+  assert.doesNotMatch(listingDetail, /DUMMY_BIDDER_ID/);
   assert.doesNotMatch(walletPage, /DUMMY_USER_ID|user-001/);
   assert.match(authContext, /refreshAccessToken/);
   assert.doesNotMatch(authProvider, /localStorage|sessionStorage/);
   assert.match(authProvider, /trustedApiPath/);
   assert.match(authProvider, /useMemo/);
   assert.match(authProvider, /\/api\/v1\/auth\/refresh/);
-  assert.match(auctionDetail, /useAuthenticatedFetch/);
+  assert.match(listingDetail, /useAuthenticatedFetch/);
   assert.match(walletPage, /useAuthenticatedFetch/);
   assert.match(loginPage, /twoFactorChallenge/);
   assert.match(loginPage, /\/api\/v1\/auth\/2fa\/login-verify/);
@@ -52,15 +52,16 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(globalErrorBoundary, /role="alert"/);
   assert.match(globalErrorBoundary, /toast-error/);
   assert.match(sellPage, /\/api\/v1\/catalogue\/listings/);
-  assert.match(sellPage, /\/api\/v1\/auctions/);
+  assert.doesNotMatch(sellPage, /\/api\/v1\/auctions/);
   assert.doesNotMatch(sellPage, /categoryId/);
   assert.match(sellPage, /readImageFile/);
   assert.match(sellPage, /type="file"/);
-  assert.match(sellPage, /cancelListing/);
-  assert.match(auctionDetail, /\/close/);
+  assert.match(sellPage, /publishDraftListing/);
+  assert.doesNotMatch(sellPage, /\/deactivate/);
+  assert.match(listingDetail, /\/close/);
   assert.match(walletPage, /\/detail/);
-  assert.match(auctionDetail, /useAuctionRealtime/);
-  assert.match(auctionDetail + walletPage + sellPage, /readApiError/);
+  assert.match(listingDetail, /useAuctionRealtime/);
+  assert.match(listingDetail + walletPage + sellPage, /readApiError/);
   assert.match(packageJson, /"test"/);
 });
 
@@ -73,11 +74,12 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
   const app = read('./src/App.tsx');
 
   assert.match(sellPage, /publishCreatedListing/);
-  assert.match(sellPage, /markAuctionCreated/);
-  assert.match(sellPage, /rollbackCreatedListing/);
+  assert.match(sellPage, /createListingPayload/);
+  assert.match(sellPage, /publishDraftListing/);
   assert.match(sellPage, /\/publish/);
-  assert.match(sellPage, /auction-created/);
-  assert.match(sellPage, /auctionType:\s*'ENGLISH'/);
+  assert.doesNotMatch(sellPage, /auction-created/);
+  assert.doesNotMatch(sellPage, /Continue to Auction Setup/);
+  assert.doesNotMatch(sellPage, /auctionType:\s*'ENGLISH'/);
 
   assert.match(walletPage, /toAmountCents/);
   assert.match(walletPage, /Wallet Account/);
@@ -117,13 +119,13 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
 
 test('frontend uses skeleton loading states for core async surfaces', () => {
   const cataloguePage = read('./src/modules/catalogue/pages/CataloguePage.tsx');
-  const auctionDetail = read('./src/modules/auction/pages/AuctionDetailPage.tsx');
+  const listingDetail = read('./src/modules/catalogue/pages/ListingDetailPage.tsx');
   const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
   const notificationCenter = read('./src/modules/notifications/components/NotificationCenter.tsx');
   const appStyles = read('./src/App.css');
 
   assert.match(cataloguePage, /aria-label="Loading listings"/);
-  assert.match(auctionDetail, /aria-label="Loading auctions"/);
+  assert.match(listingDetail, /aria-label="Loading listing"/);
   assert.match(walletPage, /aria-label="Loading wallet"/);
   assert.match(notificationCenter, /aria-label="Loading notifications"/);
   assert.match(appStyles, /skeleton-pulse/);

@@ -1,3 +1,5 @@
+import { formatCents as formatIdrCents } from '../../../utils/money';
+
 export interface PaymentIntent {
     paymentId: string;
     amountCents: number;
@@ -13,7 +15,7 @@ export interface PaymentIntent {
 const PAYMENT_TTL_MS = 10 * 60 * 1000;
 const paymentExpiryStorageKey = (paymentId: string): string => `bidmart:payment-expiry:${paymentId}`;
 
-export const formatCents = (value: number | undefined): string => `$${((value ?? 0) / 100).toFixed(2)}`;
+export const formatCents = (value: number | undefined): string => formatIdrCents(value);
 
 export const formatPaymentMethod = (value?: string | null): string =>
     (value ?? '')

@@ -33,7 +33,7 @@ const formatSessionDate = (dateString: string | undefined | null) => {
 };
 
 const ProfilePage: React.FC = () => {
-    const { user, logout } = useAuth() as { user: { email: string } | null; logout: () => void };
+    const { user, logout, updateUserProfile } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '';
     const [sessions, setSessions] = useState<Session[]>([]);
@@ -78,7 +78,7 @@ const ProfilePage: React.FC = () => {
             setError(null);
             try {
                 const response = await authenticatedFetch(
-                    gatewayUrl(`/api/v1/auth/profile?email=${encodeURIComponent(user.email)}`)
+                    gatewayUrl('/api/v1/auth/profile')
                 );
                 if (!response.ok) {
                     throw new Error(await readApiError(response, 'Profile lookup failed'));
@@ -93,6 +93,11 @@ const ProfilePage: React.FC = () => {
                 setDisplayName(fetchedName);
                 setAvatarUrl(fetchedAvatar);
                 setShippingAddress(fetchedAddress);
+                updateUserProfile({
+                    displayName: fetchedName || null,
+                    avatarUrl: fetchedAvatar || null,
+                    shippingAddress: fetchedAddress || null,
+                });
                 setOauthProvider(payload.oauthProvider ?? null);
                 setIsTwoFactorEnabled(payload.twoFactorEnabled === true);
                 
@@ -117,11 +122,11 @@ const ProfilePage: React.FC = () => {
         return () => {
             active = false;
         };
-    }, [authenticatedFetch, user]);
+    }, [authenticatedFetch, updateUserProfile, user]);
 
     useEffect(() => {
         if (!user) return;
-        authenticatedFetch(gatewayUrl(`/api/v1/auth/sessions?email=${encodeURIComponent(user.email)}`))
+        authenticatedFetch(gatewayUrl('/api/v1/auth/sessions'))
             .then(async (response) => {
                 if (!response.ok) throw new Error(await readApiError(response, 'Session lookup failed'));
                 return response.json();
@@ -175,6 +180,11 @@ const ProfilePage: React.FC = () => {
             setDisplayName(updatedName);
             setAvatarUrl(updatedAvatar);
             setShippingAddress(updatedAddress);
+            updateUserProfile({
+                displayName: updatedName || null,
+                avatarUrl: updatedAvatar || null,
+                shippingAddress: updatedAddress || null,
+            });
             setIsTwoFactorEnabled(payload.twoFactorEnabled === true);
             
             setOriginalProfile({
@@ -383,7 +393,6 @@ const ProfilePage: React.FC = () => {
     }
 
     const hasLinkedProvider = Boolean(oauthProvider);
-    const linkedProviderLabel = oauthProvider ? oauthProvider.toUpperCase() : '';
 
     return (
         <div className="page-wrap">
@@ -521,27 +530,44 @@ const ProfilePage: React.FC = () => {
             <div className="panel section-stack">
                 <h3>Connected Accounts</h3>
                 <p className="text-muted">
-                    Link Google so you can sign in with your Google account.
+                    Manage third-party login providers linked to your BidMart identity.
                 </p>
-                {!googleClientId && (
-                    <div className="text-muted">Google OAuth is not configured.</div>
-                )}
-                {googleClientId && hasLinkedProvider && (
-                    <div className="summary-box">
-                        <strong>{linkedProviderLabel} connected</strong>
-                        <span className="text-muted">You can sign in with this provider.</span>
+                <div className="connected-accounts-list">
+                    <div className="connected-account-item">
+                        <div className="connected-account-info">
+                            <div className="connected-account-icon">
+                                <span className="material-symbols-outlined" style={{ color: '#4285F4' }}>
+                                    account_circle
+                                </span>
+                            </div>
+                            <div className="connected-account-details">
+                                <strong>Google Account</strong>
+                                <span className="text-muted">
+                                    {hasLinkedProvider ? 'Primary login provider' : 'Sign in using your Google credentials'}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        {googleClientId && !hasLinkedProvider ? (
+                            <div className="connected-account-action">
+                                <GoogleLoginButton
+                                    clientId={googleClientId}
+                                    disabled={oauthLinkBusy}
+                                    onError={(message) => setError(message)}
+                                    onClearError={() => setError(null)}
+                                    onBusyChange={setOauthLinkBusy}
+                                    onCredential={handleGoogleLink}
+                                    className="oauth-button-standalone"
+                                    width={220}
+                                />
+                            </div>
+                        ) : hasLinkedProvider ? (
+                            <span className="status-badge status-AVAILABLE">Linked</span>
+                        ) : (
+                            <span className="text-muted">Not configured</span>
+                        )}
                     </div>
-                )}
-                {googleClientId && !hasLinkedProvider && (
-                    <GoogleLoginButton
-                        clientId={googleClientId}
-                        disabled={oauthLinkBusy}
-                        onError={(message) => setError(message)}
-                        onClearError={() => setError(null)}
-                        onBusyChange={setOauthLinkBusy}
-                        onCredential={handleGoogleLink}
-                    />
-                )}
+                </div>
             </div>
 
             <div className="panel section-stack">

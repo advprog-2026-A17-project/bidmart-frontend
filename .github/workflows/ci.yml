@@ -28,10 +28,19 @@ jobs:
         run: npm run lint
 
       - name: Run Tests
-        run: npm test
+        run: npm test 2>&1 | tee test-output.log
 
       - name: Build
         run: npm run build
+
+      - name: Upload Frontend Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-and-tests
+          path: |
+            test-output.log
+            dist/**
 
   sonarcloud:
     name: SonarCloud Code Analysis
