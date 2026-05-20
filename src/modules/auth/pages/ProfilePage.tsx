@@ -358,7 +358,7 @@ const ProfilePage: React.FC = () => {
                 } else {
                     localStorage.removeItem('token');
                     sessionStorage.clear();
-                    window.location.href = '/auth';
+                    window.location.href = '/login';
                 }
             } else {
                 setMessage('Session successfully revoked.');

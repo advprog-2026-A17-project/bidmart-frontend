@@ -48,6 +48,8 @@ const AdminAuthPage = () => {
     const [editRoleName, setEditRoleName] = useState('');
     const [editRolePermissions, setEditRolePermissions] = useState('');
     const [disableEmail, setDisableEmail] = useState('');
+    const [assignUserId, setAssignUserId] = useState('');
+    const [assignRoleName, setAssignRoleName] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -142,6 +144,34 @@ const AdminAuthPage = () => {
             await loadRoles();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to update role permissions');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const assignUserRole = async (event: FormEvent) => {
+        event.preventDefault();
+        setLoading(true);
+        clearFeedback();
+        try {
+            const userId = assignUserId.trim();
+            const role = assignRoleName.trim();
+            const response = await authenticatedFetch(
+                gatewayUrl(`/api/v1/auth/users/${encodeURIComponent(userId)}/roles`),
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role }),
+                }
+            );
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Failed to assign role'));
+            }
+            setMessage(`Role ${role} assigned to user ${userId}.`);
+            setAssignUserId('');
+            setAssignRoleName('');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to assign role');
         } finally {
             setLoading(false);
         }
@@ -262,6 +292,21 @@ const AdminAuthPage = () => {
                         <input value={editRolePermissions} onChange={(event) => setEditRolePermissions(event.target.value)} required />
                     </label>
                     <button className="primary-button" type="submit" disabled={loading}>Update Permissions</button>
+                </form>
+            </section>
+
+            <section className="panel">
+                <h3>Assign User Role</h3>
+                <form onSubmit={assignUserRole} className="form-grid">
+                    <label>
+                        User ID (UUID)
+                        <input value={assignUserId} onChange={(event) => setAssignUserId(event.target.value)} required />
+                    </label>
+                    <label>
+                        Role Name
+                        <input value={assignRoleName} onChange={(event) => setAssignRoleName(event.target.value)} required placeholder="BUYER, SELLER, ADMIN" />
+                    </label>
+                    <button className="primary-button" type="submit" disabled={loading}>Assign Role</button>
                 </form>
             </section>
 
