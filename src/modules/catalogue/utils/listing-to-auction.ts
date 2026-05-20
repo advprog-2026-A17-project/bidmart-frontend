@@ -17,7 +17,9 @@ export const catalogueListingToAuction = (listing: any): Auction => {
         currentHighestBid: hasBids ? (currentPrice ?? startingPrice) : null,
         minimumIncrement: Number(listing.minimumIncrement ?? 1),
         status: listing.status || 'UNKNOWN',
-        startTime: listing.startTime || new Date().toISOString(),
-        endTime: listing.endTime || new Date().toISOString(),
+        // Keep empty string fallback to avoid "ended now" false positives when
+        // upstream payload temporarily omits schedule fields.
+        startTime: listing.startTime || '',
+        endTime: listing.endTime || '',
     };
 };

@@ -15,6 +15,7 @@ export interface AuthLoginResult {
     refreshToken: string;
     tokenType: string;
     expiresIn: number;
+    refreshExpiresAt: number;
     user: AuthUser;
 }
 
@@ -23,6 +24,7 @@ export interface AuthContextType {
     accessToken: string | null;
     refreshToken: string | null;
     tokenId: string | null;
+    sessionExpiresAt: number | null;
     activeRole: 'BUYER' | 'SELLER' | null;
     login: (payload: AuthLoginResult) => void;
     logout: () => void;
@@ -41,6 +43,7 @@ export const AuthContext = createContext<AuthContextType>({
     accessToken: null,
     refreshToken: null,
     tokenId: null,
+    sessionExpiresAt: null,
     activeRole: null,
     login: () => {},
     logout: () => {},

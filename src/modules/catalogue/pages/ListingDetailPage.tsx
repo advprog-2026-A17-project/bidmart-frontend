@@ -40,6 +40,22 @@ type BidHistoryItem = {
     bid_time?: number;
 };
 
+type AuctionSnapshotResponse = {
+    status?: string;
+    endTime?: string;
+    end_time?: number;
+    startTime?: string;
+    start_time?: number;
+    currentHighestBid?: number | null;
+    current_highest_bid_cents?: number | null;
+    startingPrice?: number;
+    starting_price_cents?: number;
+    reservePrice?: number;
+    reserve_price_cents?: number;
+    minimumIncrement?: number;
+    minimum_increment_cents?: number;
+};
+
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE', 'CLOSED', 'WON', 'UNSOLD']);
 
@@ -51,6 +67,16 @@ const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
 
 const hasReachedEndTime = (endTime: string | null | undefined, nowMs: number): boolean =>
     endTime ? new Date(endTime).getTime() <= nowMs : false;
+
+const toIsoFromUnixSeconds = (value?: number): string | undefined => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+    return new Date(value * 1000).toISOString();
+};
+
+const centsToAmount = (value?: number | null): number | undefined => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+    return value / 100;
+};
 
 const ListingDetailSkeleton = () => (
     <div className="auction-command-grid skeleton-grid" aria-busy="true" aria-label="Loading listing">
@@ -80,6 +106,35 @@ const ListingDetailPage: React.FC = () => {
 
     const listingId = id ? String(id) : '';
 
+    const fetchAuctionSnapshotPatch = useCallback(async (): Promise<Partial<ListingDetail> | null> => {
+        if (!listingId) return null;
+        try {
+            const response = await fetch(apiUrl(biddingListingPath(listingId, '')));
+            if (!response.ok) return null;
+            const payload = await response.json() as AuctionSnapshotResponse;
+
+            const endTime = payload.endTime ?? toIsoFromUnixSeconds(payload.end_time);
+            const startTime = payload.startTime ?? toIsoFromUnixSeconds(payload.start_time);
+            const currentPrice = payload.currentHighestBid ?? centsToAmount(payload.current_highest_bid_cents);
+            const startingPrice = payload.startingPrice ?? centsToAmount(payload.starting_price_cents);
+            const reservePrice = payload.reservePrice ?? centsToAmount(payload.reserve_price_cents);
+            const minimumIncrement = payload.minimumIncrement ?? centsToAmount(payload.minimum_increment_cents);
+
+            return {
+                status: payload.status,
+                startTime,
+                endTime,
+                currentPrice,
+                startingPrice,
+                reservePrice,
+                minimumIncrement,
+                hasBids: currentPrice != null && startingPrice != null ? currentPrice > startingPrice : undefined,
+            };
+        } catch {
+            return null;
+        }
+    }, [listingId]);
+
     const fetchListing = useCallback(async () => {
         if (!listingId) {
             setError('Missing listing id.');
@@ -101,12 +156,14 @@ const ListingDetailPage: React.FC = () => {
                 throw new Error('Listing was not found.');
             }
 
-            setListing(listingPayload);
+            const auctionPatch = await fetchAuctionSnapshotPatch();
+            const mergedListing = auctionPatch ? { ...listingPayload, ...auctionPatch } : listingPayload;
+            setListing(mergedListing);
 
-            const meta = buildAuctionCardMeta(catalogueListingToAuction(listingPayload));
+            const meta = buildAuctionCardMeta(catalogueListingToAuction(mergedListing));
             setBidInput(normalizeMoneyInput(meta.minNextBid));
 
-            if (activeListingStatuses.has((listingPayload.status ?? '').toUpperCase())) {
+            if (activeListingStatuses.has((mergedListing.status ?? '').toUpperCase())) {
                 try {
                     const bidResponse = await fetch(apiUrl(biddingListingPath(listingId, '/bids')));
                     if (bidResponse.ok) {
@@ -128,11 +185,31 @@ const ListingDetailPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [listingId]);
+    }, [fetchAuctionSnapshotPatch, listingId]);
 
     useEffect(() => {
         void fetchListing();
     }, [fetchListing]);
+
+    useEffect(() => {
+        if (!listingId) return;
+        const timer = window.setInterval(() => {
+            void fetchListing();
+        }, 15000);
+        return () => window.clearInterval(timer);
+    }, [fetchListing, listingId]);
+
+    useEffect(() => {
+        if (!listingId) return;
+        const timer = window.setInterval(() => {
+            void (async () => {
+                const patch = await fetchAuctionSnapshotPatch();
+                if (!patch) return;
+                setListing((prev) => prev ? { ...prev, ...patch } : prev);
+            })();
+        }, 5000);
+        return () => window.clearInterval(timer);
+    }, [fetchAuctionSnapshotPatch, listingId]);
 
     const realtimeDestinations = useMemo(
         () => (listingId ? [`/topic/listings/${listingId}`, `/topic/auctions/${listingId}`] : []),

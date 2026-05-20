@@ -6,6 +6,7 @@ const sampleLoginResult: AuthLoginResult = {
   refreshToken: 'refresh-token',
   tokenType: 'Bearer',
   expiresIn: 900,
+  refreshExpiresAt: 1700000000000,
   user: {
     id: 'user-id',
     email: 'user@example.com',

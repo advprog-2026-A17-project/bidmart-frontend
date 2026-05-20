@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { AuthContext, type AuthLoginResult, type AuthUser } from './auth-context';
 import { apiUrl } from '../config/api';
 import { useSessionRevocation } from '../hooks/useSessionRevocation';
@@ -6,6 +6,7 @@ import { getPersistentItem, setPersistentItem, removePersistentItem } from '../u
 
 const API_PATH_PREFIX = '/api/v1/';
 type AccountRole = 'BUYER' | 'SELLER';
+const SESSION_REFRESH_MIN_INTERVAL_MS = 60000;
 
 const trustedApiPath = (input: RequestInfo | URL): string => {
     const rawUrl = input instanceof Request ? input.url : input.toString();
@@ -79,6 +80,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const token = getPersistentItem('access_token');
         return extractTokenIdFromJwt(token);
     });
+    const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(() => {
+        const saved = getPersistentItem('session_expires_at');
+        if (!saved) return null;
+        const parsed = Number(saved);
+        return Number.isFinite(parsed) ? parsed : null;
+    });
     const [activeRole, setActiveRole] = useState<AccountRole | null>(() => {
         const savedRole = getPersistentItem('active_role');
         const savedUser = getPersistentItem('auth_user');
@@ -90,6 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setPersistentItem('auth_user', JSON.stringify(user));
             setPersistentItem('access_token', accessToken || '');
             setPersistentItem('refresh_token', refreshToken || '');
+            setPersistentItem('session_expires_at', sessionExpiresAt ? String(sessionExpiresAt) : '');
             const nextRole = resolveActiveRole(user, activeRole);
             if (nextRole) {
                 setPersistentItem('active_role', nextRole);
@@ -98,15 +106,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             removePersistentItem('auth_user');
             removePersistentItem('access_token');
             removePersistentItem('refresh_token');
+            removePersistentItem('session_expires_at');
             removePersistentItem('active_role');
         }
-    }, [user, accessToken, refreshToken, activeRole]);
+    }, [user, accessToken, refreshToken, sessionExpiresAt, activeRole]);
 
     const login = useCallback((payload: AuthLoginResult) => {
         setUser(payload.user);
         setAccessToken(payload.accessToken);
         setRefreshToken(payload.refreshToken);
         setTokenId(extractTokenIdFromJwt(payload.accessToken));
+        setSessionExpiresAt(payload.refreshExpiresAt || null);
         setActiveRole(resolveActiveRole(payload.user, getPersistentItem('active_role')));
     }, []);
 
@@ -126,16 +136,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removePersistentItem('auth_user');
         removePersistentItem('access_token');
         removePersistentItem('refresh_token');
+        removePersistentItem('session_expires_at');
         removePersistentItem('active_role');
 
         setUser(null);
         setAccessToken(null);
         setRefreshToken(null);
         setTokenId(null);
+        setSessionExpiresAt(null);
         setActiveRole(null);
     }, [refreshToken]);
 
     useSessionRevocation(user, tokenId, logout);
+
+    useEffect(() => {
+        if (!user || !sessionExpiresAt) {
+            return;
+        }
+
+        const msRemaining = sessionExpiresAt - Date.now();
+        if (msRemaining <= 0) {
+            logout();
+            return;
+        }
+
+        const timerId = window.setTimeout(() => {
+            logout();
+        }, msRemaining);
+
+        return () => window.clearTimeout(timerId);
+    }, [logout, sessionExpiresAt, user]);
 
     const refreshAccessToken = useCallback(async (): Promise<string | null> => {
         if (!refreshToken) {
@@ -158,6 +188,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login(payload);
         return payload.accessToken;
     }, [login, logout, refreshToken]);
+
+    const lastRefreshAtRef = useRef(0);
+
+    useEffect(() => {
+        if (!user || !refreshToken) {
+            return;
+        }
+
+        const refreshOnActivity = () => {
+            const now = Date.now();
+            if (now - lastRefreshAtRef.current < SESSION_REFRESH_MIN_INTERVAL_MS) {
+                return;
+            }
+            lastRefreshAtRef.current = now;
+            void refreshAccessToken();
+        };
+
+        const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+        events.forEach((eventName) => {
+            window.addEventListener(eventName, refreshOnActivity, { passive: true });
+        });
+
+        return () => {
+            events.forEach((eventName) => {
+                window.removeEventListener(eventName, refreshOnActivity);
+            });
+        };
+    }, [refreshAccessToken, refreshToken, user]);
 
     const authenticatedFetch = useCallback(async (input: RequestInfo | URL, init: RequestInit = {}) => {
         const requestPath = trustedApiPath(input);
@@ -217,6 +275,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         accessToken,
         refreshToken,
         tokenId,
+        sessionExpiresAt,
         activeRole,
         login,
         logout,
@@ -224,7 +283,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateUserProfile,
         refreshAccessToken,
         authenticatedFetch,
-    }), [accessToken, activeRole, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, switchRole, tokenId, updateUserProfile, user]);
+    }), [accessToken, activeRole, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, sessionExpiresAt, switchRole, tokenId, updateUserProfile, user]);
 
     return (
         <AuthContext.Provider value={contextValue}>
