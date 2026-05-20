@@ -456,7 +456,11 @@ const WalletPage: React.FC = () => {
                                 <span className="material-symbols-outlined metric-icon" aria-hidden="true">lock</span>
                             </div>
                             <strong>{showBalance ? formatCents(wallet?.heldBalance) : '••••••'}</strong>
-                            <small>Reserved for active bids</small>
+                            <small>
+                                {isSellerUser(user)
+                                    ? 'Pending sale proceeds (released after buyer confirms order)'
+                                    : 'Reserved for active bids'}
+                            </small>
                         </div>
                         <div className="wallet-summary-card">
                             <div className="wallet-summary-top">

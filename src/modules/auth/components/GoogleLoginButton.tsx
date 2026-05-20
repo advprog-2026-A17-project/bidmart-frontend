@@ -14,6 +14,7 @@ interface GoogleLoginButtonProps {
     onClearError?: () => void;
     onBusyChange?: (busy: boolean) => void;
     onCredential?: (credential: string) => Promise<void>;
+    onTwoFactorChallenge?: (challengeToken: string) => void;
     className?: string;
     width?: number;
 }
@@ -25,6 +26,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
     onClearError,
     onBusyChange,
     onCredential,
+    onTwoFactorChallenge,
     className = '',
     width = 320,
 }) => {
@@ -50,6 +52,10 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
             }
 
             const result = await requestOAuthLogin('google', response.credential);
+            if (result.kind === 'challenge') {
+                onTwoFactorChallenge?.(result.token);
+                return;
+            }
             if (result.kind !== 'success') {
                 onError(result.kind === 'error' ? result.message : 'Google login requires a fresh login.');
                 return;
@@ -62,7 +68,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
         } finally {
             onBusyChange?.(false);
         }
-    }, [login, navigate, onBusyChange, onClearError, onCredential, onError]);
+    }, [login, navigate, onBusyChange, onClearError, onCredential, onError, onTwoFactorChallenge]);
 
     useEffect(() => {
         if (!clientId) {

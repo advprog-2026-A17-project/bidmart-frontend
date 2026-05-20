@@ -74,6 +74,9 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
             if (result.kind === 'success') {
                 setResendSuccess(true);
                 setError(null);
+            } else if (result.kind === 'cooldown') {
+                setError(result.message);
+                setResendSuccess(false);
             } else {
                 setError(result.message);
             }
@@ -167,6 +170,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                         onError={(message) => setError(message)}
                         onClearError={() => setError(null)}
                         onBusyChange={setOauthBusy}
+                        onTwoFactorChallenge={(token) => setTwoFactorChallenge(token)}
                     />
                 </>
             )}

@@ -1169,6 +1169,131 @@ button {
   font-size: 0.82rem;
 }
 
+.profile-avatar-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.profile-avatar-image,
+.profile-avatar-fallback {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.profile-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-muted, #eef2f7);
+  color: var(--muted);
+}
+
+.profile-avatar-editor {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  padding: 1rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface-elevated, #fafbfd);
+}
+
+.profile-avatar-editor-body {
+  display: grid;
+  gap: 0.65rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.avatar-method-tabs {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.avatar-method-tab {
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.avatar-method-tab-active {
+  border-color: var(--primary);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--primary);
+}
+
+.listing-seller-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.bid-history-card-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.bid-history-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface-elevated, #fff);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.bid-history-card-own {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.bid-history-card-body {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.bid-history-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.bid-history-card-amount {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.bid-history-card-time {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.bid-history-card-empty {
+  justify-content: flex-start;
+  color: var(--muted);
+}
+
+.bid-history-card-empty .material-symbols-outlined {
+  font-size: 1.6rem;
+}
+
 .studio-head {
   display: flex;
   justify-content: space-between;
@@ -2666,4 +2791,190 @@ button {
   .listing-detail-media img {
     min-height: 300px;
   }
+}
+
+.admin-auth-console .admin-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.admin-search-input {
+  min-width: min(100%, 320px);
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #d4d7de;
+}
+
+.admin-user-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.admin-user-card,
+.admin-role-card {
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--surface, #fff);
+}
+
+.admin-user-card-head,
+.admin-role-card-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.admin-user-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.status-pill.is-active {
+  background: #e8f8ef;
+  color: #067647;
+}
+
+.status-pill.is-banned {
+  background: #fdecec;
+  color: #b42318;
+}
+
+.status-pill.is-neutral {
+  background: #f2f4f7;
+  color: #344054;
+}
+
+.admin-user-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-inline-label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.admin-inline-label select {
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid #d4d7de;
+}
+
+.admin-self-note {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.admin-role-create {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.admin-role-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-role-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-role-editor {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.admin-role-permission-preview {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.permission-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.permission-toggle {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #d4d7de;
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  cursor: pointer;
+  background: #fff;
+}
+
+.permission-toggle.is-active {
+  border-color: #12b76a;
+  background: #f3fcf7;
+}
+
+.permission-toggle-label {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.permission-toggle-state {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.permission-toggle.is-active .permission-toggle-state {
+  color: #067647;
+}
+
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 24, 40, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 1200;
+  padding: 16px;
+}
+
+.admin-modal {
+  width: min(100%, 460px);
+  background: #fff;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 16px 40px rgba(16, 24, 40, 0.2);
+}
+
+.admin-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
 }

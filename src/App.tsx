@@ -21,6 +21,7 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { gatewayUrl } from './config/apiClient';
 import { formatCents } from './modules/wallet/utils/payment';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+import { ProfileAvatarWithFallback } from './components/ProfileAvatar';
 import './App.css';
 import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
 import ResetPasswordPage from './modules/auth/pages/ResetPasswordPage';
@@ -35,7 +36,6 @@ const Navbar = () => {
     const navigate = useNavigate();
     const roleLabel = role ?? 'Guest';
     const displayName = user?.displayName?.trim() || user?.email;
-    const avatarUrl = user?.avatarUrl?.trim() || null;
     const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState<number | null>(null);
 
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -209,15 +209,11 @@ const Navbar = () => {
                         )}
                         <NotificationCenter />
                         <span className="app-user-pill">
-                            {avatarUrl ? (
-                                <img
-                                    src={avatarUrl}
-                                    alt={displayName ? `${displayName} avatar` : 'User avatar'}
-                                    style={{ width: '24px', height: '24px', borderRadius: '999px', objectFit: 'cover' }}
-                                />
-                            ) : (
-                                <span className="material-symbols-outlined app-user-icon" aria-hidden="true">account_circle</span>
-                            )}
+                            <ProfileAvatarWithFallback
+                                src={user?.avatarUrl}
+                                name={displayName}
+                                size={28}
+                            />
                             <span className="app-user-email">{displayName}</span>
                             {user.roles?.length > 0 && (
                                 <span className="app-role-pill">

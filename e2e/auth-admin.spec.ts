@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { authenticateAdminViaApi, buildTestEmail, registerUserViaApi } from './helpers/auth';
 import { getGatewayBaseUrl } from './helpers/env';
 
-test('admin can load roles and assign a role to a user', async ({ page, request }) => {
+test('admin console loads users and roles without manual refresh', async ({ page, request }) => {
   const admin = await authenticateAdminViaApi(request);
   const targetEmail = buildTestEmail('role-target');
   const target = await registerUserViaApi(request, targetEmail, 'Bidmart!12345', 'BUYER');
@@ -17,13 +17,16 @@ test('admin can load roles and assign a role to a user', async ({ page, request 
   });
 
   await page.goto('/admin/auth');
-  await page.getByRole('button', { name: 'Refresh Roles' }).click();
-  await expect(page.getByText('BUYER')).toBeVisible();
+  await expect(page.getByText('BUYER')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(targetEmail)).toBeVisible();
 
-  await page.getByLabel('User ID (UUID)').fill(target.id);
-  await page.getByLabel('Role Name').fill('SELLER');
-  await page.getByRole('button', { name: 'Assign Role' }).click();
-  await expect(page.getByText(/assigned to user/i)).toBeVisible();
+  await page.getByLabel('Search users').fill(targetEmail.split('@')[0]);
+  await expect(page.getByText(targetEmail)).toBeVisible();
+
+  const roleSelect = page.locator('.admin-user-card').filter({ hasText: targetEmail }).getByLabel('Role');
+  await roleSelect.selectOption('SELLER');
+  await page.getByRole('button', { name: 'Terapkan Role' }).click();
+  await expect(page.getByText(/assigned/i)).toBeVisible();
 
   const userResponse = await request.get(
     `${getGatewayBaseUrl()}/api/v1/auth/user?email=${encodeURIComponent(targetEmail)}`,

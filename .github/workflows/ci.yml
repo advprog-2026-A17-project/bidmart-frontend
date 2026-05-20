@@ -5,6 +5,9 @@ on:
     branches: ["staging", "main"]
   push:
     branches: ["staging", "main"]
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
 
 jobs:
   test:
@@ -41,6 +44,42 @@ jobs:
           path: |
             test-output.log
             dist/**
+
+  # Playwright needs a running gateway + services. PR CI runs lint/unit/build only.
+  # Nightly (or manual workflow_dispatch) runs E2E and uploads the HTML report for asdos.
+  e2e-nightly:
+    name: Playwright E2E (nightly / manual)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        continue-on-error: true
+        env:
+          BIDMART_BASE_URL: ${{ vars.BIDMART_E2E_BASE_URL || 'http://localhost:5173' }}
+        run: npm run test:e2e
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report
+          path: |
+            playwright-report/**
+            test-results/**
 
   sonarcloud:
     name: SonarCloud Code Analysis
