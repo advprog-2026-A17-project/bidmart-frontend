@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
 import { requestOAuthLogin } from '../utils/auth-api';
+import { resolvePostLoginPath } from '../utils/post-auth-navigation';
 
 const GOOGLE_SCRIPT_ID = 'google-oauth-client';
 const GOOGLE_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
@@ -54,7 +55,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
                 return;
             }
             login(result.payload);
-            navigate('/');
+            navigate(await resolvePostLoginPath(result.payload.accessToken));
         } catch (err: unknown) {
             onError(err instanceof Error ? err.message : 'Failed to connect to Auth Service via API Gateway.');
             console.error(err);

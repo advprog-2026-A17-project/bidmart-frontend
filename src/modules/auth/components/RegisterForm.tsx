@@ -10,14 +10,14 @@ interface RegisterFormProps {
 const ROLES = [
     {
         value: 'BUYER',
-        title: 'Buying account',
-        description: 'Browse auctions, bid, manage wallet funds, and track purchases.',
+        title: 'Pembeli',
+        description: 'Jelajahi lelang, menawar, kelola saldo dompet, dan lacak pembelian.',
         icon: 'shopping_bag',
     },
     {
         value: 'SELLER',
-        title: 'Selling account',
-        description: 'Open Seller Studio, create listings, publish auctions, and manage payouts.',
+        title: 'Penjual',
+        description: 'Kelola Seller Studio, buat listing, publikasikan lelang, dan kelola pencairan.',
         icon: 'storefront',
     },
 ] as const;
@@ -49,8 +49,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ initialRole = 'BUYER', onSw
                 return;
             }
             setSuccess(role === 'BUYER'
-                ? 'Buying account ready. If this email is new, verify it before logging in.'
-                : 'Selling account ready. Use the navbar switch after login to enter Seller Studio.');
+                ? 'Akun pembeli dibuat. Verifikasi email lalu masuk untuk mulai berbelanja.'
+                : 'Akun penjual dibuat. Verifikasi email lalu masuk ke Seller Studio.');
             setPassword('');
             // Optionally, you can automatically switch back to login here after a delay
         } catch (err: unknown) {
@@ -94,8 +94,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ initialRole = 'BUYER', onSw
                 </div>
             </label>
             <div className="field">
-                <span>Account mode</span>
-                <div className="account-type-grid" role="radiogroup" aria-label="Choose account mode">
+                <span>Daftar sebagai</span>
+                <div className="account-type-grid" role="radiogroup" aria-label="Daftar sebagai">
                     {ROLES.map((item) => (
                         <button
                             key={item.value}

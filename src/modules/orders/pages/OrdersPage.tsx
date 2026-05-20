@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
+import { isSellerUser } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney } from '../../../utils/money';
 
@@ -32,8 +33,8 @@ const orderStatusLabel = (order: OrderRecord): string =>
     order.shippingStatus || order.status;
 
 const OrdersPage: React.FC = () => {
-    const { user, activeRole } = useAuth();
-    const isSellerView = activeRole === 'SELLER';
+    const { user } = useAuth();
+    const isSellerView = isSellerUser(user);
     const authenticatedFetch = useAuthenticatedFetch();
     const [orders, setOrders] = useState<OrderRecord[]>([]);
     const [listingsById, setListingsById] = useState<Record<string, ListingSummary>>({});
@@ -135,8 +136,8 @@ const OrdersPage: React.FC = () => {
         <div className="page-wrap">
             <section className="page-head studio-head">
                 <div>
-                    <BackButton fallback={activeRole === 'SELLER' ? '/seller-studio' : '/'} />
-                    <p className="eyebrow">{activeRole === 'SELLER' ? 'Seller Workspace' : 'Buyer Workspace'}</p>
+                    <BackButton fallback={isSellerView ? '/seller-studio' : '/'} />
+                    <p className="eyebrow">{isSellerView ? 'Seller Workspace' : 'Buyer Workspace'}</p>
                     <h1>Orders</h1>
                     <p>{isSellerView ? 'Monitor buyer orders, shipping progress, and settlement status for your sold listings.' : 'Track auctions you won after the seller settles them.'}</p>
                 </div>

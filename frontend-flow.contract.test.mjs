@@ -45,7 +45,9 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(profilePage, /\/api\/v1\/auth\/oauth\/link/);
   assert.match(profilePage, /Connected Accounts/);
   assert.match(app, /\/seller-studio/);
-  assert.match(authContext, /activeRole/);
+  assert.doesNotMatch(authContext, /activeRole/);
+  assert.doesNotMatch(authContext, /switchRole/);
+  assert.match(read('./src/context/primaryRole.ts'), /export const primaryRole/);
   assert.match(app, /RoleHome/);
   assert.match(app, /ProfilePage/);
   assert.match(app, /GlobalErrorBoundary/);
@@ -139,9 +141,8 @@ test('frontend sell flow is gated to seller accounts before any listing request 
   assert.match(sellPage, /role\.name === 'SELLER'/);
   assert.match(sellPage, /Only seller accounts can publish listings/);
   assert.match(sellPage, /Seller access required/);
-  assert.match(app, /const isSeller = activeRole === 'SELLER'/);
+  assert.match(app, /isSellerUser/);
   assert.match(app, /sellerOnly/);
-  assert.match(app, /activeRole === 'SELLER'/);
-  assert.match(app, /Switch to Selling/);
-  assert.match(app, /Switch to Buying/);
+  assert.doesNotMatch(app, /Switch to Selling/);
+  assert.doesNotMatch(app, /Open Seller Account/);
 });

@@ -93,12 +93,12 @@ export const registerUserViaUi = async (
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   if (role === 'SELLER') {
-    await page.getByRole('radio', { name: /selling account/i }).click();
+    await page.getByRole('radio', { name: /penjual/i }).click();
   } else {
-    await page.getByRole('radio', { name: /buying account/i }).click();
+    await page.getByRole('radio', { name: /pembeli/i }).click();
   }
   await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page.getByText(/account ready/i)).toBeVisible();
+  await expect(page.getByText(/akun (pembeli|penjual) dibuat/i)).toBeVisible();
   await ensureAuthUserVerified(email);
 };
 

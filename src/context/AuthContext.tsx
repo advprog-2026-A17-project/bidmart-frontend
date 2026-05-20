@@ -5,7 +5,6 @@ import { useSessionRevocation } from '../hooks/useSessionRevocation';
 import { getPersistentItem, setPersistentItem, removePersistentItem } from '../utils/storage';
 
 const API_PATH_PREFIX = '/api/v1/';
-type AccountRole = 'BUYER' | 'SELLER';
 const SESSION_REFRESH_MIN_INTERVAL_MS = 60000;
 const DEFAULT_SESSION_WINDOW_SECONDS = 900;
 
@@ -53,19 +52,6 @@ const extractTokenIdFromJwt = (token: string | null): string | null => {
     }
 };
 
-const hasRole = (user: AuthUser | null, role: AccountRole): boolean =>
-    user?.roles?.some((item) => item.name === role) ?? false;
-
-const resolveActiveRole = (user: AuthUser | null, preferred: string | null): AccountRole | null => {
-    if (!user) return null;
-    if ((preferred === 'BUYER' || preferred === 'SELLER') && hasRole(user, preferred)) {
-        return preferred;
-    }
-    if (hasRole(user, 'BUYER')) return 'BUYER';
-    if (hasRole(user, 'SELLER')) return 'SELLER';
-    return null;
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser | null>(() => {
         const saved = getPersistentItem('auth_user');
@@ -87,11 +73,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsed = Number(saved);
         return Number.isFinite(parsed) ? parsed : null;
     });
-    const [activeRole, setActiveRole] = useState<AccountRole | null>(() => {
-        const savedRole = getPersistentItem('active_role');
-        const savedUser = getPersistentItem('auth_user');
-        return resolveActiveRole(savedUser ? JSON.parse(savedUser) as AuthUser : null, savedRole);
-    });
     const sessionWindowSecondsRef = useRef(DEFAULT_SESSION_WINDOW_SECONDS);
 
     useEffect(() => {
@@ -100,10 +81,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setPersistentItem('access_token', accessToken || '');
             setPersistentItem('refresh_token', refreshToken || '');
             setPersistentItem('session_expires_at', sessionExpiresAt ? String(sessionExpiresAt) : '');
-            const nextRole = resolveActiveRole(user, activeRole);
-            if (nextRole) {
-                setPersistentItem('active_role', nextRole);
-            }
         } else {
             removePersistentItem('auth_user');
             removePersistentItem('access_token');
@@ -111,7 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             removePersistentItem('session_expires_at');
             removePersistentItem('active_role');
         }
-    }, [user, accessToken, refreshToken, sessionExpiresAt, activeRole]);
+    }, [user, accessToken, refreshToken, sessionExpiresAt]);
 
     const login = useCallback((payload: AuthLoginResult) => {
         sessionWindowSecondsRef.current = payload.expiresIn > 0 ? payload.expiresIn : DEFAULT_SESSION_WINDOW_SECONDS;
@@ -124,7 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRefreshToken(payload.refreshToken);
         setTokenId(extractTokenIdFromJwt(payload.accessToken));
         setSessionExpiresAt(Number.isFinite(nextSessionExpiresAt) ? nextSessionExpiresAt : null);
-        setActiveRole(resolveActiveRole(payload.user, getPersistentItem('active_role')));
+        removePersistentItem('active_role');
     }, []);
 
     const logout = useCallback(async () => {
@@ -151,7 +128,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRefreshToken(null);
         setTokenId(null);
         setSessionExpiresAt(null);
-        setActiveRole(null);
     }, [refreshToken]);
 
     useSessionRevocation(user, tokenId, logout);
@@ -245,14 +221,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return response;
     }, [accessToken, refreshAccessToken, refreshToken]);
 
-    const switchRole = useCallback((role: AccountRole) => {
-        if (!hasRole(user, role)) {
-            return;
-        }
-        setActiveRole(role);
-        setPersistentItem('active_role', role);
-    }, [user]);
-
     const updateUserProfile = useCallback((profile: {
         displayName?: string | null;
         avatarUrl?: string | null;
@@ -283,14 +251,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         refreshToken,
         tokenId,
         sessionExpiresAt,
-        activeRole,
         login,
         logout,
-        switchRole,
         updateUserProfile,
         refreshAccessToken,
         authenticatedFetch,
-    }), [accessToken, activeRole, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, sessionExpiresAt, switchRole, tokenId, updateUserProfile, user]);
+    }), [accessToken, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, sessionExpiresAt, tokenId, updateUserProfile, user]);
 
     return (
         <AuthContext.Provider value={contextValue}>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
 import { requestLogin, requestResendVerification } from '../utils/auth-api';
+import { resolvePostLoginPath } from '../utils/post-auth-navigation';
 import GoogleLoginButton from './GoogleLoginButton';
 import TwoFactorForm from './TwoFactorForm';
 
@@ -55,7 +56,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                 return;
             }
             login(result.payload);
-            navigate('/');
+            navigate(await resolvePostLoginPath(result.payload.accessToken));
         } catch (err: unknown) {
             setError('Failed to connect to Auth Service via API Gateway.');
             console.error(err);

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
@@ -35,6 +35,8 @@ const formatSessionDate = (dateString: string | undefined | null) => {
 const ProfilePage: React.FC = () => {
     const { user, logout, updateUserProfile } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
+    const location = useLocation();
+    const navigate = useNavigate();
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '';
     const [sessions, setSessions] = useState<Session[]>([]);
     const [profileLoading, setProfileLoading] = useState(true);
@@ -195,6 +197,12 @@ const ProfilePage: React.FC = () => {
             
             setMessage('Profile updated successfully.');
             setIsEditing(false);
+
+            const profileNowComplete = Boolean(updatedName.trim()) && Boolean(updatedAddress.trim());
+            const redirectTarget = (location.state as { from?: string } | null)?.from;
+            if (profileNowComplete && redirectTarget && redirectTarget !== '/profile') {
+                navigate(redirectTarget, { replace: true });
+            }
         } catch (err: unknown) {
             setError('Failed to update profile.');
             console.error(err);
@@ -403,6 +411,15 @@ const ProfilePage: React.FC = () => {
             </section>
             {error && <div className="toast-error">{error}</div>}
             {message && <div className="toast-success">{message}</div>}
+            {!profileLoading && !isProfileComplete && (
+                <div className="panel center-content" style={{ marginBottom: '1rem' }}>
+                    <span className="hero-badge">Profile Required</span>
+                    <h2 style={{ marginTop: '0.75rem' }}>Complete your profile to use BidMart</h2>
+                    <p className="text-muted">
+                        Display name and shipping address are required before you can browse, bid, sell, or manage your wallet.
+                    </p>
+                </div>
+            )}
 
             <div className="panel section-stack">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
