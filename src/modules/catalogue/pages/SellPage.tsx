@@ -399,13 +399,19 @@ const SellPage: React.FC = () => {
             errors.minimumIncrement = 'Minimum increment must be greater than 0.';
         }
 
+        const now = new Date();
+        now.setSeconds(0, 0);
         if (!listingForm.startTime) {
             errors.startTime = 'Start time is required.';
+        } else if (new Date(listingForm.startTime) < now) {
+            errors.startTime = 'Start time must be set in the future.';
         }
         if (!listingForm.endTime) {
             errors.endTime = 'End time is required.';
         } else if (new Date(listingForm.endTime) <= new Date(listingForm.startTime)) {
             errors.endTime = 'End time must be after start time.';
+        } else if (new Date(listingForm.endTime) <= now) {
+            errors.endTime = 'End time must be in the future.';
         }
 
         if (!isValidImageReference(listingForm.imageUrl)) {
@@ -539,6 +545,16 @@ const SellPage: React.FC = () => {
         }
         if (!listing.startTime || !listing.endTime) {
             setError('Auction start and end times are required before publishing.');
+            setNotice(null);
+            return;
+        }
+        if (new Date(listing.startTime) < new Date()) {
+            setError('Auction start time has already passed. Edit the listing to update it before publishing.');
+            setNotice(null);
+            return;
+        }
+        if (new Date(listing.endTime) <= new Date()) {
+            setError('Auction end time has already passed. Edit the listing to update it before publishing.');
             setNotice(null);
             return;
         }
@@ -864,6 +880,7 @@ const SellPage: React.FC = () => {
                                     <input
                                         className={`form-input ${listingFormErrors.startTime ? 'form-input-error' : ''}`}
                                         type="datetime-local"
+                                        min={toDateTimeLocalValue(new Date())}
                                         value={listingForm.startTime}
                                         onChange={(event) => updateListingField('startTime', event.target.value)}
                                     />
@@ -874,6 +891,7 @@ const SellPage: React.FC = () => {
                                     <input
                                         className={`form-input ${listingFormErrors.endTime ? 'form-input-error' : ''}`}
                                         type="datetime-local"
+                                        min={toDateTimeLocalValue(new Date())}
                                         value={listingForm.endTime}
                                         onChange={(event) => updateListingField('endTime', event.target.value)}
                                     />
