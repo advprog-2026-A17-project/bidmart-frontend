@@ -42,7 +42,7 @@ const Navbar = () => {
 
     useEffect(() => {
         if (!user) {
-            setWalletBalance(null);
+            setTimeout(() => setWalletBalance(null), 0);
             return;
         }
 
@@ -93,7 +93,7 @@ const Navbar = () => {
 
     useEffect(() => {
         if (!sessionExpiresAt || !user) {
-            setSessionRemainingSeconds(null);
+            setTimeout(() => setSessionRemainingSeconds(null), 0);
             return;
         }
 
