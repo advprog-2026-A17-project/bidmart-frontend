@@ -163,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const msRemaining = sessionExpiresAt - Date.now();
         if (msRemaining <= 0) {
-            logout();
+            setTimeout(() => logout(), 0);
             return;
         }
 
