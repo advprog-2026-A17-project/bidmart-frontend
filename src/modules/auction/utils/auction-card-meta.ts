@@ -35,7 +35,7 @@ export const buildAuctionCardMeta = (auction: Auction, nowMs = Date.now()) => {
     if (isClosed) {
         timeLeftLabel = 'Ended';
     } else if (hasReachedEndTime) {
-        timeLeftLabel = 'Awaiting settlement';
+        timeLeftLabel = 'Closing automatically';
     } else {
         timeLeftLabel = `${minutesLeft}m ${secondsLeft}s left`;
     }

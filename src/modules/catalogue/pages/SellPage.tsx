@@ -9,6 +9,9 @@ import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta, type Auction } from '../../auction/utils/auction-card-meta';
 import { useNowTick } from '../../../hooks/useNowTick';
 import { catalogueListingToAuction } from '../utils/listing-to-auction';
+import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
+import { CATALOGUE_CATEGORIES_TREE_PATH } from '../api/endpoints';
+import { flattenCategoryTree, type CategoryNode, type CategoryOption } from '../utils/categories';
 
 type StudioView = 'dashboard' | 'listing-create' | 'listing-manage';
 
@@ -38,7 +41,6 @@ type ListingFormState = {
     startingBid: string;
     reservePrice: string;
     minimumIncrement: string;
-    startTime: string;
     endTime: string;
     imageUrl: string;
     images: string[];
@@ -78,7 +80,7 @@ const CONDITIONS = [
 
 const MAX_IMAGE_BYTES = 600 * 1024;
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
-const LOCKED_AUCTION_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'ENDED', 'WON', 'UNSOLD', 'CANCELLED'] as const);
+const FINAL_AUCTION_STATUSES = new Set<string>(['ENDED', 'WON', 'UNSOLD', 'CLOSED', 'CANCELLED']);
 
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
     meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
@@ -101,7 +103,6 @@ const emptyListingForm: ListingFormState = {
     startingBid: '',
     reservePrice: '',
     minimumIncrement: '1',
-    startTime: toDateTimeLocalValue(new Date()),
     endTime: toDateTimeLocalValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
     imageUrl: '',
     images: [],
@@ -151,12 +152,24 @@ const asIsoDate = (input?: string | null): string | null => {
     return parsed.toISOString();
 };
 
+const SELLER_STUDIO_VIEW_STORAGE_KEY = 'seller_studio_active_view';
+
+const isStudioView = (value: string | null): value is StudioView =>
+    value === 'dashboard' || value === 'listing-create' || value === 'listing-manage';
+
 const SellPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const isSeller = user?.roles?.some((role) => role.name === 'SELLER') ?? false;
     const roleSummary = user?.roles?.map((role) => role.name).join(', ') ?? 'No active role';
-    const [activeView, setActiveView] = useState<StudioView>('dashboard');
+    const [activeView, setActiveView] = useState<StudioView>(() => {
+        try {
+            const saved = window.localStorage.getItem(SELLER_STUDIO_VIEW_STORAGE_KEY);
+            return isStudioView(saved) ? saved : 'dashboard';
+        } catch {
+            return 'dashboard';
+        }
+    });
     const [listingForm, setListingForm] = useState<ListingFormState>(emptyListingForm);
 
     const [listings, setListings] = useState<ListingRecord[]>([]);
@@ -168,6 +181,8 @@ const SellPage: React.FC = () => {
     const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(true);
     const [analyticsError, setAnalyticsError] = useState<string | null>(null);
     const [listingFormErrors, setListingFormErrors] = useState<ListingFormErrors>({});
+    const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
+    const [editingListingStatus, setEditingListingStatus] = useState<string | null>(null);
     const nowMs = useNowTick();
 
     const fetchSellerListings = useCallback(async () => {
@@ -225,6 +240,36 @@ const SellPage: React.FC = () => {
     useEffect(() => {
         refreshStudio();
     }, [refreshStudio]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const fetchCategories = async () => {
+            try {
+                const response = await fetch(gatewayUrl(CATALOGUE_CATEGORIES_TREE_PATH));
+                if (!response.ok) return;
+                const payload = await response.json() as CategoryNode[];
+                if (!cancelled) {
+                    setCategoryOptions(flattenCategoryTree(payload));
+                }
+            } catch {
+                if (!cancelled) {
+                    setCategoryOptions([]);
+                }
+            }
+        };
+        void fetchCategories();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(SELLER_STUDIO_VIEW_STORAGE_KEY, activeView);
+        } catch {
+            // Ignore storage failures and keep view in-memory.
+        }
+    }, [activeView]);
 
     const realtimeDestinations = useMemo(() => user ? ['/topic/listings'] : [], [user]);
     const handleRealtimeEvent = useCallback(() => {
@@ -308,7 +353,7 @@ const SellPage: React.FC = () => {
                 startingPrice: listing.startingPrice,
                 reservePrice: listing.reservePrice ?? listing.startingPrice,
                 minimumIncrement: listing.minimumIncrement ?? 1,
-                startTime: asIsoDate(listing.startTime),
+                startTime: new Date().toISOString(),
                 endTime: asIsoDate(listing.endTime),
             }),
         });
@@ -335,6 +380,7 @@ const SellPage: React.FC = () => {
 
     const resetListingForm = () => {
         setEditingListingId(null);
+        setEditingListingStatus(null);
         setListingForm(emptyListingForm);
         setListingFormErrors({});
     };
@@ -358,7 +404,6 @@ const SellPage: React.FC = () => {
         startingPrice: toListingAmount(form.startingBid),
         reservePrice: toListingAmount(form.reservePrice || form.startingBid),
         minimumIncrement: toListingAmount(form.minimumIncrement || '1'),
-        startTime: form.startTime,
         endTime: form.endTime,
         imageUrl: form.imageUrl.trim() || form.images[0] || null,
     });
@@ -401,15 +446,8 @@ const SellPage: React.FC = () => {
 
         const now = new Date();
         now.setSeconds(0, 0);
-        if (!listingForm.startTime) {
-            errors.startTime = 'Start time is required.';
-        } else if (new Date(listingForm.startTime) < now) {
-            errors.startTime = 'Start time must be set in the future.';
-        }
         if (!listingForm.endTime) {
             errors.endTime = 'End time is required.';
-        } else if (new Date(listingForm.endTime) <= new Date(listingForm.startTime)) {
-            errors.endTime = 'End time must be after start time.';
         } else if (new Date(listingForm.endTime) <= now) {
             errors.endTime = 'End time must be in the future.';
         }
@@ -463,6 +501,8 @@ const SellPage: React.FC = () => {
             setNotice(
                 publishImmediate
                     ? 'Listing published.'
+                    : editingListingStatus === 'ACTIVE' || editingListingStatus === 'EXTENDED'
+                        ? 'Listing description and images updated.'
                     : isEditing
                         ? 'Listing draft updated.'
                         : 'Listing draft created.'
@@ -477,6 +517,7 @@ const SellPage: React.FC = () => {
 
     const editListing = (listing: ListingRecord) => {
         setEditingListingId(String(listing.id));
+        setEditingListingStatus((listing.status ?? '').toUpperCase());
         const condition = normalizeCondition(listing.condition);
         setListingForm({
             title: listing.title ?? '',
@@ -486,7 +527,6 @@ const SellPage: React.FC = () => {
             startingBid: fromListingAmount(listing.startingPrice),
             reservePrice: fromListingAmount(listing.reservePrice || listing.startingPrice),
             minimumIncrement: fromListingAmount(listing.minimumIncrement || 1),
-            startTime: listing.startTime ? toDateTimeLocalValue(new Date(listing.startTime)) : toDateTimeLocalValue(new Date()),
             endTime: listing.endTime ? toDateTimeLocalValue(new Date(listing.endTime)) : toDateTimeLocalValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
             imageUrl: listing.imageUrl ?? '',
             images: listing.imageUrl ? [listing.imageUrl] : [],
@@ -512,17 +552,17 @@ const SellPage: React.FC = () => {
         }
     };
 
-    const closeAuction = async (listingId: string) => {
+    const cancelListing = async (listingId: string | number) => {
         setError(null);
         setNotice(null);
         try {
-            const response = await authenticatedFetch(gatewayUrl(`/api/v1/listings/${listingId}/close`), {
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/cancel`), {
                 method: 'POST',
             });
             if (!response.ok) {
-                throw new Error(await readApiError(response, 'Auction close failed'));
+                throw new Error(await readApiError(response, 'Listing cancel failed'));
             }
-            setNotice('Listing close requested.');
+            setNotice('Listing cancelled.');
             await refreshStudio();
         } catch (err: unknown) {
             setError(toErrorMessage(err));
@@ -543,13 +583,8 @@ const SellPage: React.FC = () => {
             setNotice(null);
             return;
         }
-        if (!listing.startTime || !listing.endTime) {
-            setError('Auction start and end times are required before publishing.');
-            setNotice(null);
-            return;
-        }
-        if (new Date(listing.startTime) < new Date()) {
-            setError('Auction start time has already passed. Edit the listing to update it before publishing.');
+        if (!listing.endTime) {
+            setError('Auction end time is required before publishing.');
             setNotice(null);
             return;
         }
@@ -614,6 +649,10 @@ const SellPage: React.FC = () => {
             ],
         },
     ];
+    const displayCategoryOptions = categoryOptions.length > 0
+        ? categoryOptions
+        : CATEGORIES.map((category, index) => ({ id: index, name: category, label: category }));
+    const isEditingPublishedListing = editingListingStatus === 'ACTIVE' || editingListingStatus === 'EXTENDED';
 
     return (
         <div className="seller-studio-shell">
@@ -771,6 +810,7 @@ const SellPage: React.FC = () => {
                                 <input
                                     className={`form-input ${listingFormErrors.title ? 'form-input-error' : ''}`}
                                     value={listingForm.title}
+                                    disabled={isEditingPublishedListing}
                                     onChange={(event) => updateListingField('title', event.target.value)}
                                     placeholder="Be specific and descriptive"
                                     aria-invalid={Boolean(listingFormErrors.title)}
@@ -796,13 +836,14 @@ const SellPage: React.FC = () => {
                                     <select
                                         className={`form-input ${listingFormErrors.category ? 'form-input-error' : ''}`}
                                         value={listingForm.category}
+                                        disabled={isEditingPublishedListing}
                                         onChange={(event) => updateListingField('category', event.target.value)}
                                         aria-invalid={Boolean(listingFormErrors.category)}
                                         aria-describedby={listingFormErrors.category ? 'listing-category-error' : undefined}
                                     >
                                         <option value="">Select a category</option>
-                                        {CATEGORIES.map((category) => (
-                                            <option key={category} value={category}>{category}</option>
+                                        {displayCategoryOptions.map((category) => (
+                                            <option key={`${category.id}-${category.label}`} value={category.name}>{category.label}</option>
                                         ))}
                                     </select>
                                     {listingFormErrors.category && <span id="listing-category-error" className="field-error">{listingFormErrors.category}</span>}
@@ -815,6 +856,7 @@ const SellPage: React.FC = () => {
                                         min={1}
                                         step="1"
                                         value={listingForm.startingBid}
+                                        disabled={isEditingPublishedListing}
                                         onChange={(event) => updateListingField('startingBid', event.target.value)}
                                         onBlur={() => updateListingField('startingBid', normalizeRupiahInput(listingForm.startingBid))}
                                         placeholder="0.00"
@@ -836,6 +878,7 @@ const SellPage: React.FC = () => {
                                             key={condition.value}
                                             type="button"
                                             className={`chip ${listingForm.condition === condition.value ? 'chip-active' : ''}`}
+                                            disabled={isEditingPublishedListing}
                                             onClick={() => updateListingField('condition', condition.value)}
                                         >
                                             {condition.label}
@@ -853,6 +896,7 @@ const SellPage: React.FC = () => {
                                         min={1}
                                         step="1"
                                         value={listingForm.reservePrice}
+                                        disabled={isEditingPublishedListing}
                                         onChange={(event) => updateListingField('reservePrice', event.target.value)}
                                         onBlur={() => updateListingField('reservePrice', normalizeRupiahInput(listingForm.reservePrice))}
                                         placeholder="Minimum price to sell"
@@ -867,6 +911,7 @@ const SellPage: React.FC = () => {
                                         min={1}
                                         step="1"
                                         value={listingForm.minimumIncrement}
+                                        disabled={isEditingPublishedListing}
                                         onChange={(event) => updateListingField('minimumIncrement', event.target.value)}
                                         onBlur={() => updateListingField('minimumIncrement', normalizeRupiahInput(listingForm.minimumIncrement))}
                                     />
@@ -874,30 +919,23 @@ const SellPage: React.FC = () => {
                                 </label>
                             </div>
 
-                            <div className="seller-form-two-col">
-                                <label className="field">
-                                    Auction Start
-                                    <input
-                                        className={`form-input ${listingFormErrors.startTime ? 'form-input-error' : ''}`}
-                                        type="datetime-local"
-                                        min={toDateTimeLocalValue(new Date())}
-                                        value={listingForm.startTime}
-                                        onChange={(event) => updateListingField('startTime', event.target.value)}
-                                    />
-                                    {listingFormErrors.startTime && <span className="field-error">{listingFormErrors.startTime}</span>}
-                                </label>
-                                <label className="field">
-                                    Auction End
-                                    <input
-                                        className={`form-input ${listingFormErrors.endTime ? 'form-input-error' : ''}`}
-                                        type="datetime-local"
-                                        min={toDateTimeLocalValue(new Date())}
-                                        value={listingForm.endTime}
-                                        onChange={(event) => updateListingField('endTime', event.target.value)}
-                                    />
-                                    {listingFormErrors.endTime && <span className="field-error">{listingFormErrors.endTime}</span>}
-                                </label>
-                            </div>
+                            <label className="field">
+                                Auction End
+                                <input
+                                    className={`form-input ${listingFormErrors.endTime ? 'form-input-error' : ''}`}
+                                    type="datetime-local"
+                                    min={toDateTimeLocalValue(new Date())}
+                                    value={listingForm.endTime}
+                                    disabled={isEditingPublishedListing}
+                                    onChange={(event) => updateListingField('endTime', event.target.value)}
+                                />
+                                <span className="field-hint">
+                                    {isEditingPublishedListing
+                                        ? 'Published auction timing is locked. Only description and images can be updated before bids arrive.'
+                                        : 'Auction starts automatically at publish time.'}
+                                </span>
+                                {listingFormErrors.endTime && <span className="field-error">{listingFormErrors.endTime}</span>}
+                            </label>
 
                             <label className="upload-zone">
                                 <strong>Upload product images</strong>
@@ -923,17 +961,24 @@ const SellPage: React.FC = () => {
                                 {listingFormErrors.imageUrl && <span id="listing-image-url-error" className="field-error">{listingFormErrors.imageUrl}</span>}
                             </label>
                             <div className="panel-footer">
-                                <button type="button" className="secondary-button" onClick={() => saveListing(false)}>
-                                    Save Draft
-                                </button>
+                                {!isEditingPublishedListing && (
+                                    <button type="button" className="secondary-button" onClick={() => saveListing(false)}>
+                                        Save Draft
+                                    </button>
+                                )}
                                 {!editingListingId && (
                                     <button type="button" className="primary-button" onClick={() => saveListing(true)}>
                                         Create & Publish Listing
                                     </button>
                                 )}
-                                {editingListingId && (
+                                {editingListingId && !isEditingPublishedListing && (
                                     <button type="button" className="primary-button" onClick={() => saveListing(true)}>
                                         Update & Publish Listing
+                                    </button>
+                                )}
+                                {editingListingId && isEditingPublishedListing && (
+                                    <button type="button" className="primary-button" onClick={() => saveListing(false)}>
+                                        Update Listing
                                     </button>
                                 )}
                             </div>
@@ -990,12 +1035,26 @@ const SellPage: React.FC = () => {
                             <div className="management-list">
                                 {listings.map((listing) => {
                                     const status = (listing.status ?? 'UNKNOWN').toUpperCase();
-                                    const locked = listing.hasBids || LOCKED_AUCTION_STATUSES.has(status as 'ACTIVE');
-                                    const canClose = (status === 'ACTIVE' || status === 'EXTENDED') && listing.endTime && new Date(listing.endTime) <= new Date();
+                                    const finalized = FINAL_AUCTION_STATUSES.has(status);
+                                    const locked = listing.hasBids || finalized;
+                                    const canEdit = !listing.hasBids && !finalized;
+                                    const canCancel = !listing.hasBids && status !== 'WON' && status !== 'UNSOLD' && status !== 'CLOSED' && status !== 'CANCELLED';
+                                    const canDelete = !listing.hasBids && status === 'DRAFT';
                                     const canPublishDraft = status === 'DRAFT';
                                     
                                     return (
                                         <article key={listing.id} className="management-card">
+                                            <div className="management-card-image">
+                                                <img
+                                                    src={listing.imageUrl?.trim() || NO_IMAGE_PLACEHOLDER}
+                                                    alt={listing.title}
+                                                    loading="lazy"
+                                                    onError={(event) => {
+                                                        event.currentTarget.onerror = null;
+                                                        event.currentTarget.src = NO_IMAGE_PLACEHOLDER;
+                                                    }}
+                                                />
+                                            </div>
                                             <div>
                                                 <span className={`status-badge status-${status}`}>{status}</span>
                                                 <h3>{listing.title}</h3>
@@ -1019,7 +1078,7 @@ const SellPage: React.FC = () => {
                                             </div>
                                             <div className="management-actions">
                                                 <Link className="secondary-button" to={`/listings/${listing.id}`}>View Room</Link>
-                                                <button type="button" className="secondary-button" disabled={Boolean(locked)} onClick={() => editListing(listing)}>
+                                                <button type="button" className="secondary-button" disabled={!canEdit} onClick={() => editListing(listing)}>
                                                     Edit
                                                 </button>
                                                 {canPublishDraft && (
@@ -1027,12 +1086,12 @@ const SellPage: React.FC = () => {
                                                         Publish
                                                     </button>
                                                 )}
-                                                {canClose && (
-                                                    <button type="button" className="primary-button" onClick={() => closeAuction(String(listing.id))}>
-                                                        Settle
+                                                {canCancel && (
+                                                    <button type="button" className="secondary-button" onClick={() => cancelListing(listing.id)}>
+                                                        Cancel
                                                     </button>
                                                 )}
-                                                <button type="button" className="secondary-button" disabled={Boolean(locked)} onClick={() => deleteListing(listing.id)}>
+                                                <button type="button" className="secondary-button" disabled={!canDelete} onClick={() => deleteListing(listing.id)}>
                                                     Delete
                                                 </button>
                                             </div>
