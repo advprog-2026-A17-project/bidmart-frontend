@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { apiUrl } from '../../../config/api';
+import { requestForgotPassword } from '../utils/auth-api';
 
 interface ForgotPasswordFormProps {
     onBackToLogin: () => void;
@@ -17,28 +17,14 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBackToLogin }
         setError(null);
         setSuccess(null);
 
-        try {
-            // TODO: Move this to auth-api.ts later
-            const response = await fetch(apiUrl('/api/v1/auth/forgot-password'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email }),
-            });
-
-            if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                setError(errData.message || 'Failed to request password reset. Please try again.');
-                return;
-            }
-
+        const outcome = await requestForgotPassword(email);
+        if (outcome.kind === 'error') {
+            setError(outcome.message);
+        } else {
             setSuccess('If an account exists for that email, we have sent a password reset link.');
             setEmail('');
-        } catch (err: unknown) {
-            setError('Failed to connect to the server. Please check your network.');
-            console.error(err);
-        } finally {
-            setLoading(false);
         }
+        setLoading(false);
     };
 
     return (

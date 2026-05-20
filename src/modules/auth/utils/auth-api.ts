@@ -118,6 +118,51 @@ export const requestEmailVerification = async (token: string): Promise<{ kind: '
     return { kind: 'error', message: errData.message ?? 'Verification failed. The link may be invalid or expired.' };
 };
 
+export const requestForgotPassword = async (email: string): Promise<{ kind: 'success' } | { kind: 'error'; message: string }> => {
+    const response = await fetch(apiUrl('/api/v1/auth/forgot-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+    });
+
+    if (response.ok || response.status === 204) {
+        return { kind: 'success' };
+    }
+
+    return { kind: 'error', message: await readApiError(response, 'Failed to request password reset.') };
+};
+
+export const requestResetPassword = async (
+    token: string,
+    newPassword: string,
+): Promise<{ kind: 'success' } | { kind: 'error'; message: string }> => {
+    const response = await fetch(apiUrl('/api/v1/auth/reset-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword }),
+    });
+
+    if (response.ok || response.status === 204) {
+        return { kind: 'success' };
+    }
+
+    return { kind: 'error', message: await readApiError(response, 'Password reset failed. The link may be invalid or expired.') };
+};
+
+export type PublicSellerProfile = {
+    id: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+};
+
+export const fetchPublicSellerProfile = async (userId: string): Promise<PublicSellerProfile | null> => {
+    const response = await fetch(apiUrl(`/api/v1/auth/users/${userId}/public-profile`));
+    if (!response.ok) {
+        return null;
+    }
+    return response.json() as Promise<PublicSellerProfile>;
+};
+
 export const requestResendVerification = async (email: string): Promise<{ kind: 'success' } | { kind: 'error'; message: string }> => {
     const response = await fetch(apiUrl('/api/v1/auth/resend-verification'), {
         method: 'POST',

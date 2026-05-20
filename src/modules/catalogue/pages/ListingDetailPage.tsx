@@ -12,6 +12,7 @@ import { biddingListingPath } from '../../auction/utils/bidding-paths';
 import { activeListingStatuses, catalogueListingToAuction, type CatalogueListing } from '../utils/listing-to-auction';
 import { useNowTick } from '../../../hooks/useNowTick';
 import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
+import { fetchPublicSellerProfile, type PublicSellerProfile } from '../../auth/utils/auth-api';
 
 type ListingDetail = {
     id: string;
@@ -98,6 +99,7 @@ const ListingDetailPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const [listing, setListing] = useState<ListingDetail | null>(null);
+    const [sellerProfile, setSellerProfile] = useState<PublicSellerProfile | null>(null);
     const [bids, setBids] = useState<BidHistoryItem[]>([]);
     const [bidInput, setBidInput] = useState('');
     const [loading, setLoading] = useState(true);
@@ -188,6 +190,9 @@ const ListingDetailPage: React.FC = () => {
             }
             const mergedListing = auctionPatch ? { ...listingPayload, ...auctionPatch } : listingPayload;
             setListing(mergedListing);
+
+            const profile = await fetchPublicSellerProfile(String(mergedListing.sellerId));
+            setSellerProfile(profile);
 
             const meta = buildAuctionCardMeta(catalogueListingToAuction(mergedListing as unknown as CatalogueListing));
             setBidInput(normalizeMoneyInput(meta.minNextBid));
@@ -356,6 +361,29 @@ const ListingDetailPage: React.FC = () => {
                     <div className="auction-detail-copy">
                         <p className="eyebrow">{listing.category || 'Marketplace Listing'}</p>
                         <h1>{listing.title}</h1>
+                        <div className="listing-seller-meta" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                            {sellerProfile?.avatarUrl ? (
+                                <img
+                                    src={sellerProfile.avatarUrl}
+                                    alt=""
+                                    style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
+                                />
+                            ) : (
+                                <span
+                                    className="material-symbols-outlined"
+                                    style={{ fontSize: '2rem', color: 'var(--text-muted)' }}
+                                    aria-hidden="true"
+                                >
+                                    person
+                                </span>
+                            )}
+                            <div>
+                                <span className="text-muted" style={{ fontSize: '0.85rem' }}>Seller</span>
+                                <div style={{ fontWeight: 600 }}>
+                                    {sellerProfile?.displayName?.trim() || `Seller ${listing.sellerId.slice(0, 8)}`}
+                                </div>
+                            </div>
+                        </div>
                         <p className="text-muted">{listing.description || 'No description provided by the seller.'}</p>
                         <div className="auction-spec-grid">
                             <div>

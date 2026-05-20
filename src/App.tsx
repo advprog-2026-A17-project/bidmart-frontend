@@ -22,6 +22,7 @@ import { formatCents } from './modules/wallet/utils/payment';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import './App.css';
 import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
+import ResetPasswordPage from './modules/auth/pages/ResetPasswordPage';
 
 const Navbar = () => {
     const { user, activeRole, switchRole, logout, sessionExpiresAt } = useAuth();
@@ -296,6 +297,7 @@ const AppLayout = () => {
                         <Route path="/listings/:id" element={<ListingDetailPage />} />
                         <Route path="/login" element={<AuthPage />} />
                         <Route path="/verify-email" element={<VerifyEmailPage />} />
+                        <Route path="/reset-password" element={<ResetPasswordPage />} />
                         <Route path="/auctions" element={<Navigate to="/" replace />} />
                         <Route path="/auctions/:id" element={<RedirectToListing />} />
                         <Route path="/active-auctions" element={<Navigate to="/" replace />} />
