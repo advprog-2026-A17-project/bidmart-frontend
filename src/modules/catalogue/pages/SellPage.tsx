@@ -4,7 +4,7 @@ import BackButton from '../../../components/BackButton';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
-import { formatMoney, normalizeMoneyInput, toMoneyAmount } from '../../../utils/money';
+import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta, type Auction } from '../../auction/utils/auction-card-meta';
 import { useNowTick } from '../../../hooks/useNowTick';
@@ -88,8 +88,8 @@ const toDateTimeLocalValue = (date: Date): string => {
     return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 };
 
-const toListingAmount = (value: string): number => toMoneyAmount(value);
-const fromListingAmount = (value?: number | null): string => normalizeMoneyInput(value);
+const toListingAmount = (value: string): number => toRupiahAmount(value);
+const fromListingAmount = (value?: number | null): string => normalizeRupiahInput(value);
 const toErrorMessage = (err: unknown): string =>
     err instanceof Error ? err.message : 'Unknown error';
 
@@ -813,10 +813,10 @@ const SellPage: React.FC = () => {
                                         className={`form-input ${listingFormErrors.startingBid ? 'form-input-error' : ''}`}
                                         type="number"
                                         min={1}
-                                        step="0.01"
+                                        step="1"
                                         value={listingForm.startingBid}
                                         onChange={(event) => updateListingField('startingBid', event.target.value)}
-                                        onBlur={() => updateListingField('startingBid', normalizeMoneyInput(listingForm.startingBid))}
+                                        onBlur={() => updateListingField('startingBid', normalizeRupiahInput(listingForm.startingBid))}
                                         placeholder="0.00"
                                         aria-invalid={Boolean(listingFormErrors.startingBid)}
                                         aria-describedby={listingFormErrors.startingBid ? 'listing-starting-price-error' : undefined}
@@ -851,10 +851,10 @@ const SellPage: React.FC = () => {
                                         className={`form-input ${listingFormErrors.reservePrice ? 'form-input-error' : ''}`}
                                         type="number"
                                         min={1}
-                                        step="0.01"
+                                        step="1"
                                         value={listingForm.reservePrice}
                                         onChange={(event) => updateListingField('reservePrice', event.target.value)}
-                                        onBlur={() => updateListingField('reservePrice', normalizeMoneyInput(listingForm.reservePrice))}
+                                        onBlur={() => updateListingField('reservePrice', normalizeRupiahInput(listingForm.reservePrice))}
                                         placeholder="Minimum price to sell"
                                     />
                                     {listingFormErrors.reservePrice && <span className="field-error">{listingFormErrors.reservePrice}</span>}
@@ -865,10 +865,10 @@ const SellPage: React.FC = () => {
                                         className={`form-input ${listingFormErrors.minimumIncrement ? 'form-input-error' : ''}`}
                                         type="number"
                                         min={1}
-                                        step="0.01"
+                                        step="1"
                                         value={listingForm.minimumIncrement}
                                         onChange={(event) => updateListingField('minimumIncrement', event.target.value)}
-                                        onBlur={() => updateListingField('minimumIncrement', normalizeMoneyInput(listingForm.minimumIncrement))}
+                                        onBlur={() => updateListingField('minimumIncrement', normalizeRupiahInput(listingForm.minimumIncrement))}
                                     />
                                     {listingFormErrors.minimumIncrement && <span className="field-error">{listingFormErrors.minimumIncrement}</span>}
                                 </label>
@@ -961,7 +961,7 @@ const SellPage: React.FC = () => {
                             <div className="seller-preview-metrics">
                                 <div>
                                     <span>Starting Price</span>
-                                    <strong>{formatMoney(toMoneyAmount(listingForm.startingBid))}</strong>
+                                    <strong>{formatMoney(toRupiahAmount(listingForm.startingBid))}</strong>
                                 </div>
                             </div>
                         </aside>

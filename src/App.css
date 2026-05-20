@@ -180,6 +180,30 @@ button {
   gap: 10px;
 }
 
+.session-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-low);
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.session-timer .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.session-timer-warning {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .app-user-pill {
   display: inline-flex;
   align-items: center;
