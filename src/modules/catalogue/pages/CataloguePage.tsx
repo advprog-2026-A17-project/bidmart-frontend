@@ -154,7 +154,6 @@ const CataloguePage: React.FC = () => {
 
     const handleImageError = (
         event: React.SyntheticEvent<HTMLImageElement>,
-        _itemId: CatalogueItem['id']
     ) => {
         const target = event.currentTarget;
         target.onerror = null;
@@ -309,7 +308,7 @@ const CataloguePage: React.FC = () => {
                                     src={resolveImageSrc(featuredItem)}
                                     alt={featuredItem.title}
                                     loading="eager"
-                                    onError={(event) => handleImageError(event, featuredItem.id)}
+                                    onError={(event) => handleImageError(event)}
                                 />
                                 <div className="hero-lot-overlay" />
                                 <div className="hero-lot-badges">
@@ -347,7 +346,7 @@ const CataloguePage: React.FC = () => {
                                                     src={resolveImageSrc(item)}
                                                     alt={item.title}
                                                     loading="lazy"
-                                                    onError={(event) => handleImageError(event, item.id)}
+                                                    onError={(event) => handleImageError(event)}
                                                 />
                                                 <div>
                                                     <span className="time-badge compact">
@@ -385,7 +384,7 @@ const CataloguePage: React.FC = () => {
                                             alt={item.title}
                                             className="catalog-image"
                                             loading="lazy"
-                                            onError={(event) => handleImageError(event, item.id)}
+                                            onError={(event) => handleImageError(event)}
                                         />
                                         <span className={`status-badge status-${item.status}`}>{item.status}</span>
                                     </div>
