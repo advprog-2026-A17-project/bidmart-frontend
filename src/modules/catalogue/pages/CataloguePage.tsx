@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiUrl } from '../../../config/api';
 import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
+import { CATALOGUE_CATEGORIES_TREE_PATH } from '../api/endpoints';
 import { Link } from 'react-router-dom';
 import { formatMoney, normalizeMoneyInput } from '../../../utils/money';
 import { useNowTick } from '../../../hooks/useNowTick';
+import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
+import { flattenCategoryTree, type CategoryNode, type CategoryOption } from '../utils/categories';
 
 interface CatalogueItem {
     id: number | string;
@@ -21,6 +24,7 @@ const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE']);
 
 interface SearchParams {
     keyword: string;
+    category: string;
     minPrice: string;
     maxPrice: string;
 }
@@ -31,15 +35,18 @@ const CataloguePage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [searchParams, setSearchParams] = useState<SearchParams>({
         keyword: '',
+        category: '',
         minPrice: '',
         maxPrice: '',
     });
     const [appliedParams, setAppliedParams] = useState<SearchParams>({
         keyword: '',
+        category: '',
         minPrice: '',
         maxPrice: '',
     });
     const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
+    const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
     const nowMs = useNowTick();
 
     const parseCatalogueItems = (payload: unknown): CatalogueItem[] => {
@@ -57,6 +64,7 @@ const CataloguePage: React.FC = () => {
         setError(null);
         const query = new URLSearchParams();
         if (params.keyword) query.append('keyword', params.keyword);
+        if (params.category) query.append('category', params.category);
         if (params.minPrice) query.append('minPrice', params.minPrice);
         if (params.maxPrice) query.append('maxPrice', params.maxPrice);
 
@@ -83,13 +91,35 @@ const CataloguePage: React.FC = () => {
         fetchItems(appliedParams);
     }, [appliedParams, fetchItems]);
 
+    useEffect(() => {
+        let cancelled = false;
+        const fetchCategories = async () => {
+            try {
+                const response = await fetch(apiUrl(CATALOGUE_CATEGORIES_TREE_PATH));
+                if (!response.ok) return;
+                const payload = await response.json() as CategoryNode[];
+                if (!cancelled) {
+                    setCategoryOptions(flattenCategoryTree(payload));
+                }
+            } catch {
+                if (!cancelled) {
+                    setCategoryOptions([]);
+                }
+            }
+        };
+        void fetchCategories();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         setAppliedParams({ ...searchParams });
     };
 
     const handleReset = () => {
-        const empty: SearchParams = { keyword: '', minPrice: '', maxPrice: '' };
+        const empty: SearchParams = { keyword: '', category: '', minPrice: '', maxPrice: '' };
         setSearchParams(empty);
         setAppliedParams(empty);
     };
@@ -117,21 +147,18 @@ const CataloguePage: React.FC = () => {
         return `${mins}m left`;
     };
 
-    const buildFallbackImage = (itemId: CatalogueItem['id']) =>
-        `https://picsum.photos/seed/${encodeURIComponent(String(itemId))}/640/480`;
-
     const resolveImageSrc = (item: CatalogueItem) => {
         const url = item.imageUrl?.trim();
-        return url ? url : buildFallbackImage(item.id);
+        return url ? url : NO_IMAGE_PLACEHOLDER;
     };
 
     const handleImageError = (
         event: React.SyntheticEvent<HTMLImageElement>,
-        itemId: CatalogueItem['id']
+        _itemId: CatalogueItem['id']
     ) => {
         const target = event.currentTarget;
         target.onerror = null;
-        target.src = buildFallbackImage(itemId);
+        target.src = NO_IMAGE_PLACEHOLDER;
     };
 
     const visibleItems = [...items]
@@ -210,6 +237,21 @@ const CataloguePage: React.FC = () => {
                             value={searchParams.keyword}
                             onChange={(e) => setSearchParams((p) => ({ ...p, keyword: e.target.value }))}
                         />
+                    </label>
+                    <label className="field">
+                        <span>Category</span>
+                        <select
+                            className="form-input"
+                            value={searchParams.category}
+                            onChange={(e) => setSearchParams((p) => ({ ...p, category: e.target.value }))}
+                        >
+                            <option value="">All categories</option>
+                            {categoryOptions.map((category) => (
+                                <option key={`${category.id}-${category.label}`} value={category.name}>
+                                    {category.label}
+                                </option>
+                            ))}
+                        </select>
                     </label>
                     <label className="field">
                         <span>Min Price</span>
