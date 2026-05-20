@@ -9,12 +9,12 @@ import { formatMoney, normalizeMoneyInput, toMoneyAmount } from '../../../utils/
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta } from '../../auction/utils/auction-card-meta';
 import { biddingListingPath } from '../../auction/utils/bidding-paths';
-import { activeListingStatuses, catalogueListingToAuction } from '../utils/listing-to-auction';
+import { activeListingStatuses, catalogueListingToAuction, type CatalogueListing } from '../utils/listing-to-auction';
 import { useNowTick } from '../../../hooks/useNowTick';
 import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
 
 type ListingDetail = {
-    id: string | number;
+    id: string;
     title: string;
     description?: string | null;
     startingPrice?: number | null;
@@ -24,7 +24,7 @@ type ListingDetail = {
     imageUrl?: string | null;
     category?: string | null;
     condition?: string | null;
-    sellerId?: string | null;
+    sellerId: string;
     status?: string | null;
     startTime?: string | null;
     endTime?: string | null;
@@ -189,7 +189,7 @@ const ListingDetailPage: React.FC = () => {
             const mergedListing = auctionPatch ? { ...listingPayload, ...auctionPatch } : listingPayload;
             setListing(mergedListing);
 
-            const meta = buildAuctionCardMeta(catalogueListingToAuction(mergedListing));
+            const meta = buildAuctionCardMeta(catalogueListingToAuction(mergedListing as unknown as CatalogueListing));
             setBidInput(normalizeMoneyInput(meta.minNextBid));
 
             if (activeListingStatuses.has((mergedListing.status ?? '').toUpperCase())) {
@@ -254,7 +254,7 @@ const ListingDetailPage: React.FC = () => {
         return listing.imageUrl?.trim() || NO_IMAGE_PLACEHOLDER;
     }, [listing]);
 
-    const listingMeta = listing ? buildAuctionCardMeta(catalogueListingToAuction(listing), nowMs) : null;
+    const listingMeta = listing ? buildAuctionCardMeta(catalogueListingToAuction(listing as unknown as CatalogueListing), nowMs) : null;
     const isLive = listing ? activeListingStatuses.has((listing.status ?? '').toUpperCase()) : false;
     const isSeller = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId);
     const canViewListing = Boolean(

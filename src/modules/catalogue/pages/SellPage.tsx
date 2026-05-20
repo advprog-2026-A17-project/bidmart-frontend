@@ -8,7 +8,7 @@ import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../util
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta, type Auction } from '../../auction/utils/auction-card-meta';
 import { useNowTick } from '../../../hooks/useNowTick';
-import { catalogueListingToAuction } from '../utils/listing-to-auction';
+import { catalogueListingToAuction, type CatalogueListing } from '../utils/listing-to-auction';
 import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
 import { CATALOGUE_CATEGORIES_TREE_PATH } from '../api/endpoints';
 import { flattenCategoryTree, type CategoryNode, type CategoryOption } from '../utils/categories';
@@ -16,12 +16,12 @@ import { flattenCategoryTree, type CategoryNode, type CategoryOption } from '../
 type StudioView = 'dashboard' | 'listing-create' | 'listing-manage';
 
 type ListingRecord = {
-    id: string | number;
+    id: string;
     title: string;
     description: string;
     category?: string | null;
     condition?: string | null;
-    sellerId?: string | null;
+    sellerId: string;
     startingPrice?: number | null;
     reservePrice?: number | null;
     currentPrice?: number | null;
@@ -223,7 +223,7 @@ const SellPage: React.FC = () => {
             setSellerAuctions(
                 listings
                     .filter((listing) => String(listing.sellerId) === user.id)
-                    .map((listing) => catalogueListingToAuction(listing as unknown as Record<string, unknown>))
+                    .map((listing) => catalogueListingToAuction(listing as unknown as CatalogueListing))
             );
         } catch (err: unknown) {
             setAnalyticsError(toErrorMessage(err));
