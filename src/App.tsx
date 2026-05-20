@@ -1,35 +1,341 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useEffect, type ReactElement } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, NavLink, useNavigate, useParams } from 'react-router-dom';
+import CataloguePage from './modules/catalogue/pages/CataloguePage';
+import ListingDetailPage from './modules/catalogue/pages/ListingDetailPage';
+import SellPage from './modules/catalogue/pages/SellPage';
+import WalletPage from './modules/wallet/pages/WalletPage';
+import PaymentDetailPage from './modules/wallet/pages/PaymentDetailPage';
+import OrdersPage from './modules/orders/pages/OrdersPage';
+import OrderDetailPage from './modules/orders/pages/OrderDetailPage';
+import NotificationCenter from './modules/notifications/components/NotificationCenter';
+import AuthPage from './modules/auth/pages/AuthPage';
+import ProfilePage from './modules/auth/pages/ProfilePage';
+import AdminAuthPage from './modules/auth/pages/AdminAuthPage';
+import ProfileGuard from './modules/auth/components/ProfileGuard';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/useAuth';
+import { useAuthenticatedFetch } from './context/useAuthenticatedFetch';
+import { WalletUIProvider, useWalletUI } from './context/WalletUIContext';
+import { useWebSocket } from './hooks/useWebSocket';
+import { gatewayUrl } from './config/apiClient';
+import { formatCents } from './modules/wallet/utils/payment';
+import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+import './App.css';
+import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
+
+const Navbar = () => {
+    const { user, activeRole, switchRole, logout, sessionExpiresAt } = useAuth();
+    const authenticatedFetch = useAuthenticatedFetch();
+    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
+    const hasBuyer = user?.roles?.some((role) => role.name === 'BUYER') ?? false;
+    const hasSeller = user?.roles?.some((role) => role.name === 'SELLER') ?? false;
+    const hasAdmin = user?.roles?.some((role) => role.name === 'ADMIN') ?? false;
+    const isSeller = activeRole === 'SELLER';
+    const navigate = useNavigate();
+    const roleLabel = activeRole ?? user?.roles?.[0]?.name ?? 'Guest';
+    const displayName = user?.displayName?.trim() || user?.email;
+    const avatarUrl = user?.avatarUrl?.trim() || null;
+    const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState<number | null>(null);
+
+    const [walletBalance, setWalletBalance] = useState<number | null>(null);
+    const { showBalance, setShowBalance } = useWalletUI();
+
+    useEffect(() => {
+        if (!user) {
+            setTimeout(() => setWalletBalance(null), 0);
+            return;
+        }
+
+        let active = true;
+
+        const fetchWallet = async () => {
+            try {
+                const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${activeRole}`));
+                if (response.ok) {
+                    const data = await response.json();
+                    if (active) {
+                        setWalletBalance(data.wallet?.activeBalance ?? data.activeBalance ?? null);
+                    }
+                } else if (response.status === 404 || response.status === 500) {
+                    if (active) setWalletBalance(null);
+                }
+            } catch (err) {
+                console.error('Failed to fetch wallet for navbar:', err);
+            }
+        };
+
+        void fetchWallet();
+
+        if (isConnected) {
+            const destination = '/user/queue/notifications';
+            subscribe(destination, (payload) => {
+                const event = payload as { type?: string; payload?: { type?: string } };
+                const type = String(event.payload?.type ?? event.type ?? '').toUpperCase();
+                if (
+                    ['BID_PLACED', 'OUTBID', 'AUCTION_WON', 'AUCTION_ENDED', 'ORDER_CREATED'].includes(type) ||
+                    type.includes('WALLET') ||
+                    type.includes('PAYMENT') ||
+                    type.includes('WITHDRAW')
+                ) {
+                    void fetchWallet();
+                }
+            });
+            return () => {
+                active = false;
+                unsubscribe(destination);
+            };
+        }
+
+        return () => {
+            active = false;
+        };
+    }, [user, activeRole, authenticatedFetch, isConnected, subscribe, unsubscribe]);
+
+    useEffect(() => {
+        if (!sessionExpiresAt || !user) {
+            setTimeout(() => setSessionRemainingSeconds(null), 0);
+            return;
+        }
+
+        const updateRemaining = () => {
+            const remainingMs = sessionExpiresAt - Date.now();
+            const remainingSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+            setSessionRemainingSeconds(remainingSeconds);
+        };
+
+        updateRemaining();
+        const intervalId = window.setInterval(updateRemaining, 1000);
+        return () => window.clearInterval(intervalId);
+    }, [sessionExpiresAt, user]);
+
+    const formatSessionRemaining = (seconds: number | null) => {
+        if (seconds === null) return null;
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remaining = seconds % 60;
+        if (hours > 0) {
+            return `${hours}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`;
+        }
+        return `${minutes}:${String(remaining).padStart(2, '0')}`;
+    };
+
+    const handleSwitchRole = (role: 'BUYER' | 'SELLER') => {
+        switchRole(role);
+        navigate(role === 'SELLER' ? '/seller-studio' : '/');
+    };
+
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
+
+    return (
+        <nav className="app-nav">
+            <div className="app-brand-wrap">
+                <Link to={isSeller ? '/seller-studio' : '/'} className="app-logo" aria-label="BidMart home">
+                    BM
+                </Link>
+                <div>
+                    <strong className="app-brand">BidMart</strong>
+                    <span className="app-brand-subtitle">{isSeller ? 'Seller Studio' : 'Marketplace'}</span>
+                </div>
+            </div>
+            <div className="app-nav-links">
+                {isSeller ? (
+                    <>
+                        <NavLink to="/seller-studio" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`} end>
+                            Seller Studio
+                        </NavLink>
+                        <NavLink to="/wallet" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Wallet
+                        </NavLink>
+                        <NavLink to="/orders" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Orders
+                        </NavLink>
+                        <NavLink to="/profile" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Profile
+                        </NavLink>
+                        {hasAdmin && (
+                            <NavLink to="/admin/auth" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                                Admin Auth
+                            </NavLink>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        <NavLink to="/" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`} end>
+                            Marketplace
+                        </NavLink>
+                        <NavLink to="/orders" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Orders
+                        </NavLink>
+                        <NavLink to="/wallet" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Wallet
+                        </NavLink>
+                        <NavLink to="/profile" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Profile
+                        </NavLink>
+                        {hasAdmin && (
+                            <NavLink to="/admin/auth" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                                Admin Auth
+                            </NavLink>
+                        )}
+                    </>
+                )}
+            </div>
+            <div className="app-nav-right">
+                {user ? (
+                    <>
+                        {walletBalance !== null && (
+                            <div className="navbar-wallet-balance" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem' }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>account_balance_wallet</span>
+                                <strong style={{ minWidth: '80px' }}>
+                                    {showBalance ? formatCents(walletBalance) : '••••••'}
+                                </strong>
+                                <button
+                                    type="button"
+                                    className="icon-button"
+                                    style={{ padding: '0.2rem' }}
+                                    onClick={() => setShowBalance(prev => !prev)}
+                                    aria-label={showBalance ? 'Hide balance' : 'Show balance'}
+                                >
+                                    <span className="material-symbols-outlined" style={{ fontSize: '1.2rem' }}>
+                                        {showBalance ? 'visibility_off' : 'visibility'}
+                                    </span>
+                                </button>
+                            </div>
+                        )}
+                        {hasBuyer && isSeller && (
+                            <button type="button" className="account-switch-button" onClick={() => handleSwitchRole('BUYER')}>
+                                <span className="material-symbols-outlined" aria-hidden="true">shopping_bag</span>
+                                Switch to Buying
+                            </button>
+                        )}
+                        {hasSeller && !isSeller && (
+                            <button type="button" className="account-switch-button" onClick={() => handleSwitchRole('SELLER')}>
+                                <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                                Switch to Selling
+                            </button>
+                        )}
+                        {!hasSeller && !isSeller && (
+                            <Link to="/login?tab=register&role=SELLER" className="account-switch-button">
+                                <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                                Open Seller Account
+                            </Link>
+                        )}
+                        {!hasBuyer && isSeller && (
+                            <Link to="/login?tab=register&role=BUYER" className="account-switch-button">
+                                <span className="material-symbols-outlined" aria-hidden="true">shopping_bag</span>
+                                Open Buying Account
+                            </Link>
+                        )}
+                        {sessionRemainingSeconds !== null && (
+                            <div className={`session-timer ${sessionRemainingSeconds <= 300 ? 'session-timer-warning' : ''}`}>
+                                <span className="material-symbols-outlined" aria-hidden="true">timer</span>
+                                <span>Session ends in {formatSessionRemaining(sessionRemainingSeconds)}</span>
+                            </div>
+                        )}
+                        <NotificationCenter />
+                        <span className="app-user-pill">
+                            {avatarUrl ? (
+                                <img
+                                    src={avatarUrl}
+                                    alt={displayName ? `${displayName} avatar` : 'User avatar'}
+                                    style={{ width: '24px', height: '24px', borderRadius: '999px', objectFit: 'cover' }}
+                                />
+                            ) : (
+                                <span className="material-symbols-outlined app-user-icon" aria-hidden="true">account_circle</span>
+                            )}
+                            <span className="app-user-email">{displayName}</span>
+                            {user.roles?.length > 0 && (
+                                <span className="app-role-pill">
+                                    {roleLabel}
+                                </span>
+                            )}
+                        </span>
+                        <button
+                            onClick={handleLogout}
+                            className="app-logout-button"
+                        >
+                            Logout
+                        </button>
+                    </>
+                ) : (
+                    <Link to="/login" className="app-logout-button">
+                        <span className="material-symbols-outlined" aria-hidden="true">login</span>
+                        Sign In
+                    </Link>
+                )}
+            </div>
+        </nav>
+    );
+};
+
+const RoleHome = () => {
+    const { activeRole } = useAuth();
+    return activeRole === 'SELLER' ? <Navigate to="/seller-studio" replace /> : <CataloguePage />;
+};
+
+const RedirectToListing = () => {
+    const { id } = useParams();
+    return <Navigate to={id ? `/listings/${id}` : '/'} replace />;
+};
+
+const AppLayout = () => {
+    const { user, activeRole } = useAuth();
+    const isSeller = activeRole === 'SELLER';
+    const sellerOnly = (element: ReactElement) => isSeller ? element : <Navigate to={user ? '/' : '/login'} replace />;
+
+    return (
+        <div className="app-body app-body-public">
+            <main className="app-main">
+                <ProfileGuard>
+                    <Routes>
+                        <Route path="/" element={<RoleHome />} />
+                        <Route path="/marketplace" element={<CataloguePage />} />
+                        <Route path="/listings/:id" element={<ListingDetailPage />} />
+                        <Route path="/login" element={<AuthPage />} />
+                        <Route path="/verify-email" element={<VerifyEmailPage />} />
+                        <Route path="/auctions" element={<Navigate to="/" replace />} />
+                        <Route path="/auctions/:id" element={<RedirectToListing />} />
+                        <Route path="/active-auctions" element={<Navigate to="/" replace />} />
+                        <Route path="/active-auctions/:id" element={<RedirectToListing />} />
+                        <Route path="/seller-studio" element={sellerOnly(<SellPage />)} />
+                        <Route path="/command" element={<Navigate to="/seller-studio" replace />} />
+                        <Route path="/command/auctions" element={<Navigate to="/seller-studio" replace />} />
+                        <Route path="/command/auctions/:id" element={<Navigate to="/seller-studio" replace />} />
+                        <Route path="/command/sell" element={<Navigate to="/seller-studio" replace />} />
+                        <Route path="/command/wallet" element={<Navigate to="/wallet" replace />} />
+                        <Route path="/command/profile" element={<Navigate to="/profile" replace />} />
+                        <Route path="/profile" element={<ProfilePage />} />
+                        <Route path="/admin/auth" element={<AdminAuthPage />} />
+                        <Route path="/sell" element={<Navigate to={isSeller ? '/seller-studio' : '/'} replace />} />
+                        <Route path="/wallet" element={<WalletPage />} />
+                        <Route path="/wallet/payments/:paymentId" element={<PaymentDetailPage />} />
+                        <Route path="/orders" element={<OrdersPage />} />
+                        <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+                    </Routes>
+                </ProfileGuard>
+            </main>
+        </div>
+    );
+};
 
 function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    return (
+        <GlobalErrorBoundary>
+            <AuthProvider>
+                <WalletUIProvider>
+                    <Router>
+                        <div className="app-shell">
+                            <Navbar />
+                            <AppLayout />
+                        </div>
+                    </Router>
+                </WalletUIProvider>
+            </AuthProvider>
+        </GlobalErrorBoundary>
+    );
 }
 
-export default App
+export default App;
