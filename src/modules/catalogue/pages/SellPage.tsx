@@ -175,6 +175,7 @@ const SellPage: React.FC = () => {
     const [listings, setListings] = useState<ListingRecord[]>([]);
     const [sellerAuctions, setSellerAuctions] = useState<Auction[]>([]);
     const [editingListingId, setEditingListingId] = useState<string | null>(null);
+    const [submitting, setSubmitting] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -460,6 +461,7 @@ const SellPage: React.FC = () => {
     };
 
     const saveListing = async (publishImmediate = false) => {
+        if (submitting) return;
         if (!user || !isSeller) {
             setError('Only seller accounts can publish listings. Sign in with a SELLER role to continue.');
             return;
@@ -476,6 +478,7 @@ const SellPage: React.FC = () => {
         setListingFormErrors({});
         setError(null);
         setNotice(null);
+        setSubmitting(true);
 
         try {
             const isEditing = Boolean(editingListingId);
@@ -495,7 +498,17 @@ const SellPage: React.FC = () => {
             const listingId = String(saved.id);
 
             if (publishImmediate) {
-                await publishCreatedListing(listingId);
+                try {
+                    await publishCreatedListing(listingId);
+                } catch (publishErr: unknown) {
+                    // Rollback: delete the orphan draft listing so it doesn't linger
+                    if (!isEditing) {
+                        try {
+                            await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`), { method: 'DELETE' });
+                        } catch { /* best-effort cleanup */ }
+                    }
+                    throw publishErr;
+                }
             }
 
             setNotice(
@@ -512,6 +525,8 @@ const SellPage: React.FC = () => {
             setActiveView('listing-manage');
         } catch (err: unknown) {
             setError(toErrorMessage(err));
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -962,23 +977,23 @@ const SellPage: React.FC = () => {
                             </label>
                             <div className="panel-footer">
                                 {!isEditingPublishedListing && (
-                                    <button type="button" className="secondary-button" onClick={() => saveListing(false)}>
-                                        Save Draft
+                                    <button type="button" className="secondary-button" disabled={submitting} onClick={() => saveListing(false)}>
+                                        {submitting ? 'Saving…' : 'Save Draft'}
                                     </button>
                                 )}
                                 {!editingListingId && (
-                                    <button type="button" className="primary-button" onClick={() => saveListing(true)}>
-                                        Create & Publish Listing
+                                    <button type="button" className="primary-button" disabled={submitting} onClick={() => saveListing(true)}>
+                                        {submitting ? 'Publishing…' : 'Create & Publish Listing'}
                                     </button>
                                 )}
                                 {editingListingId && !isEditingPublishedListing && (
-                                    <button type="button" className="primary-button" onClick={() => saveListing(true)}>
-                                        Update & Publish Listing
+                                    <button type="button" className="primary-button" disabled={submitting} onClick={() => saveListing(true)}>
+                                        {submitting ? 'Publishing…' : 'Update & Publish Listing'}
                                     </button>
                                 )}
                                 {editingListingId && isEditingPublishedListing && (
-                                    <button type="button" className="primary-button" onClick={() => saveListing(false)}>
-                                        Update Listing
+                                    <button type="button" className="primary-button" disabled={submitting} onClick={() => saveListing(false)}>
+                                        {submitting ? 'Updating…' : 'Update Listing'}
                                     </button>
                                 )}
                             </div>
@@ -1037,7 +1052,8 @@ const SellPage: React.FC = () => {
                                     const status = (listing.status ?? 'UNKNOWN').toUpperCase();
                                     const finalized = FINAL_AUCTION_STATUSES.has(status);
                                     const locked = listing.hasBids || finalized;
-                                    const canEdit = !listing.hasBids && !finalized;
+                                    const isLiveStatus = status === 'ACTIVE' || status === 'EXTENDED';
+                                    const canEdit = (!listing.hasBids && !finalized) || isLiveStatus;
                                     const canCancel = !listing.hasBids && status !== 'WON' && status !== 'UNSOLD' && status !== 'CLOSED' && status !== 'CANCELLED';
                                     const canDelete = !listing.hasBids && status === 'DRAFT';
                                     const canPublishDraft = status === 'DRAFT';

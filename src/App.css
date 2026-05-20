@@ -1016,6 +1016,26 @@ button {
   font-size: 1.6rem;
 }
 
+.seller-info-block {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-low);
+}
+
+.seller-info-block > .material-symbols-outlined {
+  font-size: 28px;
+  color: var(--secondary);
+}
+
+.seller-info-block > div {
+  display: grid;
+  gap: 2px;
+}
+
 .auction-spec-grid,
 .seller-preview-metrics {
   display: grid;

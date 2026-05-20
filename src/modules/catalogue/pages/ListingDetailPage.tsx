@@ -385,6 +385,23 @@ const ListingDetailPage: React.FC = () => {
                             </div>
                         </div>
                         <p className="text-muted">{listing.description || 'No description provided by the seller.'}</p>
+
+                        {listing.sellerId && (
+                            <div className="seller-info-block">
+                                <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                                <div>
+                                    <span className="metric-label">Seller</span>
+                                    <strong>{listing.sellerId.length > 12 ? `${listing.sellerId.slice(0, 6)}…${listing.sellerId.slice(-4)}` : listing.sellerId}</strong>
+                                </div>
+                                {listing.condition && (
+                                    <div>
+                                        <span className="metric-label">Condition</span>
+                                        <strong style={{ textTransform: 'capitalize' }}>{listing.condition}</strong>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="auction-spec-grid">
                             <div>
                                 <span>Starting Price (IDR)</span>
