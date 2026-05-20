@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { AuthContext, type AuthLoginResult, type AuthUser } from './auth-context';
 import { apiUrl } from '../config/api';
 import { useSessionRevocation } from '../hooks/useSessionRevocation';
@@ -6,6 +6,8 @@ import { getPersistentItem, setPersistentItem, removePersistentItem } from '../u
 
 const API_PATH_PREFIX = '/api/v1/';
 type AccountRole = 'BUYER' | 'SELLER';
+const SESSION_REFRESH_MIN_INTERVAL_MS = 60000;
+const DEFAULT_SESSION_WINDOW_SECONDS = 900;
 
 const trustedApiPath = (input: RequestInfo | URL): string => {
     const rawUrl = input instanceof Request ? input.url : input.toString();
@@ -79,17 +81,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const token = getPersistentItem('access_token');
         return extractTokenIdFromJwt(token);
     });
+    const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(() => {
+        const saved = getPersistentItem('session_expires_at');
+        if (!saved) return null;
+        const parsed = Number(saved);
+        return Number.isFinite(parsed) ? parsed : null;
+    });
     const [activeRole, setActiveRole] = useState<AccountRole | null>(() => {
         const savedRole = getPersistentItem('active_role');
         const savedUser = getPersistentItem('auth_user');
         return resolveActiveRole(savedUser ? JSON.parse(savedUser) as AuthUser : null, savedRole);
     });
+    const sessionWindowSecondsRef = useRef(DEFAULT_SESSION_WINDOW_SECONDS);
 
     useEffect(() => {
         if (user) {
             setPersistentItem('auth_user', JSON.stringify(user));
             setPersistentItem('access_token', accessToken || '');
             setPersistentItem('refresh_token', refreshToken || '');
+            setPersistentItem('session_expires_at', sessionExpiresAt ? String(sessionExpiresAt) : '');
             const nextRole = resolveActiveRole(user, activeRole);
             if (nextRole) {
                 setPersistentItem('active_role', nextRole);
@@ -98,15 +108,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             removePersistentItem('auth_user');
             removePersistentItem('access_token');
             removePersistentItem('refresh_token');
+            removePersistentItem('session_expires_at');
             removePersistentItem('active_role');
         }
-    }, [user, accessToken, refreshToken, activeRole]);
+    }, [user, accessToken, refreshToken, sessionExpiresAt, activeRole]);
 
     const login = useCallback((payload: AuthLoginResult) => {
+        sessionWindowSecondsRef.current = payload.expiresIn > 0 ? payload.expiresIn : DEFAULT_SESSION_WINDOW_SECONDS;
+        const accessWindowExpiresAt = Date.now() + (sessionWindowSecondsRef.current * 1000);
+        const refreshWindowExpiresAt = payload.refreshExpiresAt || Number.MAX_SAFE_INTEGER;
+        const nextSessionExpiresAt = Math.min(accessWindowExpiresAt, refreshWindowExpiresAt);
+
         setUser(payload.user);
         setAccessToken(payload.accessToken);
         setRefreshToken(payload.refreshToken);
         setTokenId(extractTokenIdFromJwt(payload.accessToken));
+        setSessionExpiresAt(Number.isFinite(nextSessionExpiresAt) ? nextSessionExpiresAt : null);
         setActiveRole(resolveActiveRole(payload.user, getPersistentItem('active_role')));
     }, []);
 
@@ -126,16 +143,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removePersistentItem('auth_user');
         removePersistentItem('access_token');
         removePersistentItem('refresh_token');
+        removePersistentItem('session_expires_at');
         removePersistentItem('active_role');
 
         setUser(null);
         setAccessToken(null);
         setRefreshToken(null);
         setTokenId(null);
+        setSessionExpiresAt(null);
         setActiveRole(null);
     }, [refreshToken]);
 
     useSessionRevocation(user, tokenId, logout);
+
+    useEffect(() => {
+        if (!user || !sessionExpiresAt) {
+            return;
+        }
+
+        const msRemaining = sessionExpiresAt - Date.now();
+        if (msRemaining <= 0) {
+            logout();
+            return;
+        }
+
+        const timerId = window.setTimeout(() => {
+            logout();
+        }, msRemaining);
+
+        return () => window.clearTimeout(timerId);
+    }, [logout, sessionExpiresAt, user]);
 
     const refreshAccessToken = useCallback(async (): Promise<string | null> => {
         if (!refreshToken) {
@@ -158,6 +195,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login(payload);
         return payload.accessToken;
     }, [login, logout, refreshToken]);
+
+    const lastRefreshAtRef = useRef(0);
+
+    useEffect(() => {
+        if (!user || !refreshToken) {
+            return;
+        }
+
+        const refreshOnActivity = () => {
+            const now = Date.now();
+            if (now - lastRefreshAtRef.current < SESSION_REFRESH_MIN_INTERVAL_MS) {
+                return;
+            }
+            lastRefreshAtRef.current = now;
+            void refreshAccessToken();
+        };
+
+        const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+        events.forEach((eventName) => {
+            window.addEventListener(eventName, refreshOnActivity, { passive: true });
+        });
+
+        return () => {
+            events.forEach((eventName) => {
+                window.removeEventListener(eventName, refreshOnActivity);
+            });
+        };
+    }, [refreshAccessToken, refreshToken, user]);
 
     const authenticatedFetch = useCallback(async (input: RequestInfo | URL, init: RequestInit = {}) => {
         const requestPath = trustedApiPath(input);
@@ -188,18 +253,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPersistentItem('active_role', role);
     }, [user]);
 
+    const updateUserProfile = useCallback((profile: {
+        displayName?: string | null;
+        avatarUrl?: string | null;
+        shippingAddress?: string | null;
+    }) => {
+        setUser((previous) => {
+            if (!previous) return previous;
+            const nextDisplayName = profile.displayName ?? previous.displayName ?? null;
+            const nextAvatarUrl = profile.avatarUrl ?? previous.avatarUrl ?? null;
+            const nextShippingAddress = profile.shippingAddress ?? previous.shippingAddress ?? null;
+            const unchanged =
+                (previous.displayName ?? null) === nextDisplayName
+                && (previous.avatarUrl ?? null) === nextAvatarUrl
+                && (previous.shippingAddress ?? null) === nextShippingAddress;
+            if (unchanged) {
+                return previous;
+            }
+            return {
+                ...previous,
+                ...profile,
+            };
+        });
+    }, []);
+
     const contextValue = useMemo(() => ({
         user,
         accessToken,
         refreshToken,
         tokenId,
+        sessionExpiresAt,
         activeRole,
         login,
         logout,
         switchRole,
+        updateUserProfile,
         refreshAccessToken,
         authenticatedFetch,
-    }), [accessToken, activeRole, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, switchRole, tokenId, user]);
+    }), [accessToken, activeRole, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, sessionExpiresAt, switchRole, tokenId, updateUserProfile, user]);
 
     return (
         <AuthContext.Provider value={contextValue}>

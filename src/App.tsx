@@ -1,29 +1,123 @@
-import type { ReactElement } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate, NavLink, useNavigate } from 'react-router-dom';
-import AuctionDetailPage from './modules/auction/pages/AuctionDetailPage';
-import BuyerAuctionsPage from './modules/auction/pages/BuyerAuctionsPage';
+import { useState, useEffect, type ReactElement } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, NavLink, useNavigate, useParams } from 'react-router-dom';
 import CataloguePage from './modules/catalogue/pages/CataloguePage';
 import ListingDetailPage from './modules/catalogue/pages/ListingDetailPage';
 import SellPage from './modules/catalogue/pages/SellPage';
 import WalletPage from './modules/wallet/pages/WalletPage';
 import PaymentDetailPage from './modules/wallet/pages/PaymentDetailPage';
+import OrdersPage from './modules/orders/pages/OrdersPage';
+import OrderDetailPage from './modules/orders/pages/OrderDetailPage';
 import NotificationCenter from './modules/notifications/components/NotificationCenter';
 import AuthPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
+import AdminAuthPage from './modules/auth/pages/AdminAuthPage';
 import ProfileGuard from './modules/auth/components/ProfileGuard';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
+import { useAuthenticatedFetch } from './context/useAuthenticatedFetch';
+import { WalletUIProvider, useWalletUI } from './context/WalletUIContext';
+import { useWebSocket } from './hooks/useWebSocket';
+import { gatewayUrl } from './config/apiClient';
+import { formatCents } from './modules/wallet/utils/payment';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import './App.css';
 import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
 
 const Navbar = () => {
-    const { user, activeRole, switchRole, logout } = useAuth();
+    const { user, activeRole, switchRole, logout, sessionExpiresAt } = useAuth();
+    const authenticatedFetch = useAuthenticatedFetch();
+    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
     const hasBuyer = user?.roles?.some((role) => role.name === 'BUYER') ?? false;
     const hasSeller = user?.roles?.some((role) => role.name === 'SELLER') ?? false;
+    const hasAdmin = user?.roles?.some((role) => role.name === 'ADMIN') ?? false;
     const isSeller = activeRole === 'SELLER';
     const navigate = useNavigate();
     const roleLabel = activeRole ?? user?.roles?.[0]?.name ?? 'Guest';
+    const displayName = user?.displayName?.trim() || user?.email;
+    const avatarUrl = user?.avatarUrl?.trim() || null;
+    const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState<number | null>(null);
+
+    const [walletBalance, setWalletBalance] = useState<number | null>(null);
+    const { showBalance, setShowBalance } = useWalletUI();
+
+    useEffect(() => {
+        if (!user) {
+            setWalletBalance(null);
+            return;
+        }
+
+        let active = true;
+
+        const fetchWallet = async () => {
+            try {
+                const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${activeRole}`));
+                if (response.ok) {
+                    const data = await response.json();
+                    if (active) {
+                        setWalletBalance(data.wallet?.activeBalance ?? data.activeBalance ?? null);
+                    }
+                } else if (response.status === 404 || response.status === 500) {
+                    if (active) setWalletBalance(null);
+                }
+            } catch (err) {
+                console.error('Failed to fetch wallet for navbar:', err);
+            }
+        };
+
+        void fetchWallet();
+
+        if (isConnected) {
+            const destination = '/user/queue/notifications';
+            subscribe(destination, (payload) => {
+                const event = payload as { type?: string; payload?: { type?: string } };
+                const type = String(event.payload?.type ?? event.type ?? '').toUpperCase();
+                if (
+                    ['BID_PLACED', 'OUTBID', 'AUCTION_WON', 'AUCTION_ENDED', 'ORDER_CREATED'].includes(type) ||
+                    type.includes('WALLET') ||
+                    type.includes('PAYMENT') ||
+                    type.includes('WITHDRAW')
+                ) {
+                    void fetchWallet();
+                }
+            });
+            return () => {
+                active = false;
+                unsubscribe(destination);
+            };
+        }
+
+        return () => {
+            active = false;
+        };
+    }, [user, activeRole, authenticatedFetch, isConnected, subscribe, unsubscribe]);
+
+    useEffect(() => {
+        if (!sessionExpiresAt || !user) {
+            setSessionRemainingSeconds(null);
+            return;
+        }
+
+        const updateRemaining = () => {
+            const remainingMs = sessionExpiresAt - Date.now();
+            const remainingSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+            setSessionRemainingSeconds(remainingSeconds);
+        };
+
+        updateRemaining();
+        const intervalId = window.setInterval(updateRemaining, 1000);
+        return () => window.clearInterval(intervalId);
+    }, [sessionExpiresAt, user]);
+
+    const formatSessionRemaining = (seconds: number | null) => {
+        if (seconds === null) return null;
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remaining = seconds % 60;
+        if (hours > 0) {
+            return `${hours}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`;
+        }
+        return `${minutes}:${String(remaining).padStart(2, '0')}`;
+    };
 
     const handleSwitchRole = (role: 'BUYER' | 'SELLER') => {
         switchRole(role);
@@ -55,17 +149,25 @@ const Navbar = () => {
                         <NavLink to="/wallet" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Wallet
                         </NavLink>
+                        <NavLink to="/orders" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Orders
+                        </NavLink>
                         <NavLink to="/profile" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Profile
                         </NavLink>
+                        {hasAdmin && (
+                            <NavLink to="/admin/auth" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                                Admin Auth
+                            </NavLink>
+                        )}
                     </>
                 ) : (
                     <>
                         <NavLink to="/" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`} end>
                             Marketplace
                         </NavLink>
-                        <NavLink to="/active-auctions" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
-                            Active Auctions
+                        <NavLink to="/orders" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Orders
                         </NavLink>
                         <NavLink to="/wallet" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Wallet
@@ -73,12 +175,36 @@ const Navbar = () => {
                         <NavLink to="/profile" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Profile
                         </NavLink>
+                        {hasAdmin && (
+                            <NavLink to="/admin/auth" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                                Admin Auth
+                            </NavLink>
+                        )}
                     </>
                 )}
             </div>
             <div className="app-nav-right">
                 {user ? (
                     <>
+                        {walletBalance !== null && (
+                            <div className="navbar-wallet-balance" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem' }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>account_balance_wallet</span>
+                                <strong style={{ minWidth: '80px' }}>
+                                    {showBalance ? formatCents(walletBalance) : '••••••'}
+                                </strong>
+                                <button
+                                    type="button"
+                                    className="icon-button"
+                                    style={{ padding: '0.2rem' }}
+                                    onClick={() => setShowBalance(prev => !prev)}
+                                    aria-label={showBalance ? 'Hide balance' : 'Show balance'}
+                                >
+                                    <span className="material-symbols-outlined" style={{ fontSize: '1.2rem' }}>
+                                        {showBalance ? 'visibility_off' : 'visibility'}
+                                    </span>
+                                </button>
+                            </div>
+                        )}
                         {hasBuyer && isSeller && (
                             <button type="button" className="account-switch-button" onClick={() => handleSwitchRole('BUYER')}>
                                 <span className="material-symbols-outlined" aria-hidden="true">shopping_bag</span>
@@ -103,10 +229,24 @@ const Navbar = () => {
                                 Open Buying Account
                             </Link>
                         )}
+                        {sessionRemainingSeconds !== null && (
+                            <div className={`session-timer ${sessionRemainingSeconds <= 300 ? 'session-timer-warning' : ''}`}>
+                                <span className="material-symbols-outlined" aria-hidden="true">timer</span>
+                                <span>Session ends in {formatSessionRemaining(sessionRemainingSeconds)}</span>
+                            </div>
+                        )}
                         <NotificationCenter />
                         <span className="app-user-pill">
-                            <span className="material-symbols-outlined app-user-icon" aria-hidden="true">account_circle</span>
-                            <span className="app-user-email">{user.email}</span>
+                            {avatarUrl ? (
+                                <img
+                                    src={avatarUrl}
+                                    alt={displayName ? `${displayName} avatar` : 'User avatar'}
+                                    style={{ width: '24px', height: '24px', borderRadius: '999px', objectFit: 'cover' }}
+                                />
+                            ) : (
+                                <span className="material-symbols-outlined app-user-icon" aria-hidden="true">account_circle</span>
+                            )}
+                            <span className="app-user-email">{displayName}</span>
                             {user.roles?.length > 0 && (
                                 <span className="app-role-pill">
                                     {roleLabel}
@@ -136,6 +276,11 @@ const RoleHome = () => {
     return activeRole === 'SELLER' ? <Navigate to="/seller-studio" replace /> : <CataloguePage />;
 };
 
+const RedirectToListing = () => {
+    const { id } = useParams();
+    return <Navigate to={id ? `/listings/${id}` : '/'} replace />;
+};
+
 const AppLayout = () => {
     const { user, activeRole } = useAuth();
     const isSeller = activeRole === 'SELLER';
@@ -151,10 +296,10 @@ const AppLayout = () => {
                         <Route path="/listings/:id" element={<ListingDetailPage />} />
                         <Route path="/login" element={<AuthPage />} />
                         <Route path="/verify-email" element={<VerifyEmailPage />} />
-                        <Route path="/auctions" element={<Navigate to="/active-auctions" replace />} />
-                        <Route path="/auctions/:id" element={<AuctionDetailPage />} />
-                        <Route path="/active-auctions" element={<BuyerAuctionsPage />} />
-                        <Route path="/active-auctions/:id" element={<AuctionDetailPage />} />
+                        <Route path="/auctions" element={<Navigate to="/" replace />} />
+                        <Route path="/auctions/:id" element={<RedirectToListing />} />
+                        <Route path="/active-auctions" element={<Navigate to="/" replace />} />
+                        <Route path="/active-auctions/:id" element={<RedirectToListing />} />
                         <Route path="/seller-studio" element={sellerOnly(<SellPage />)} />
                         <Route path="/command" element={<Navigate to="/seller-studio" replace />} />
                         <Route path="/command/auctions" element={<Navigate to="/seller-studio" replace />} />
@@ -163,9 +308,12 @@ const AppLayout = () => {
                         <Route path="/command/wallet" element={<Navigate to="/wallet" replace />} />
                         <Route path="/command/profile" element={<Navigate to="/profile" replace />} />
                         <Route path="/profile" element={<ProfilePage />} />
+                        <Route path="/admin/auth" element={<AdminAuthPage />} />
                         <Route path="/sell" element={<Navigate to={isSeller ? '/seller-studio' : '/'} replace />} />
                         <Route path="/wallet" element={<WalletPage />} />
                         <Route path="/wallet/payments/:paymentId" element={<PaymentDetailPage />} />
+                        <Route path="/orders" element={<OrdersPage />} />
+                        <Route path="/orders/:orderId" element={<OrderDetailPage />} />
                     </Routes>
                 </ProfileGuard>
             </main>
@@ -177,12 +325,14 @@ function App() {
     return (
         <GlobalErrorBoundary>
             <AuthProvider>
-                <Router>
-                    <div className="app-shell">
-                        <Navbar />
-                        <AppLayout />
-                    </div>
-                </Router>
+                <WalletUIProvider>
+                    <Router>
+                        <div className="app-shell">
+                            <Navbar />
+                            <AppLayout />
+                        </div>
+                    </Router>
+                </WalletUIProvider>
             </AuthProvider>
         </GlobalErrorBoundary>
     );

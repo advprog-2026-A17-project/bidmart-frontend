@@ -4,11 +4,16 @@ import BackButton from '../../../components/BackButton';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta, type Auction } from '../../auction/utils/auction-card-meta';
-import { parseAuctionsResponse } from '../../auction/utils/parse-auctions-response';
+import { useNowTick } from '../../../hooks/useNowTick';
+import { catalogueListingToAuction } from '../utils/listing-to-auction';
+import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
+import { CATALOGUE_CATEGORIES_TREE_PATH } from '../api/endpoints';
+import { flattenCategoryTree, type CategoryNode, type CategoryOption } from '../utils/categories';
 
-type StudioView = 'dashboard' | 'listing-create' | 'listing-manage' | 'auction-create' | 'auction-manage';
+type StudioView = 'dashboard' | 'listing-create' | 'listing-manage';
 
 type ListingRecord = {
     id: string | number;
@@ -18,9 +23,12 @@ type ListingRecord = {
     condition?: string | null;
     sellerId?: string | null;
     startingPrice?: number | null;
+    reservePrice?: number | null;
     currentPrice?: number | null;
+    minimumIncrement?: number | null;
     imageUrl?: string | null;
     status?: string | null;
+    startTime?: string | null;
     endTime?: string | null;
     hasBids?: boolean;
 };
@@ -31,17 +39,14 @@ type ListingFormState = {
     category: string;
     condition: string;
     startingBid: string;
+    reservePrice: string;
+    minimumIncrement: string;
+    endTime: string;
     imageUrl: string;
     images: string[];
 };
 
-type AuctionFormState = {
-    listingId: string;
-    startingBid: string;
-    reservePrice: string;
-    minimumIncrement: string;
-    duration: number;
-};
+type ListingFormErrors = Partial<Record<keyof ListingFormState, string>>;
 
 type StudioNavItem = {
     id: StudioView;
@@ -73,10 +78,22 @@ const CONDITIONS = [
     { value: 'used', label: 'Used' },
 ];
 
-const AUCTION_DURATIONS = [1, 3, 5, 7, 10];
 const MAX_IMAGE_BYTES = 600 * 1024;
-const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD', 'CANCELLED']);
-const LOCKED_AUCTION_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'ENDED', 'WON', 'UNSOLD', 'CANCELLED']);
+const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
+const FINAL_AUCTION_STATUSES = new Set<string>(['ENDED', 'WON', 'UNSOLD', 'CLOSED', 'CANCELLED']);
+
+const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
+    meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
+
+const toDateTimeLocalValue = (date: Date): string => {
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+};
+
+const toListingAmount = (value: string): number => toRupiahAmount(value);
+const fromListingAmount = (value?: number | null): string => normalizeRupiahInput(value);
+const toErrorMessage = (err: unknown): string =>
+    err instanceof Error ? err.message : 'Unknown error';
 
 const emptyListingForm: ListingFormState = {
     title: '',
@@ -84,27 +101,34 @@ const emptyListingForm: ListingFormState = {
     category: '',
     condition: '',
     startingBid: '',
+    reservePrice: '',
+    minimumIncrement: '1',
+    endTime: toDateTimeLocalValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
     imageUrl: '',
     images: [],
 };
-
-const emptyAuctionForm: AuctionFormState = {
-    listingId: '',
-    startingBid: '',
-    reservePrice: '',
-    minimumIncrement: '1',
-    duration: 7,
+const normalizeCondition = (condition?: string | null): string => {
+    const normalized = (condition ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z]+/g, ' ');
+    const compact = normalized.replace(/\s+/g, '');
+    return CONDITIONS.find((option) => (
+        option.value === compact ||
+        option.label.toLowerCase().replace(/\s+/g, '') === compact
+    ))?.value ?? '';
 };
-
-const toAmountCents = (value: string): number => Math.round(Number(value || 0) * 100);
-const fromAmountCents = (value?: number | null): string => String(((value ?? 0) / 100).toFixed(2));
-const toErrorMessage = (err: unknown): string =>
-    err instanceof Error ? err.message : 'Unknown error';
-const formatMoney = (value: number): string =>
-    `$${value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })}`;
+const isValidImageReference = (imageUrl: string): boolean => {
+    const trimmedUrl = imageUrl.trim();
+    if (!trimmedUrl) return true;
+    if (/^data:image\/(png|jpe?g|webp);base64,/i.test(trimmedUrl)) return true;
+    try {
+        const parsed = new URL(trimmedUrl);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+        return false;
+    }
+};
 const readImageFile = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -121,23 +145,33 @@ const parseListingsResponse = (payload: unknown): ListingRecord[] => {
     return [];
 };
 
-const isListingAuctionReady = (listing: ListingRecord): boolean =>
-    (listing.status ?? '').toUpperCase() === 'ACTIVE';
+const asIsoDate = (input?: string | null): string | null => {
+    if (!input) return null;
+    const parsed = new Date(input);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toISOString();
+};
 
-const isAuctionLocked = (auction: Auction): boolean =>
-    LOCKED_AUCTION_STATUSES.has(auction.status);
+const SELLER_STUDIO_VIEW_STORAGE_KEY = 'seller_studio_active_view';
 
-const hasReachedEndTime = (auction: Auction): boolean =>
-    new Date(auction.endTime).getTime() <= Date.now();
+const isStudioView = (value: string | null): value is StudioView =>
+    value === 'dashboard' || value === 'listing-create' || value === 'listing-manage';
 
 const SellPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const isSeller = user?.roles?.some((role) => role.name === 'SELLER') ?? false;
     const roleSummary = user?.roles?.map((role) => role.name).join(', ') ?? 'No active role';
-    const [activeView, setActiveView] = useState<StudioView>('dashboard');
+    const [activeView, setActiveView] = useState<StudioView>(() => {
+        try {
+            const saved = window.localStorage.getItem(SELLER_STUDIO_VIEW_STORAGE_KEY);
+            return isStudioView(saved) ? saved : 'dashboard';
+        } catch {
+            return 'dashboard';
+        }
+    });
     const [listingForm, setListingForm] = useState<ListingFormState>(emptyListingForm);
-    const [auctionForm, setAuctionForm] = useState<AuctionFormState>(emptyAuctionForm);
+
     const [listings, setListings] = useState<ListingRecord[]>([]);
     const [sellerAuctions, setSellerAuctions] = useState<Auction[]>([]);
     const [editingListingId, setEditingListingId] = useState<string | null>(null);
@@ -146,8 +180,10 @@ const SellPage: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(true);
     const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(true);
     const [analyticsError, setAnalyticsError] = useState<string | null>(null);
-    const [createdListingId, setCreatedListingId] = useState<string | null>(null);
-    const [createdAuctionId, setCreatedAuctionId] = useState<string | null>(null);
+    const [listingFormErrors, setListingFormErrors] = useState<ListingFormErrors>({});
+    const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
+    const [editingListingStatus, setEditingListingStatus] = useState<string | null>(null);
+    const nowMs = useNowTick();
 
     const fetchSellerListings = useCallback(async () => {
         if (!user || !isSeller) {
@@ -184,13 +220,10 @@ const SellPage: React.FC = () => {
         try {
             setAnalyticsLoading(true);
             setAnalyticsError(null);
-            const response = await fetch(gatewayUrl('/api/v1/auctions'));
-            if (!response.ok) {
-                throw new Error(`Auction analytics failed with status ${response.status}`);
-            }
-            const payload: unknown = await response.json();
             setSellerAuctions(
-                parseAuctionsResponse(payload).filter((auction) => auction.sellerId === user.id)
+                listings
+                    .filter((listing) => String(listing.sellerId) === user.id)
+                    .map((listing) => catalogueListingToAuction(listing as unknown as Record<string, unknown>))
             );
         } catch (err: unknown) {
             setAnalyticsError(toErrorMessage(err));
@@ -198,56 +231,87 @@ const SellPage: React.FC = () => {
         } finally {
             setAnalyticsLoading(false);
         }
-    }, [isSeller, user]);
+    }, [isSeller, listings, user]);
 
     const refreshStudio = useCallback(async () => {
-        await Promise.all([fetchSellerListings(), fetchSellerAuctions()]);
-    }, [fetchSellerAuctions, fetchSellerListings]);
+        await fetchSellerListings();
+    }, [fetchSellerListings]);
 
     useEffect(() => {
         refreshStudio();
     }, [refreshStudio]);
 
-    const realtimeDestinations = useMemo(
-        () => user ? ['/topic/auctions', `/topic/sellers/${user.id}/auctions`] : [],
-        [user]
-    );
+    useEffect(() => {
+        let cancelled = false;
+        const fetchCategories = async () => {
+            try {
+                const response = await fetch(gatewayUrl(CATALOGUE_CATEGORIES_TREE_PATH));
+                if (!response.ok) return;
+                const payload = await response.json() as CategoryNode[];
+                if (!cancelled) {
+                    setCategoryOptions(flattenCategoryTree(payload));
+                }
+            } catch {
+                if (!cancelled) {
+                    setCategoryOptions([]);
+                }
+            }
+        };
+        void fetchCategories();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(SELLER_STUDIO_VIEW_STORAGE_KEY, activeView);
+        } catch {
+            // Ignore storage failures and keep view in-memory.
+        }
+    }, [activeView]);
+
+    const realtimeDestinations = useMemo(() => user ? ['/topic/listings'] : [], [user]);
     const handleRealtimeEvent = useCallback(() => {
         void refreshStudio();
     }, [refreshStudio]);
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
 
+    useEffect(() => {
+        void fetchSellerAuctions();
+    }, [fetchSellerAuctions]);
+
+    const existingListingIds = useMemo(
+        () => new Set(listings.map((listing) => String(listing.id))),
+        [listings]
+    );
+    const visibleSellerAuctions = useMemo(
+        () => sellerAuctions.filter((auction) => existingListingIds.has(String(auction.listingId))),
+        [existingListingIds, sellerAuctions]
+    );
     const activeSellerAuctions = useMemo(
-        () => sellerAuctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)),
-        [sellerAuctions]
+        () => visibleSellerAuctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)),
+        [visibleSellerAuctions]
     );
     const topSellerAuction = useMemo(
-        () => [...sellerAuctions].sort((a, b) => {
-            const aBid = a.currentHighestBid ?? a.startingPrice;
-            const bBid = b.currentHighestBid ?? b.startingPrice;
+        () => [...visibleSellerAuctions].sort((a, b) => {
+            const aBid = a.currentHighestBid ?? 0;
+            const bBid = b.currentHighestBid ?? 0;
             return bBid - aBid;
         })[0],
-        [sellerAuctions]
+        [visibleSellerAuctions]
     );
     const totalTopBidValue = useMemo(
-        () => activeSellerAuctions.reduce((sum, auction) => sum + (auction.currentHighestBid ?? auction.startingPrice), 0),
+        () => activeSellerAuctions.reduce((sum, auction) => sum + (auction.currentHighestBid ?? 0), 0),
         [activeSellerAuctions]
     );
     const reserveMetCount = useMemo(
         () => activeSellerAuctions.filter((auction) => (auction.currentHighestBid ?? 0) >= auction.reservePrice).length,
         [activeSellerAuctions]
     );
-    const auctionedListingIds = useMemo(
-        () => new Set(sellerAuctions.map((auction) => String(auction.listingId))),
-        [sellerAuctions]
-    );
-    const auctionReadyListings = useMemo(
-        () => listings.filter((listing) => isListingAuctionReady(listing) && !auctionedListingIds.has(String(listing.id))),
-        [auctionedListingIds, listings]
-    );
-    const selectedListing = useMemo(
-        () => listings.find((listing) => String(listing.id) === auctionForm.listingId),
-        [auctionForm.listingId, listings]
+    const listingTitleById = useCallback(
+        (listingId: string) => listings.find((listing) => String(listing.id) === listingId)?.title || 'Auction Listing',
+        [listings]
     );
 
     const handleImageUpload = async (files: FileList | null) => {
@@ -267,8 +331,34 @@ const SellPage: React.FC = () => {
                 })
             );
             setListingForm((previous) => ({ ...previous, images, imageUrl: images[0] ?? previous.imageUrl }));
+            setListingFormErrors((previous) => {
+                if (!previous.imageUrl) return previous;
+                const next = { ...previous };
+                delete next.imageUrl;
+                return next;
+            });
         } catch (err: unknown) {
             setError(toErrorMessage(err));
+        }
+    };
+
+    const ensureBiddingSessionForListing = async (listing: ListingRecord) => {
+        const response = await authenticatedFetch(gatewayUrl('/api/v1/listings'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                listingId: String(listing.id),
+                sellerId: listing.sellerId ?? user?.id,
+                auctionType: 'ENGLISH',
+                startingPrice: listing.startingPrice,
+                reservePrice: listing.reservePrice ?? listing.startingPrice,
+                minimumIncrement: listing.minimumIncrement ?? 1,
+                startTime: new Date().toISOString(),
+                endTime: asIsoDate(listing.endTime),
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(await readApiError(response, 'Bidding session sync failed'));
         }
     };
 
@@ -279,54 +369,111 @@ const SellPage: React.FC = () => {
         if (!response.ok) {
             throw new Error(await readApiError(response, 'Listing publish failed'));
         }
-    };
 
-    const rollbackCreatedListing = async (listingId: string) => {
-        const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/cancel`), {
-            method: 'POST',
-        });
-        if (!response.ok) {
-            throw new Error(await readApiError(response, 'Listing rollback failed'));
+        const listingResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
+        if (!listingResponse.ok) {
+            throw new Error(await readApiError(listingResponse, 'Published listing fetch failed'));
         }
-    };
-
-    const markAuctionCreated = async (listingId: string, auctionId: string) => {
-        const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/auction-created`), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ auctionId }),
-        });
-        if (!response.ok) {
-            throw new Error(await readApiError(response, 'Listing auction marker failed'));
-        }
+        const listing = await listingResponse.json() as ListingRecord;
+        await ensureBiddingSessionForListing(listing);
     };
 
     const resetListingForm = () => {
         setEditingListingId(null);
+        setEditingListingStatus(null);
         setListingForm(emptyListingForm);
+        setListingFormErrors({});
+    };
+
+    const updateListingField = <K extends keyof ListingFormState>(field: K, value: ListingFormState[K]) => {
+        setListingForm((previous) => ({ ...previous, [field]: value }));
+        setListingFormErrors((previous) => {
+            if (!previous[field as keyof ListingFormErrors]) return previous;
+            const next = { ...previous };
+            delete next[field as keyof ListingFormErrors];
+            return next;
+        });
     };
 
     const createListingPayload = (form: ListingFormState) => ({
-        title: form.title,
-        description: form.description,
+        title: form.title.trim(),
+        description: form.description.trim(),
         category: form.category,
         condition: form.condition,
         sellerId: user?.id,
-        startingPrice: toAmountCents(form.startingBid),
-        currentPrice: toAmountCents(form.startingBid),
-        imageUrl: form.imageUrl || form.images[0] || null,
+        startingPrice: toListingAmount(form.startingBid),
+        reservePrice: toListingAmount(form.reservePrice || form.startingBid),
+        minimumIncrement: toListingAmount(form.minimumIncrement || '1'),
+        endTime: form.endTime,
+        imageUrl: form.imageUrl.trim() || form.images[0] || null,
     });
 
-    const saveListing = async (publishAfterCreate = false) => {
+    const validateListingForm = (): ListingFormErrors => {
+        const errors: ListingFormErrors = {};
+        const startingBid = Number(listingForm.startingBid);
+        const reservePrice = Number(listingForm.reservePrice);
+        const minimumIncrement = Number(listingForm.minimumIncrement);
+
+        if (!listingForm.title.trim()) {
+            errors.title = 'Title is required.';
+        }
+        if (!listingForm.description.trim()) {
+            errors.description = 'Description is required.';
+        }
+        if (!listingForm.category) {
+            errors.category = 'Choose a category.';
+        }
+        if (!listingForm.condition) {
+            errors.condition = 'Select the item condition.';
+        }
+        if (!listingForm.startingBid.trim()) {
+            errors.startingBid = 'Starting price is required.';
+        } else if (!Number.isFinite(startingBid) || startingBid <= 0) {
+            errors.startingBid = 'Starting price must be greater than 0.';
+        }
+
+        if (listingForm.reservePrice.trim()) {
+            if (!Number.isFinite(reservePrice) || reservePrice < startingBid) {
+                errors.reservePrice = 'Reserve price must be greater than or equal to starting price.';
+            }
+        }
+
+        if (!listingForm.minimumIncrement.trim()) {
+            errors.minimumIncrement = 'Minimum increment is required.';
+        } else if (!Number.isFinite(minimumIncrement) || minimumIncrement <= 0) {
+            errors.minimumIncrement = 'Minimum increment must be greater than 0.';
+        }
+
+        const now = new Date();
+        now.setSeconds(0, 0);
+        if (!listingForm.endTime) {
+            errors.endTime = 'End time is required.';
+        } else if (new Date(listingForm.endTime) <= now) {
+            errors.endTime = 'End time must be in the future.';
+        }
+
+        if (!isValidImageReference(listingForm.imageUrl)) {
+            errors.imageUrl = 'Use a valid http(s) image URL or upload an image file.';
+        }
+
+        return errors;
+    };
+
+    const saveListing = async (publishImmediate = false) => {
         if (!user || !isSeller) {
             setError('Only seller accounts can publish listings. Sign in with a SELLER role to continue.');
             return;
         }
-        if (!listingForm.title || !listingForm.description || !listingForm.category || !listingForm.condition || !listingForm.startingBid) {
-            setError('Complete title, description, category, condition, and starting price before saving.');
+
+        const validationErrors = validateListingForm();
+        if (Object.keys(validationErrors).length > 0) {
+            setListingFormErrors(validationErrors);
+            setError('Resolve the highlighted listing fields before saving.');
+            setNotice(null);
             return;
         }
 
+        setListingFormErrors({});
         setError(null);
         setNotice(null);
 
@@ -346,13 +493,20 @@ const SellPage: React.FC = () => {
 
             const saved = await response.json() as ListingRecord;
             const listingId = String(saved.id);
-            setCreatedListingId(listingId);
 
-            if (publishAfterCreate && !isEditing) {
+            if (publishImmediate) {
                 await publishCreatedListing(listingId);
             }
 
-            setNotice(isEditing ? 'Listing updated.' : publishAfterCreate ? 'Listing created and published.' : 'Listing draft created.');
+            setNotice(
+                publishImmediate
+                    ? 'Listing published.'
+                    : editingListingStatus === 'ACTIVE' || editingListingStatus === 'EXTENDED'
+                        ? 'Listing description and images updated.'
+                    : isEditing
+                        ? 'Listing draft updated.'
+                        : 'Listing draft created.'
+            );
             resetListingForm();
             await fetchSellerListings();
             setActiveView('listing-manage');
@@ -363,15 +517,21 @@ const SellPage: React.FC = () => {
 
     const editListing = (listing: ListingRecord) => {
         setEditingListingId(String(listing.id));
+        setEditingListingStatus((listing.status ?? '').toUpperCase());
+        const condition = normalizeCondition(listing.condition);
         setListingForm({
-            title: listing.title,
-            description: listing.description,
+            title: listing.title ?? '',
+            description: listing.description ?? '',
             category: listing.category ?? '',
-            condition: listing.condition ?? '',
-            startingBid: fromAmountCents(listing.startingPrice),
+            condition,
+            startingBid: fromListingAmount(listing.startingPrice),
+            reservePrice: fromListingAmount(listing.reservePrice || listing.startingPrice),
+            minimumIncrement: fromListingAmount(listing.minimumIncrement || 1),
+            endTime: listing.endTime ? toDateTimeLocalValue(new Date(listing.endTime)) : toDateTimeLocalValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
             imageUrl: listing.imageUrl ?? '',
             images: listing.imageUrl ? [listing.imageUrl] : [],
         });
+        setListingFormErrors(condition ? {} : { condition: 'Select the item condition before updating this listing.' });
         setActiveView('listing-create');
     };
 
@@ -386,14 +546,13 @@ const SellPage: React.FC = () => {
                 throw new Error(await readApiError(response, 'Listing delete failed'));
             }
             setNotice('Listing deleted.');
-            await fetchSellerListings();
+            await refreshStudio();
         } catch (err: unknown) {
             setError(toErrorMessage(err));
         }
     };
 
-    const cancelListing = async (listingId = createdListingId) => {
-        if (!listingId) return;
+    const cancelListing = async (listingId: string | number) => {
         setError(null);
         setNotice(null);
         try {
@@ -401,93 +560,45 @@ const SellPage: React.FC = () => {
                 method: 'POST',
             });
             if (!response.ok) {
-                throw new Error(await readApiError(response, 'Listing cancellation failed'));
+                throw new Error(await readApiError(response, 'Listing cancel failed'));
             }
-            setCreatedListingId(null);
             setNotice('Listing cancelled.');
-            await fetchSellerListings();
+            await refreshStudio();
         } catch (err: unknown) {
             setError(toErrorMessage(err));
         }
     };
 
-    const publishListing = async (listingId = createdListingId) => {
-        if (!listingId) return;
+    const publishDraftListing = async (listing: ListingRecord) => {
+        const listingId = String(listing.id);
+        const startingPrice = listing.startingPrice ?? 0;
+        const reservePrice = listing.reservePrice ?? listing.startingPrice ?? 0;
+        if (startingPrice <= 0) {
+            setError('Starting price must be greater than 0 before publishing.');
+            setNotice(null);
+            return;
+        }
+        if (reservePrice < startingPrice) {
+            setError('Reserve price must be greater than or equal to starting price before publishing.');
+            setNotice(null);
+            return;
+        }
+        if (!listing.endTime) {
+            setError('Auction end time is required before publishing.');
+            setNotice(null);
+            return;
+        }
+        if (new Date(listing.endTime) <= new Date()) {
+            setError('Auction end time has already passed. Edit the listing to update it before publishing.');
+            setNotice(null);
+            return;
+        }
+
         setError(null);
         setNotice(null);
         try {
             await publishCreatedListing(listingId);
             setNotice('Listing published.');
-            await fetchSellerListings();
-        } catch (err: unknown) {
-            setError(toErrorMessage(err));
-        }
-    };
-
-    const createAuction = async () => {
-        if (!user || !isSeller) {
-            setError('Only seller accounts can create auctions.');
-            return;
-        }
-        if (!auctionForm.listingId || !auctionForm.startingBid || !auctionForm.reservePrice || !auctionForm.minimumIncrement) {
-            setError('Select a published listing and complete auction pricing before creating an auction.');
-            return;
-        }
-
-        setError(null);
-        setNotice(null);
-        const now = Math.floor(Date.now() / 1000);
-        const listingId: string = auctionForm.listingId;
-
-        try {
-            const auctionResponse = await authenticatedFetch(gatewayUrl('/api/v1/auctions'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    listingId,
-                    sellerId: user.id,
-                    auctionType: 'ENGLISH',
-                    starting_price_cents: toAmountCents(auctionForm.startingBid),
-                    reserve_price_cents: toAmountCents(auctionForm.reservePrice || auctionForm.startingBid),
-                    minimum_increment_cents: toAmountCents(auctionForm.minimumIncrement || '1'),
-                    startTime: now,
-                    endTime: now + auctionForm.duration * 24 * 60 * 60,
-                }),
-            });
-            if (!auctionResponse.ok) {
-                throw new Error(await readApiError(auctionResponse, 'Auction creation failed'));
-            }
-            const auction = await auctionResponse.json() as { id: string | number };
-            const auctionId = String(auction.id);
-            await markAuctionCreated(listingId, auctionId);
-            setCreatedAuctionId(auctionId);
-            setAuctionForm(emptyAuctionForm);
-            setNotice('Auction created.');
-            await refreshStudio();
-            setActiveView('auction-manage');
-        } catch (err: unknown) {
-            if (listingId && err instanceof Error && err.message.includes('Listing auction marker failed')) {
-                try {
-                    await rollbackCreatedListing(listingId);
-                } catch {
-                    // The auction was created; keep the primary error visible.
-                }
-            }
-            setError(toErrorMessage(err));
-        }
-    };
-
-    const closeAuction = async (auctionId: string) => {
-        setError(null);
-        setNotice(null);
-        try {
-            const response = await authenticatedFetch(gatewayUrl(`/api/v1/auctions/${auctionId}/close`), {
-                method: 'POST',
-            });
-            if (!response.ok) {
-                throw new Error(await readApiError(response, 'Auction close failed'));
-            }
-            setNotice('Auction close requested.');
             await refreshStudio();
         } catch (err: unknown) {
             setError(toErrorMessage(err));
@@ -531,20 +642,17 @@ const SellPage: React.FC = () => {
             items: [{ id: 'dashboard' as const, label: 'Dashboard Analytics', icon: 'monitoring' }],
         },
         {
-            title: 'Listing',
+            title: 'Inventory',
             items: [
                 { id: 'listing-create' as const, label: 'Create Listing', icon: 'add_box' },
-                { id: 'listing-manage' as const, label: 'View Current Listing', icon: 'inventory_2' },
-            ],
-        },
-        {
-            title: 'Auction',
-            items: [
-                { id: 'auction-create' as const, label: 'Create Auction', icon: 'gavel' },
-                { id: 'auction-manage' as const, label: 'View Current Auction', icon: 'fact_check' },
+                { id: 'listing-manage' as const, label: 'Manage Listings', icon: 'inventory_2' },
             ],
         },
     ];
+    const displayCategoryOptions = categoryOptions.length > 0
+        ? categoryOptions
+        : CATEGORIES.map((category, index) => ({ id: index, name: category, label: category }));
+    const isEditingPublishedListing = editingListingStatus === 'ACTIVE' || editingListingStatus === 'EXTENDED';
 
     return (
         <div className="seller-studio-shell">
@@ -581,7 +689,7 @@ const SellPage: React.FC = () => {
                         <BackButton fallback="/" />
                         <p className="eyebrow">Seller Studio</p>
                         <h1>{navGroups.flatMap((group) => group.items).find((item) => item.id === activeView)?.label}</h1>
-                        <p>Manage product records separately from bidding sessions so each workflow stays clear.</p>
+                        <p>Manage listing-auctions in a single workflow aligned with the platform specification.</p>
                     </div>
                     <button type="button" className="secondary-button" onClick={refreshStudio}>
                         <span className="material-symbols-outlined" aria-hidden="true">refresh</span>
@@ -643,7 +751,7 @@ const SellPage: React.FC = () => {
                                     <span className="skeleton-line" />
                                     <span className="skeleton-line skeleton-line-medium" />
                                 </div>
-                            ) : sellerAuctions.length > 0 ? (
+                            ) : visibleSellerAuctions.length > 0 ? (
                                 <div className="analytics-table">
                                     <div className="analytics-row analytics-row-head">
                                         <span>Lot</span>
@@ -652,12 +760,12 @@ const SellPage: React.FC = () => {
                                         <span>Status</span>
                                         <span>Ends</span>
                                     </div>
-                                    {sellerAuctions.map((auction) => {
-                                        const meta = buildAuctionCardMeta(auction);
+                                    {visibleSellerAuctions.map((auction) => {
+                                        const meta = buildAuctionCardMeta(auction, nowMs);
                                         return (
-                                            <Link key={auction.id} className="analytics-row" to={`/active-auctions/${auction.id}`}>
-                                                <span>#{auction.listingId}</span>
-                                                <strong>{formatMoney(meta.currentHighest)}</strong>
+                                            <Link key={auction.id} className="analytics-row" to={`/listings/${auction.id}`}>
+                                                <span>{listingTitleById(auction.listingId)}</span>
+                                                <strong>{bidLabel(meta)}</strong>
                                                 <span>{formatMoney(meta.minNextBid)}</span>
                                                 <span>{meta.statusLabel}</span>
                                                 <span>{meta.timeLeftLabel}</span>
@@ -668,15 +776,15 @@ const SellPage: React.FC = () => {
                             ) : (
                                 <div className="empty-state compact-empty">
                                     <strong>No seller auctions yet.</strong>
-                                    <span className="text-muted">Create an auction from a published listing to start collecting bid data.</span>
+                                    <span className="text-muted">Create a listing, configure auction rules, and publish from one place.</span>
                                 </div>
                             )}
 
                             {topSellerAuction && (
                                 <div className="top-auction-callout">
-                                    <span className="metric-label">Best performing lot</span>
-                                    <strong>Lot #{topSellerAuction.listingId}</strong>
-                                    <span>{formatMoney(topSellerAuction.currentHighestBid ?? topSellerAuction.startingPrice)} top bid</span>
+                                    <span className="metric-label">Best performing auction</span>
+                                    <strong>{listingTitleById(topSellerAuction.listingId)}</strong>
+                                    <span>{bidLabel(buildAuctionCardMeta(topSellerAuction, nowMs))} top bid</span>
                                 </div>
                             )}
                         </section>
@@ -700,62 +808,135 @@ const SellPage: React.FC = () => {
                             <label className="field">
                                 Title
                                 <input
-                                    className="form-input"
+                                    className={`form-input ${listingFormErrors.title ? 'form-input-error' : ''}`}
                                     value={listingForm.title}
-                                    onChange={(event) => setListingForm((previous) => ({ ...previous, title: event.target.value }))}
+                                    disabled={isEditingPublishedListing}
+                                    onChange={(event) => updateListingField('title', event.target.value)}
                                     placeholder="Be specific and descriptive"
+                                    aria-invalid={Boolean(listingFormErrors.title)}
+                                    aria-describedby={listingFormErrors.title ? 'listing-title-error' : undefined}
                                 />
+                                {listingFormErrors.title && <span id="listing-title-error" className="field-error">{listingFormErrors.title}</span>}
                             </label>
                             <label className="field">
                                 Description
                                 <textarea
-                                    className="form-input form-textarea"
+                                    className={`form-input form-textarea ${listingFormErrors.description ? 'form-input-error' : ''}`}
                                     value={listingForm.description}
-                                    onChange={(event) => setListingForm((previous) => ({ ...previous, description: event.target.value }))}
+                                    onChange={(event) => updateListingField('description', event.target.value)}
                                     placeholder="Include condition, features, provenance, defects, and handling notes"
+                                    aria-invalid={Boolean(listingFormErrors.description)}
+                                    aria-describedby={listingFormErrors.description ? 'listing-description-error' : undefined}
                                 />
+                                {listingFormErrors.description && <span id="listing-description-error" className="field-error">{listingFormErrors.description}</span>}
                             </label>
                             <div className="seller-form-two-col">
                                 <label className="field">
                                     Category
                                     <select
-                                        className="form-input"
+                                        className={`form-input ${listingFormErrors.category ? 'form-input-error' : ''}`}
                                         value={listingForm.category}
-                                        onChange={(event) => setListingForm((previous) => ({ ...previous, category: event.target.value }))}
+                                        disabled={isEditingPublishedListing}
+                                        onChange={(event) => updateListingField('category', event.target.value)}
+                                        aria-invalid={Boolean(listingFormErrors.category)}
+                                        aria-describedby={listingFormErrors.category ? 'listing-category-error' : undefined}
                                     >
                                         <option value="">Select a category</option>
-                                        {CATEGORIES.map((category) => (
-                                            <option key={category} value={category}>{category}</option>
+                                        {displayCategoryOptions.map((category) => (
+                                            <option key={`${category.id}-${category.label}`} value={category.name}>{category.label}</option>
                                         ))}
                                     </select>
+                                    {listingFormErrors.category && <span id="listing-category-error" className="field-error">{listingFormErrors.category}</span>}
                                 </label>
                                 <label className="field">
                                     Starting Price
                                     <input
-                                        className="form-input"
+                                        className={`form-input ${listingFormErrors.startingBid ? 'form-input-error' : ''}`}
                                         type="number"
                                         min={1}
+                                        step="1"
                                         value={listingForm.startingBid}
-                                        onChange={(event) => setListingForm((previous) => ({ ...previous, startingBid: event.target.value }))}
+                                        disabled={isEditingPublishedListing}
+                                        onChange={(event) => updateListingField('startingBid', event.target.value)}
+                                        onBlur={() => updateListingField('startingBid', normalizeRupiahInput(listingForm.startingBid))}
                                         placeholder="0.00"
+                                        aria-invalid={Boolean(listingFormErrors.startingBid)}
+                                        aria-describedby={listingFormErrors.startingBid ? 'listing-starting-price-error' : undefined}
                                     />
+                                    {listingFormErrors.startingBid && <span id="listing-starting-price-error" className="field-error">{listingFormErrors.startingBid}</span>}
                                 </label>
                             </div>
                             <div>
                                 <div className="field-label">Condition</div>
-                                <div className="chip-grid">
+                                <div
+                                    className={`chip-grid ${listingFormErrors.condition ? 'chip-grid-error' : ''}`}
+                                    aria-invalid={Boolean(listingFormErrors.condition)}
+                                    aria-describedby={listingFormErrors.condition ? 'listing-condition-error' : undefined}
+                                >
                                     {CONDITIONS.map((condition) => (
                                         <button
                                             key={condition.value}
                                             type="button"
                                             className={`chip ${listingForm.condition === condition.value ? 'chip-active' : ''}`}
-                                            onClick={() => setListingForm((previous) => ({ ...previous, condition: condition.value }))}
+                                            disabled={isEditingPublishedListing}
+                                            onClick={() => updateListingField('condition', condition.value)}
                                         >
                                             {condition.label}
                                         </button>
                                     ))}
                                 </div>
+                                {listingFormErrors.condition && <span id="listing-condition-error" className="field-error">{listingFormErrors.condition}</span>}
                             </div>
+                            <div className="seller-form-two-col">
+                                <label className="field">
+                                    Reserve Price (IDR)
+                                    <input
+                                        className={`form-input ${listingFormErrors.reservePrice ? 'form-input-error' : ''}`}
+                                        type="number"
+                                        min={1}
+                                        step="1"
+                                        value={listingForm.reservePrice}
+                                        disabled={isEditingPublishedListing}
+                                        onChange={(event) => updateListingField('reservePrice', event.target.value)}
+                                        onBlur={() => updateListingField('reservePrice', normalizeRupiahInput(listingForm.reservePrice))}
+                                        placeholder="Minimum price to sell"
+                                    />
+                                    {listingFormErrors.reservePrice && <span className="field-error">{listingFormErrors.reservePrice}</span>}
+                                </label>
+                                <label className="field">
+                                    Min Increment (IDR)
+                                    <input
+                                        className={`form-input ${listingFormErrors.minimumIncrement ? 'form-input-error' : ''}`}
+                                        type="number"
+                                        min={1}
+                                        step="1"
+                                        value={listingForm.minimumIncrement}
+                                        disabled={isEditingPublishedListing}
+                                        onChange={(event) => updateListingField('minimumIncrement', event.target.value)}
+                                        onBlur={() => updateListingField('minimumIncrement', normalizeRupiahInput(listingForm.minimumIncrement))}
+                                    />
+                                    {listingFormErrors.minimumIncrement && <span className="field-error">{listingFormErrors.minimumIncrement}</span>}
+                                </label>
+                            </div>
+
+                            <label className="field">
+                                Auction End
+                                <input
+                                    className={`form-input ${listingFormErrors.endTime ? 'form-input-error' : ''}`}
+                                    type="datetime-local"
+                                    min={toDateTimeLocalValue(new Date())}
+                                    value={listingForm.endTime}
+                                    disabled={isEditingPublishedListing}
+                                    onChange={(event) => updateListingField('endTime', event.target.value)}
+                                />
+                                <span className="field-hint">
+                                    {isEditingPublishedListing
+                                        ? 'Published auction timing is locked. Only description and images can be updated before bids arrive.'
+                                        : 'Auction starts automatically at publish time.'}
+                                </span>
+                                {listingFormErrors.endTime && <span className="field-error">{listingFormErrors.endTime}</span>}
+                            </label>
+
                             <label className="upload-zone">
                                 <strong>Upload product images</strong>
                                 <span>JPG, PNG, or WebP up to 600KB each. Add up to 3 images.</span>
@@ -770,22 +951,32 @@ const SellPage: React.FC = () => {
                             <label className="field">
                                 Image URL
                                 <input
-                                    className="form-input"
+                                    className={`form-input ${listingFormErrors.imageUrl ? 'form-input-error' : ''}`}
                                     value={listingForm.imageUrl}
-                                    onChange={(event) => setListingForm((previous) => ({ ...previous, imageUrl: event.target.value }))}
+                                    onChange={(event) => updateListingField('imageUrl', event.target.value)}
                                     placeholder="Optional external image URL"
+                                    aria-invalid={Boolean(listingFormErrors.imageUrl)}
+                                    aria-describedby={listingFormErrors.imageUrl ? 'listing-image-url-error' : undefined}
                                 />
+                                {listingFormErrors.imageUrl && <span id="listing-image-url-error" className="field-error">{listingFormErrors.imageUrl}</span>}
                             </label>
                             <div className="panel-footer">
-                                <button type="button" className="secondary-button" onClick={() => saveListing(false)}>
-                                    Save Draft
-                                </button>
-                                {!editingListingId && (
-                                    <button type="button" className="primary-button" onClick={() => saveListing(true)}>
-                                        Publish Listing
+                                {!isEditingPublishedListing && (
+                                    <button type="button" className="secondary-button" onClick={() => saveListing(false)}>
+                                        Save Draft
                                     </button>
                                 )}
-                                {editingListingId && (
+                                {!editingListingId && (
+                                    <button type="button" className="primary-button" onClick={() => saveListing(true)}>
+                                        Create & Publish Listing
+                                    </button>
+                                )}
+                                {editingListingId && !isEditingPublishedListing && (
+                                    <button type="button" className="primary-button" onClick={() => saveListing(true)}>
+                                        Update & Publish Listing
+                                    </button>
+                                )}
+                                {editingListingId && isEditingPublishedListing && (
                                     <button type="button" className="primary-button" onClick={() => saveListing(false)}>
                                         Update Listing
                                     </button>
@@ -815,7 +1006,7 @@ const SellPage: React.FC = () => {
                             <div className="seller-preview-metrics">
                                 <div>
                                     <span>Starting Price</span>
-                                    <strong>${listingForm.startingBid || '0.00'}</strong>
+                                    <strong>{formatMoney(toRupiahAmount(listingForm.startingBid))}</strong>
                                 </div>
                             </div>
                         </aside>
@@ -827,7 +1018,7 @@ const SellPage: React.FC = () => {
                         <div className="section-title-row">
                             <div>
                                 <p className="eyebrow">Listing Management</p>
-                                <h2>View Current Listing</h2>
+                                <h2>Manage Your Inventory</h2>
                             </div>
                             <button type="button" className="primary-button" onClick={() => setActiveView('listing-create')}>
                                 <span className="material-symbols-outlined" aria-hidden="true">add</span>
@@ -844,9 +1035,26 @@ const SellPage: React.FC = () => {
                             <div className="management-list">
                                 {listings.map((listing) => {
                                     const status = (listing.status ?? 'UNKNOWN').toUpperCase();
-                                    const locked = listing.hasBids || status === 'AUCTION_CREATED' || status === 'SOLD' || status === 'UNSOLD';
+                                    const finalized = FINAL_AUCTION_STATUSES.has(status);
+                                    const locked = listing.hasBids || finalized;
+                                    const canEdit = !listing.hasBids && !finalized;
+                                    const canCancel = !listing.hasBids && status !== 'WON' && status !== 'UNSOLD' && status !== 'CLOSED' && status !== 'CANCELLED';
+                                    const canDelete = !listing.hasBids && status === 'DRAFT';
+                                    const canPublishDraft = status === 'DRAFT';
+                                    
                                     return (
                                         <article key={listing.id} className="management-card">
+                                            <div className="management-card-image">
+                                                <img
+                                                    src={listing.imageUrl?.trim() || NO_IMAGE_PLACEHOLDER}
+                                                    alt={listing.title}
+                                                    loading="lazy"
+                                                    onError={(event) => {
+                                                        event.currentTarget.onerror = null;
+                                                        event.currentTarget.src = NO_IMAGE_PLACEHOLDER;
+                                                    }}
+                                                />
+                                            </div>
                                             <div>
                                                 <span className={`status-badge status-${status}`}>{status}</span>
                                                 <h3>{listing.title}</h3>
@@ -861,27 +1069,33 @@ const SellPage: React.FC = () => {
                                                     <span>Current</span>
                                                     <strong>{formatMoney(listing.currentPrice ?? listing.startingPrice ?? 0)}</strong>
                                                 </div>
+                                                {listing.endTime && (
+                                                    <div>
+                                                        <span>Ends</span>
+                                                        <strong>{new Date(listing.endTime).toLocaleString()}</strong>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="management-actions">
-                                                <Link className="secondary-button" to={`/listings/${listing.id}`}>View</Link>
-                                                <button type="button" className="secondary-button" disabled={Boolean(locked)} onClick={() => editListing(listing)}>
+                                                <Link className="secondary-button" to={`/listings/${listing.id}`}>View Room</Link>
+                                                <button type="button" className="secondary-button" disabled={!canEdit} onClick={() => editListing(listing)}>
                                                     Edit
                                                 </button>
-                                                {status === 'DRAFT' && (
-                                                    <button type="button" className="primary-button" onClick={() => publishListing(String(listing.id))}>
+                                                {canPublishDraft && (
+                                                    <button type="button" className="primary-button" onClick={() => publishDraftListing(listing)}>
                                                         Publish
                                                     </button>
                                                 )}
-                                                {(status === 'DRAFT' || status === 'ACTIVE') && (
-                                                    <button type="button" className="secondary-button" onClick={() => cancelListing(String(listing.id))}>
+                                                {canCancel && (
+                                                    <button type="button" className="secondary-button" onClick={() => cancelListing(listing.id)}>
                                                         Cancel
                                                     </button>
                                                 )}
-                                                <button type="button" className="secondary-button" disabled={Boolean(locked)} onClick={() => deleteListing(listing.id)}>
+                                                <button type="button" className="secondary-button" disabled={!canDelete} onClick={() => deleteListing(listing.id)}>
                                                     Delete
                                                 </button>
                                             </div>
-                                            {locked && <p className="text-muted">Editing is locked once bids or an auction lifecycle are attached.</p>}
+                                            {locked && <p className="text-muted">Editing is locked once bids are attached or the auction is finalized.</p>}
                                         </article>
                                     );
                                 })}
@@ -889,187 +1103,12 @@ const SellPage: React.FC = () => {
                         ) : (
                             <div className="empty-state compact-empty">
                                 <strong>No listings yet.</strong>
-                                <span className="text-muted">Create a listing before opening an auction.</span>
+                                <span className="text-muted">Create a listing to start selling.</span>
                             </div>
                         )}
                     </section>
                 )}
 
-                {activeView === 'auction-create' && (
-                    <section className="panel seller-form-panel section-stack">
-                        <div className="section-title-row">
-                            <div>
-                                <p className="eyebrow">Create Auction</p>
-                                <h2>Open Bidding Session</h2>
-                            </div>
-                        </div>
-                        <label className="field">
-                            Published Listing
-                            <select
-                                className="form-input"
-                                value={auctionForm.listingId}
-                                onChange={(event) => {
-                                    const listing = listings.find((item) => String(item.id) === event.target.value);
-                                    setAuctionForm((previous) => ({
-                                        ...previous,
-                                        listingId: event.target.value,
-                                        startingBid: listing ? fromAmountCents(listing.startingPrice) : previous.startingBid,
-                                        reservePrice: listing ? fromAmountCents(listing.startingPrice) : previous.reservePrice,
-                                    }));
-                                }}
-                            >
-                                <option value="">Select an ACTIVE listing without an auction</option>
-                                {auctionReadyListings.map((listing) => (
-                                    <option key={listing.id} value={String(listing.id)}>
-                                        {listing.title}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                        {selectedListing && (
-                            <div className="summary-box">
-                                <div>Listing: {selectedListing.title}</div>
-                                <div>Status: {selectedListing.status}</div>
-                                <div>Seller: {selectedListing.sellerId}</div>
-                            </div>
-                        )}
-                        <div className="seller-form-two-col">
-                            <label className="field">
-                                Starting Bid
-                                <input
-                                    className="form-input"
-                                    type="number"
-                                    min={1}
-                                    value={auctionForm.startingBid}
-                                    onChange={(event) => setAuctionForm((previous) => ({ ...previous, startingBid: event.target.value }))}
-                                />
-                            </label>
-                            <label className="field">
-                                Reserve Price
-                                <input
-                                    className="form-input"
-                                    type="number"
-                                    min={1}
-                                    value={auctionForm.reservePrice}
-                                    onChange={(event) => setAuctionForm((previous) => ({ ...previous, reservePrice: event.target.value }))}
-                                />
-                            </label>
-                        </div>
-                        <label className="field">
-                            Minimum Increment
-                            <input
-                                className="form-input"
-                                type="number"
-                                min={1}
-                                value={auctionForm.minimumIncrement}
-                                onChange={(event) => setAuctionForm((previous) => ({ ...previous, minimumIncrement: event.target.value }))}
-                            />
-                        </label>
-                        <div>
-                            <div className="field-label">Auction Duration</div>
-                            <div className="chip-grid">
-                                {AUCTION_DURATIONS.map((duration) => (
-                                    <button
-                                        key={duration}
-                                        type="button"
-                                        className={`chip ${auctionForm.duration === duration ? 'chip-active' : ''}`}
-                                        onClick={() => setAuctionForm((previous) => ({ ...previous, duration }))}
-                                    >
-                                        {duration} day{duration > 1 ? 's' : ''}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="summary-box">
-                            <div>Critical pricing fields are locked once the auction is live.</div>
-                            <div>Estimated end: {new Date(Date.now() + auctionForm.duration * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
-                        </div>
-                        <div className="panel-footer">
-                            <button type="button" className="primary-button" onClick={createAuction}>
-                                Create Auction
-                            </button>
-                        </div>
-                    </section>
-                )}
-
-                {activeView === 'auction-manage' && (
-                    <section className="panel seller-management-panel">
-                        <div className="section-title-row">
-                            <div>
-                                <p className="eyebrow">Auction Management</p>
-                                <h2>View Current Auction</h2>
-                            </div>
-                            <button type="button" className="primary-button" onClick={() => setActiveView('auction-create')}>
-                                <span className="material-symbols-outlined" aria-hidden="true">add</span>
-                                New Auction
-                            </button>
-                        </div>
-
-                        {analyticsLoading ? (
-                            <div className="analytics-table skeleton-grid" aria-busy="true" aria-label="Loading auction analytics">
-                                <span className="skeleton-line" />
-                                <span className="skeleton-line" />
-                                <span className="skeleton-line skeleton-line-medium" />
-                            </div>
-                        ) : sellerAuctions.length > 0 ? (
-                            <div className="management-list">
-                                {sellerAuctions.map((auction) => {
-                                    const meta = buildAuctionCardMeta(auction);
-                                    const locked = isAuctionLocked(auction);
-                                    const canClose = hasReachedEndTime(auction) && !meta.isClosed;
-                                    return (
-                                        <article key={auction.id} className="management-card">
-                                            <div>
-                                                <span className={`status-badge status-${auction.status}`}>{meta.statusLabel}</span>
-                                                <h3>Lot #{auction.listingId}</h3>
-                                                <p className="text-muted">Auction ID: {auction.id}</p>
-                                            </div>
-                                            <div className="listing-price-grid">
-                                                <div>
-                                                    <span>Top Bid</span>
-                                                    <strong>{formatMoney(meta.currentHighest)}</strong>
-                                                </div>
-                                                <div>
-                                                    <span>Reserve</span>
-                                                    <strong>{formatMoney(auction.reservePrice)}</strong>
-                                                </div>
-                                                <div>
-                                                    <span>Increment</span>
-                                                    <strong>{formatMoney(auction.minimumIncrement)}</strong>
-                                                </div>
-                                                <div>
-                                                    <span>Ends</span>
-                                                    <strong>{meta.timeLeftLabel}</strong>
-                                                </div>
-                                            </div>
-                                            <div className="management-actions">
-                                                <Link className="secondary-button" to={`/active-auctions/${auction.id}`}>Open Room</Link>
-                                                <button type="button" className="secondary-button" disabled={locked}>
-                                                    Edit Draft
-                                                </button>
-                                                <button type="button" className="secondary-button" disabled={!canClose} onClick={() => closeAuction(auction.id)}>
-                                                    Settle
-                                                </button>
-                                            </div>
-                                            <p className="text-muted">
-                                                {locked
-                                                    ? 'Critical fields such as listing, starting bid, reserve, increment, and timing are locked once the auction is live.'
-                                                    : 'Draft auction details can be edited before the room goes live when the backend exposes update support.'}
-                                            </p>
-                                        </article>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <div className="empty-state compact-empty">
-                                <strong>No auctions yet.</strong>
-                                <span className="text-muted">Create an auction from an active listing.</span>
-                            </div>
-                        )}
-                    </section>
-                )}
-
-                {createdAuctionId && <span className="visually-hidden">Last auction ID: {createdAuctionId}</span>}
             </main>
         </div>
     );

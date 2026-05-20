@@ -37,7 +37,11 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     const [retryTick, setRetryTick] = useState(0);
 
     const shouldGuard = useMemo(
-        () => Boolean(user) && isGuardedRoute(location.pathname),
+        () => {
+            const isAdmin = user?.roles?.some((role) => role.name === 'ADMIN') ?? false;
+            if (!user || isAdmin) return false;
+            return isGuardedRoute(location.pathname);
+        },
         [user, location.pathname]
     );
 
@@ -55,7 +59,7 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
             setError(null);
             try {
                 const response = await authenticatedFetch(
-                    gatewayUrl(`/api/v1/auth/profile?email=${encodeURIComponent(user.email)}`)
+                    gatewayUrl('/api/v1/auth/profile')
                 );
 
                 if (!response.ok) {
