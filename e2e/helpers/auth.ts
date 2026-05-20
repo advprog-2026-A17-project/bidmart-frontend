@@ -1,11 +1,46 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
+import { createHmac } from 'crypto';
 import { ensureAuthUserVerified } from './db';
 import { getGatewayBaseUrl, loadEnv } from './env';
 
-loadEnv();
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
-// TODO(admin): add helper to create/seed an admin user and cover admin-only E2E flows.
+const decodeBase32 = (value: string): Buffer => {
+  let buffer = 0;
+  let bitsLeft = 0;
+  const bytes: number[] = [];
+  for (const char of value.toUpperCase().replace(/=+$/, '')) {
+    const index = BASE32_ALPHABET.indexOf(char);
+    if (index < 0) {
+      throw new Error('Invalid base32 secret');
+    }
+    buffer = (buffer << 5) | index;
+    bitsLeft += 5;
+    if (bitsLeft >= 8) {
+      bytes.push((buffer >> (bitsLeft - 8)) & 0xff);
+      bitsLeft -= 8;
+    }
+  }
+  return Buffer.from(bytes);
+};
+
+export const generateTotpCode = (secret: string, counter?: number): string => {
+  const epoch = Math.floor(Date.now() / 1000);
+  const step = counter ?? Math.floor(epoch / 30);
+  const counterBuffer = Buffer.alloc(8);
+  counterBuffer.writeBigInt64BE(BigInt(step));
+  const key = decodeBase32(secret);
+  const hmac = createHmac('sha1', key).update(counterBuffer).digest();
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const binary = ((hmac[offset] & 0x7f) << 24)
+    | ((hmac[offset + 1] & 0xff) << 16)
+    | ((hmac[offset + 2] & 0xff) << 8)
+    | (hmac[offset + 3] & 0xff);
+  return String(binary % 1_000_000).padStart(6, '0');
+};
+
+loadEnv();
 
 export const buildTestEmail = (prefix: string) => {
   const stamp = Date.now();
@@ -69,7 +104,7 @@ export const registerUserViaUi = async (
 
 export const authenticateAdminViaApi = async (request: APIRequestContext) => {
   const email = process.env.BIDMART_ADMIN_EMAIL || 'admin@bidmart.com';
-  const password = process.env.BIDMART_ADMIN_PASSWORD || 'verySafepw.09';
+  const password = process.env.BIDMART_ADMIN_PASSWORD || 'veryStrongadmin.09';
 
   const response = await request.post(`${getGatewayBaseUrl()}/api/v1/auth/login`, {
     data: { email, password },
