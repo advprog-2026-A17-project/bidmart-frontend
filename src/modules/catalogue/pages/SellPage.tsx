@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
-import { gatewayUrl, readApiError } from '../../../config/apiClient';
+import { gatewayUrl, readApiError, readApiJson } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
@@ -378,8 +378,8 @@ const SellPage: React.FC = () => {
             throw new Error(await readApiError(response, 'Listing publish failed'));
         }
 
-        const publishedListing = await response.json() as ListingRecord;
-        let listing = publishedListing;
+        const publishedListing = await readApiJson<ListingRecord>(response);
+        let listing = publishedListing ?? ({ id: listingId } as ListingRecord);
         for (let attempt = 0; attempt < 3 && !isPublishedListing(listing); attempt += 1) {
             await delay(250);
             const listingResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
