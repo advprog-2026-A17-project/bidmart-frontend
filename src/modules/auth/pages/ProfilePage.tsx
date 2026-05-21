@@ -9,6 +9,7 @@ import GoogleLoginButton from '../components/GoogleLoginButton';
 import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
 import PasswordField from '../../../components/PasswordField';
 import { isValidImageReference, MAX_AVATAR_IMAGE_BYTES, readAvatarImageFile } from '../../../utils/avatar-image';
+import { registerWebPushSubscription } from '../../../utils/web-push';
 
 type AvatarInputMode = 'upload' | 'link';
 
@@ -77,6 +78,7 @@ const ProfilePage: React.FC = () => {
     const [revokeAllBusy, setRevokeAllBusy] = useState(false);
     const [deleteAccountBusy, setDeleteAccountBusy] = useState(false);
     const [deleteBlockers, setDeleteBlockers] = useState<string[]>([]);
+    const [pushBusy, setPushBusy] = useState(false);
     const [avatarInputMode, setAvatarInputMode] = useState<AvatarInputMode>('link');
     const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
     const isProfileComplete = Boolean(displayName.trim()) && Boolean(shippingAddress.trim());
@@ -898,6 +900,35 @@ const ProfilePage: React.FC = () => {
                         </button>
                     </div>
                 )) : <div className="empty-state">No active sessions found.</div>}
+            </div>
+
+            <div className="panel section-stack" style={{ marginTop: '1.5rem' }}>
+                <h3>Browser Push Notifications</h3>
+                <p className="text-muted">
+                    Enable browser push to receive outbid and auction alerts when you are not on the listing page.
+                </p>
+                <button
+                    type="button"
+                    className="primary-button"
+                    disabled={pushBusy}
+                    onClick={async () => {
+                        setPushBusy(true);
+                        setError(null);
+                        setMessage(null);
+                        try {
+                            const result = await registerWebPushSubscription(authenticatedFetch);
+                            if (result.ok) {
+                                setMessage('Browser push notifications enabled for this device.');
+                            } else {
+                                setError(result.message ?? 'Failed to enable browser push notifications.');
+                            }
+                        } finally {
+                            setPushBusy(false);
+                        }
+                    }}
+                >
+                    {pushBusy ? 'Enabling...' : 'Enable browser notifications'}
+                </button>
             </div>
 
             <div className="panel section-stack" style={{ marginTop: '1.5rem' }}>

@@ -21,7 +21,7 @@ import { useAuth } from './context/useAuth';
 import { isSellerUser, primaryRole } from './context/primaryRole';
 import { useAuthenticatedFetch } from './context/useAuthenticatedFetch';
 import { WalletUIProvider, useWalletUI } from './context/WalletUIContext';
-import { useWebSocket } from './hooks/useWebSocket';
+import { NotificationsWebSocketProvider, useNotificationsWebSocket } from './context/NotificationsWebSocketContext';
 import { gatewayUrl } from './config/apiClient';
 import { formatCents } from './modules/wallet/utils/payment';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
@@ -33,7 +33,7 @@ import ResetPasswordPage from './modules/auth/pages/ResetPasswordPage';
 const Navbar = () => {
     const { user, logout, sessionExpiresAt } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
-    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
+    const { isConnected, subscribe, unsubscribe } = useNotificationsWebSocket();
     const role = primaryRole(user);
     const isAdmin = role === 'ADMIN';
     const isSeller = isSellerUser(user);
@@ -314,12 +314,14 @@ function App() {
         <GlobalErrorBoundary>
             <AuthProvider>
                 <WalletUIProvider>
-                    <Router>
-                        <div className="app-shell">
-                            <Navbar />
-                            <AppLayout />
-                        </div>
-                    </Router>
+                    <NotificationsWebSocketProvider>
+                        <Router>
+                            <div className="app-shell">
+                                <Navbar />
+                                <AppLayout />
+                            </div>
+                        </Router>
+                    </NotificationsWebSocketProvider>
                 </WalletUIProvider>
             </AuthProvider>
         </GlobalErrorBoundary>

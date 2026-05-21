@@ -1,24 +1,25 @@
 import { apiUrl } from '../../../config/api';
 
-type ProfilePayload = {
-    displayName?: string | null;
-    shippingAddress?: string | null;
+type OnboardingPayload = {
+    profileCompleted?: boolean;
+    needsPassword?: boolean;
+    needsRole?: boolean;
 };
-
-const isBlank = (value?: string | null): boolean => !value || value.trim() === '';
 
 export const resolvePostLoginPath = async (accessToken: string): Promise<string> => {
     try {
-        const response = await fetch(apiUrl('/api/v1/auth/profile'), {
+        const response = await fetch(apiUrl('/api/v1/auth/onboarding'), {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
         if (!response.ok) {
-            return '/profile';
+            return '/onboarding';
         }
-        const payload = await response.json() as ProfilePayload;
-        const isComplete = !isBlank(payload.displayName) && !isBlank(payload.shippingAddress);
-        return isComplete ? '/' : '/profile';
+        const payload = await response.json() as OnboardingPayload;
+        const needsOnboarding = payload.profileCompleted === false
+            || payload.needsPassword === true
+            || payload.needsRole === true;
+        return needsOnboarding ? '/onboarding' : '/';
     } catch {
-        return '/profile';
+        return '/onboarding';
     }
 };
