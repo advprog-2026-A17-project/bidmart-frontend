@@ -180,7 +180,7 @@ const PaymentDetailPage: React.FC = () => {
                             </div>
                             <div>
                                 <span>Amount</span>
-                                <strong>{formatCents(payment.amountCents)}</strong>
+                                <strong>{formatCents(payment.amount)}</strong>
                             </div>
                             <div>
                                 <span>Method</span>
