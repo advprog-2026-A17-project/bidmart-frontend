@@ -32,6 +32,7 @@ interface SearchParams {
     categoryId: string;
     minPrice: string;
     maxPrice: string;
+    endBefore: string;
 }
 
 const CataloguePage: React.FC = () => {
@@ -44,6 +45,7 @@ const CataloguePage: React.FC = () => {
         categoryId: '',
         minPrice: '',
         maxPrice: '',
+        endBefore: '',
     });
     const [appliedParams, setAppliedParams] = useState<SearchParams>({
         keyword: '',
@@ -51,6 +53,7 @@ const CataloguePage: React.FC = () => {
         categoryId: '',
         minPrice: '',
         maxPrice: '',
+        endBefore: '',
     });
     const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
     const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
@@ -78,6 +81,7 @@ const CataloguePage: React.FC = () => {
         }
         if (params.minPrice) query.append('minPrice', params.minPrice);
         if (params.maxPrice) query.append('maxPrice', params.maxPrice);
+        if (params.endBefore) query.append('endBefore', new Date(params.endBefore).toISOString());
 
         const url = apiUrl(`${CATALOGUE_LISTINGS_SEARCH_PATH}${query.toString() ? '?' + query.toString() : ''}`);
 
@@ -145,7 +149,7 @@ const CataloguePage: React.FC = () => {
     };
 
     const handleReset = () => {
-        const empty: SearchParams = { keyword: '', category: '', categoryId: '', minPrice: '', maxPrice: '' };
+        const empty: SearchParams = { keyword: '', category: '', categoryId: '', minPrice: '', maxPrice: '', endBefore: '' };
         setSearchParams(empty);
         setAppliedParams(empty);
     };
@@ -305,6 +309,15 @@ const CataloguePage: React.FC = () => {
                             min={0}
                             onChange={(e) => setSearchParams((p) => ({ ...p, maxPrice: e.target.value }))}
                             onBlur={() => setSearchParams((p) => ({ ...p, maxPrice: p.maxPrice ? normalizeMoneyInput(p.maxPrice) : '' }))}
+                        />
+                    </label>
+                    <label className="field">
+                        <span>Ending Before</span>
+                        <input
+                            className="form-input"
+                            type="datetime-local"
+                            value={searchParams.endBefore}
+                            onChange={(e) => setSearchParams((p) => ({ ...p, endBefore: e.target.value }))}
                         />
                     </label>
                     <label className="field">

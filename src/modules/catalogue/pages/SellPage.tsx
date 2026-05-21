@@ -208,14 +208,12 @@ const SellPage: React.FC = () => {
 
         try {
             setLoading(true);
-            const response = await fetch(gatewayUrl('/api/v1/catalogue/listings'));
+            const response = await authenticatedFetch(gatewayUrl('/api/v1/catalogue/listings/seller'));
             if (!response.ok) {
                 throw new Error(`Listing lookup failed with status ${response.status}`);
             }
             const payload: unknown = await response.json();
-            setListings(
-                parseListingsResponse(payload).filter((listing) => String(listing.sellerId) === user.id)
-            );
+            setListings(parseListingsResponse(payload));
         } catch (err: unknown) {
             setError(toErrorMessage(err));
             setListings([]);
@@ -455,7 +453,7 @@ const SellPage: React.FC = () => {
             startingPrice: toListingAmount(form.startingBid),
             reservePrice: toListingAmount(form.reservePrice || form.startingBid),
             minimumIncrement: toListingAmount(form.minimumIncrement || '1'),
-            endTime: form.endTime,
+            endTime: form.endTime ? (form.endTime.length === 16 ? form.endTime + ':00' : form.endTime) : null,
             imageUrl: form.imageUrl.trim() || form.images[0] || null,
         };
     };
