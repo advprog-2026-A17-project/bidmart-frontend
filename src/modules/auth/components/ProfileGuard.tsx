@@ -11,19 +11,7 @@ type UserProfileResponse = {
     shippingAddress?: string | null;
 };
 
-const UNGUARDED_ROUTES = new Set(['/login', '/verify-email', '/profile', '/command/profile']);
-
-const isPublicMarketplaceRoute = (pathname: string): boolean =>
-    pathname === '/'
-    || pathname === '/marketplace'
-    || pathname === '/auctions'
-    || pathname.startsWith('/auctions/')
-    || pathname === '/active-auctions'
-    || pathname.startsWith('/active-auctions/')
-    || pathname.startsWith('/listings/');
-
-const isGuardedRoute = (pathname: string): boolean =>
-    !UNGUARDED_ROUTES.has(pathname) && !isPublicMarketplaceRoute(pathname);
+const AUTH_ROUTES = new Set(['/login', '/verify-email', '/reset-password']);
 
 const isBlank = (value?: string | null): boolean => !value || value.trim() === '';
 
@@ -36,14 +24,22 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     const [error, setError] = useState<string | null>(null);
     const [retryTick, setRetryTick] = useState(0);
 
-    const shouldGuard = useMemo(
-        () => {
-            const isAdmin = user?.roles?.some((role) => role.name === 'ADMIN') ?? false;
-            if (!user || isAdmin) return false;
-            return isGuardedRoute(location.pathname);
-        },
-        [user, location.pathname]
-    );
+    const shouldGuard = useMemo(() => {
+        if (!user) {
+            return false;
+        }
+        const isAdmin = user.roles?.some((role) => role.name === 'ADMIN') ?? false;
+        if (isAdmin) {
+            return false;
+        }
+        if (AUTH_ROUTES.has(location.pathname)) {
+            return false;
+        }
+        if (location.pathname === '/profile') {
+            return false;
+        }
+        return true;
+    }, [user, location.pathname]);
 
     useEffect(() => {
         if (!shouldGuard || !user) {

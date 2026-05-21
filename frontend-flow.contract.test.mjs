@@ -45,7 +45,9 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(profilePage, /\/api\/v1\/auth\/oauth\/link/);
   assert.match(profilePage, /Connected Accounts/);
   assert.match(app, /\/seller-studio/);
-  assert.match(authContext, /activeRole/);
+  assert.doesNotMatch(authContext, /activeRole/);
+  assert.doesNotMatch(authContext, /switchRole/);
+  assert.match(read('./src/context/primaryRole.ts'), /export const primaryRole/);
   assert.match(app, /RoleHome/);
   assert.match(app, /ProfilePage/);
   assert.match(app, /GlobalErrorBoundary/);
@@ -58,7 +60,7 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(sellPage, /type="file"/);
   assert.match(sellPage, /publishDraftListing/);
   assert.doesNotMatch(sellPage, /\/deactivate/);
-  assert.match(listingDetail, /\/close/);
+  assert.match(listingDetail, /close automatically/i);
   assert.match(walletPage, /\/detail/);
   assert.match(listingDetail, /useAuctionRealtime/);
   assert.match(listingDetail + walletPage + sellPage, /readApiError/);
@@ -79,7 +81,7 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
   assert.match(sellPage, /\/publish/);
   assert.doesNotMatch(sellPage, /auction-created/);
   assert.doesNotMatch(sellPage, /Continue to Auction Setup/);
-  assert.doesNotMatch(sellPage, /auctionType:\s*'ENGLISH'/);
+  assert.match(sellPage, /auctionType:\s*'ENGLISH'/);
 
   assert.match(walletPage, /toAmountCents/);
   assert.match(walletPage, /Wallet Account/);
@@ -139,9 +141,8 @@ test('frontend sell flow is gated to seller accounts before any listing request 
   assert.match(sellPage, /role\.name === 'SELLER'/);
   assert.match(sellPage, /Only seller accounts can publish listings/);
   assert.match(sellPage, /Seller access required/);
-  assert.match(app, /const isSeller = activeRole === 'SELLER'/);
+  assert.match(app, /isSellerUser/);
   assert.match(app, /sellerOnly/);
-  assert.match(app, /activeRole === 'SELLER'/);
-  assert.match(app, /Switch to Selling/);
-  assert.match(app, /Switch to Buying/);
+  assert.doesNotMatch(app, /Switch to Selling/);
+  assert.doesNotMatch(app, /Open Seller Account/);
 });

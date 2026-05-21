@@ -12,6 +12,9 @@ import { biddingListingPath } from '../../auction/utils/bidding-paths';
 import { activeListingStatuses, catalogueListingToAuction, type CatalogueListing } from '../utils/listing-to-auction';
 import { useNowTick } from '../../../hooks/useNowTick';
 import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
+import { fetchPublicSellerProfile, type PublicSellerProfile } from '../../auth/utils/auth-api';
+import { fetchPublicUserProfiles } from '../../auth/utils/public-profiles';
+import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
 
 type ListingDetail = {
     id: string;
@@ -98,13 +101,37 @@ const ListingDetailPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const [listing, setListing] = useState<ListingDetail | null>(null);
+    const [sellerProfile, setSellerProfile] = useState<PublicSellerProfile | null>(null);
     const [bids, setBids] = useState<BidHistoryItem[]>([]);
+    const [bidderProfiles, setBidderProfiles] = useState<Record<string, PublicSellerProfile>>({});
     const [bidInput, setBidInput] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const nowMs = useNowTick();
 
     const listingId = id ? String(id) : '';
+
+    useEffect(() => {
+        const bidderIds = bids
+            .map((bid) => bid.bidderId ?? bid.bidder_id)
+            .filter((bidderId): bidderId is string => Boolean(bidderId));
+
+        if (bidderIds.length === 0) {
+            setBidderProfiles({});
+            return;
+        }
+
+        let active = true;
+        void fetchPublicUserProfiles(bidderIds).then((profiles) => {
+            if (active) {
+                setBidderProfiles(profiles);
+            }
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [bids]);
 
     const ensureAuctionSession = useCallback(async (listingPayload: ListingDetail): Promise<boolean> => {
         try {
@@ -188,6 +215,9 @@ const ListingDetailPage: React.FC = () => {
             }
             const mergedListing = auctionPatch ? { ...listingPayload, ...auctionPatch } : listingPayload;
             setListing(mergedListing);
+
+            const profile = await fetchPublicSellerProfile(String(mergedListing.sellerId));
+            setSellerProfile(profile);
 
             const meta = buildAuctionCardMeta(catalogueListingToAuction(mergedListing as unknown as CatalogueListing));
             setBidInput(normalizeMoneyInput(meta.minNextBid));
@@ -356,7 +386,37 @@ const ListingDetailPage: React.FC = () => {
                     <div className="auction-detail-copy">
                         <p className="eyebrow">{listing.category || 'Marketplace Listing'}</p>
                         <h1>{listing.title}</h1>
+                        <div className="listing-seller-meta">
+                            <ProfileAvatarWithFallback
+                                src={sellerProfile?.avatarUrl}
+                                name={sellerProfile?.displayName}
+                                size={44}
+                            />
+                            <div>
+                                <span className="text-muted" style={{ fontSize: '0.85rem' }}>Seller</span>
+                                <div style={{ fontWeight: 600 }}>
+                                    {sellerProfile?.displayName?.trim() || `Seller ${listing.sellerId.slice(0, 8)}`}
+                                </div>
+                            </div>
+                        </div>
                         <p className="text-muted">{listing.description || 'No description provided by the seller.'}</p>
+
+                        {listing.sellerId && (
+                            <div className="seller-info-block">
+                                <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                                <div>
+                                    <span className="metric-label">Seller</span>
+                                    <strong>{listing.sellerId.length > 12 ? `${listing.sellerId.slice(0, 6)}…${listing.sellerId.slice(-4)}` : listing.sellerId}</strong>
+                                </div>
+                                {listing.condition && (
+                                    <div>
+                                        <span className="metric-label">Condition</span>
+                                        <strong style={{ textTransform: 'capitalize' }}>{listing.condition}</strong>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="auction-spec-grid">
                             <div>
                                 <span>Starting Price (IDR)</span>
@@ -461,29 +521,47 @@ const ListingDetailPage: React.FC = () => {
                                 {isConnected ? 'Live' : 'Offline'}
                             </span>
                         </div>
-                        <div className="auction-history-list">
+                        <div className="bid-history-card-grid">
                             {bids.length > 0 ? (
                                 bids.map((bid) => {
                                     const amount = bid.bidAmount ?? (typeof bid.bid_amount_cents === 'number' ? bid.bid_amount_cents / 100 : 0);
-                                    const bidder = bid.bidderId ?? bid.bidder_id ?? 'Bidder';
+                                    const bidderId = bid.bidderId ?? bid.bidder_id ?? '';
+                                    const isOwnBid = Boolean(user?.id && bidderId === user.id);
+                                    const profile = bidderId ? bidderProfiles[bidderId] : undefined;
+                                    const bidderName = isOwnBid
+                                        ? 'You'
+                                        : (profile?.displayName?.trim() || `Bidder ${bidderId.slice(0, 8)}`);
                                     const timestamp = bid.bidTime ?? (bid.bid_time ? new Date(bid.bid_time * 1000).toISOString() : '');
                                     return (
-                                        <div key={bid.id} className="auction-history-row">
-                                            <div>
-                                                <strong>{bidder === user?.id ? 'You' : 'Bidder'}</strong>
-                                                <span>{timestamp ? new Date(timestamp).toLocaleString() : 'Bid recorded'}</span>
+                                        <article
+                                            key={bid.id}
+                                            className={`bid-history-card ${isOwnBid ? 'bid-history-card-own' : ''}`}
+                                        >
+                                            <ProfileAvatarWithFallback
+                                                src={profile?.avatarUrl}
+                                                name={bidderName}
+                                                size={48}
+                                            />
+                                            <div className="bid-history-card-body">
+                                                <div className="bid-history-card-top">
+                                                    <strong>{bidderName}</strong>
+                                                    <span className="bid-history-card-amount">{formatMoney(amount)}</span>
+                                                </div>
+                                                <span className="bid-history-card-time">
+                                                    {timestamp ? new Date(timestamp).toLocaleString() : 'Bid recorded'}
+                                                </span>
                                             </div>
-                                            <strong>{formatMoney(amount)}</strong>
-                                        </div>
+                                        </article>
                                     );
                                 })
                             ) : (
-                                <div className="auction-history-row">
+                                <div className="bid-history-card bid-history-card-empty">
+                                    <span className="material-symbols-outlined" aria-hidden="true">gavel</span>
                                     <div>
                                         <strong>No bids yet</strong>
                                         <span>Be the first to bid when the listing is live.</span>
                                     </div>
-                                    <strong>{formatMoney(listingMeta.minNextBid)}</strong>
+                                    <span className="bid-history-card-amount">{formatMoney(listingMeta.minNextBid)}</span>
                                 </div>
                             )}
                         </div>

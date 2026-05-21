@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
 import { requestOAuthLogin } from '../utils/auth-api';
+import { resolvePostLoginPath } from '../utils/post-auth-navigation';
 
 const GOOGLE_SCRIPT_ID = 'google-oauth-client';
 const GOOGLE_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
@@ -13,6 +14,7 @@ interface GoogleLoginButtonProps {
     onClearError?: () => void;
     onBusyChange?: (busy: boolean) => void;
     onCredential?: (credential: string) => Promise<void>;
+    onTwoFactorChallenge?: (challengeToken: string) => void;
     className?: string;
     width?: number;
 }
@@ -24,6 +26,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
     onClearError,
     onBusyChange,
     onCredential,
+    onTwoFactorChallenge,
     className = '',
     width = 320,
 }) => {
@@ -49,19 +52,23 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
             }
 
             const result = await requestOAuthLogin('google', response.credential);
+            if (result.kind === 'challenge') {
+                onTwoFactorChallenge?.(result.token);
+                return;
+            }
             if (result.kind !== 'success') {
                 onError(result.kind === 'error' ? result.message : 'Google login requires a fresh login.');
                 return;
             }
             login(result.payload);
-            navigate('/');
+            navigate(await resolvePostLoginPath(result.payload.accessToken));
         } catch (err: unknown) {
             onError(err instanceof Error ? err.message : 'Failed to connect to Auth Service via API Gateway.');
             console.error(err);
         } finally {
             onBusyChange?.(false);
         }
-    }, [login, navigate, onBusyChange, onClearError, onCredential, onError]);
+    }, [login, navigate, onBusyChange, onClearError, onCredential, onError, onTwoFactorChallenge]);
 
     useEffect(() => {
         if (!clientId) {

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { readApiError, gatewayUrl } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
+import { isSellerUser, primaryRole } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { useWalletUI } from '../../../context/WalletUIContext';
 import { useWebSocket } from '../../../hooks/useWebSocket';
@@ -88,7 +89,8 @@ const walletDisplayName = (email?: string): string => {
 };
 
 const WalletPage: React.FC = () => {
-    const { user, activeRole } = useAuth();
+    const { user } = useAuth();
+    const role = primaryRole(user);
     const authenticatedFetch = useAuthenticatedFetch();
     const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
     const location = useLocation();
@@ -100,7 +102,6 @@ const WalletPage: React.FC = () => {
     const [actionLoading, setActionLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
-    const [walletNotFound, setWalletNotFound] = useState<boolean>(false);
     const [topUpAmount, setTopUpAmount] = useState<string>('');
     const [paymentMethod, setPaymentMethod] = useState<string>('bca_va');
     const [withdrawAmount, setWithdrawAmount] = useState<string>('');
@@ -110,12 +111,9 @@ const WalletPage: React.FC = () => {
     const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawalRequestState | null>(null);
     const { showBalance, setShowBalance } = useWalletUI();
     const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw'>('overview');
-    const [acceptWalletTerms, setAcceptWalletTerms] = useState(false);
-
     const fetchWallet = useCallback(async () => {
         setLoading(true);
         setError(null);
-        setWalletNotFound(false);
         if (!user) {
             setWallet(null);
             setHistory([]);
@@ -125,11 +123,7 @@ const WalletPage: React.FC = () => {
             return;
         }
         try {
-            const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${activeRole}`));
-            if (response.status === 404 || response.status === 500) {
-                setWalletNotFound(true);
-                return;
-            }
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${role}`));
             if (!response.ok) {
                 setError(await readApiError(response, 'Wallet lookup failed'));
                 return;
@@ -144,30 +138,13 @@ const WalletPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [activeRole, authenticatedFetch, user]);
+    }, [role, authenticatedFetch, user]);
 
-    const createWallet = async () => {
-        setActionLoading(true);
+    const showSuccess = useCallback((msg: string) => {
+        setSuccess(msg);
         setError(null);
-        if (!user) return;
-        try {
-            const response = await authenticatedFetch(gatewayUrl('/api/v1/wallet/add'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: user.id, role: activeRole }),
-            });
-            if (!response.ok) {
-                setError(`Failed to create wallet: HTTP ${response.status}`);
-                return;
-            }
-            showSuccess('Wallet created successfully!');
-            await fetchWallet();
-        } catch (err: unknown) {
-            setError(`Create wallet failed: ${toErrorMessage(err)}`);
-        } finally {
-            setActionLoading(false);
-        }
-    };
+        setTimeout(() => setSuccess(null), 3000);
+    }, []);
 
     const showSuccess = useCallback((msg: string) => {
         setSuccess(msg);
@@ -294,7 +271,7 @@ const WalletPage: React.FC = () => {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amountCents, paymentMethod, role: activeRole }),
+                    body: JSON.stringify({ amountCents, paymentMethod, role }),
                 }
             );
             if (!response.ok) {
@@ -395,7 +372,7 @@ const WalletPage: React.FC = () => {
                         amountCents,
                         bankCode: withdrawBankCode,
                         accountNumber: normalizedAccountNumber,
-                        role: activeRole,
+                        role,
                     }),
                 }
             );
@@ -456,23 +433,11 @@ const WalletPage: React.FC = () => {
 
             {loading ? (
                 walletSkeleton
-            ) : walletNotFound ? (
+            ) : !wallet ? (
                 <div className="panel center-content">
-                    <p className="text-muted">Your wallet is not active yet.</p>
-                    <label className="terms-check">
-                        <input
-                            type="checkbox"
-                            checked={acceptWalletTerms}
-                            onChange={(event) => setAcceptWalletTerms(event.target.checked)}
-                        />
-                        <span>I agree to use BidMart Wallet only for bidding, top-up, and withdrawal activity.</span>
-                    </label>
-                    <button
-                        className="primary-button"
-                        onClick={createWallet}
-                        disabled={actionLoading || !acceptWalletTerms}
-                    >
-                        {actionLoading ? 'Creating...' : 'Activate Wallet'}
+                    <p className="text-muted">Unable to load your wallet. Please refresh or try again shortly.</p>
+                    <button className="primary-button" type="button" onClick={() => void fetchWallet()} disabled={actionLoading}>
+                        Retry
                     </button>
                 </div>
             ) : (
@@ -497,7 +462,11 @@ const WalletPage: React.FC = () => {
                                 <span className="material-symbols-outlined metric-icon" aria-hidden="true">lock</span>
                             </div>
                             <strong>{showBalance ? formatCents(wallet?.heldBalance) : '••••••'}</strong>
-                            <small>Reserved for active bids</small>
+                            <small>
+                                {isSellerUser(user)
+                                    ? 'Pending sale proceeds (released after buyer confirms order)'
+                                    : 'Reserved for active bids'}
+                            </small>
                         </div>
                         <div className="wallet-summary-card">
                             <div className="wallet-summary-top">
@@ -510,7 +479,7 @@ const WalletPage: React.FC = () => {
                     </div>
 
                     <div className="wallet-actions">
-                        {activeRole !== 'SELLER' && (
+                        {!isSellerUser(user) && (
                             <button className={activeTab === 'deposit' ? 'primary-button' : 'secondary-button'} onClick={() => setActiveTab('deposit')}>
                                 <span className="material-symbols-outlined" aria-hidden="true">add_card</span>
                                 Add Funds
@@ -526,7 +495,7 @@ const WalletPage: React.FC = () => {
                         </button>
                     </div>
 
-                    {activeTab === 'deposit' && activeRole !== 'SELLER' && (
+                    {activeTab === 'deposit' && !isSellerUser(user) && (
                         <div className="panel section-stack">
                             <h3>Add Funds</h3>
                             <label className="field">

@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { QRCodeSVG } from 'qrcode.react';
 import GoogleLoginButton from '../components/GoogleLoginButton';
+import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
+import { isValidImageReference, MAX_AVATAR_IMAGE_BYTES, readAvatarImageFile } from '../../../utils/avatar-image';
+
+type AvatarInputMode = 'upload' | 'link';
 
 interface Session {
     tokenId: string;
@@ -33,8 +37,10 @@ const formatSessionDate = (dateString: string | undefined | null) => {
 };
 
 const ProfilePage: React.FC = () => {
-    const { user, logout, updateUserProfile } = useAuth();
+    const { user, tokenId, logout, updateUserProfile } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
+    const location = useLocation();
+    const navigate = useNavigate();
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '';
     const [sessions, setSessions] = useState<Session[]>([]);
     const [profileLoading, setProfileLoading] = useState(true);
@@ -67,7 +73,37 @@ const ProfilePage: React.FC = () => {
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [sessionToRevoke, setSessionToRevoke] = useState<Session | null>(null);
+    const [revokeAllBusy, setRevokeAllBusy] = useState(false);
+    const [avatarInputMode, setAvatarInputMode] = useState<AvatarInputMode>('link');
+    const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
     const isProfileComplete = Boolean(displayName.trim()) && Boolean(shippingAddress.trim());
+
+    const handleAvatarFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file || !isEditing) {
+            return;
+        }
+        if (!file.type.startsWith('image/')) {
+            setError('Please choose an image file (PNG, JPG, or WebP).');
+            return;
+        }
+        if (file.size > MAX_AVATAR_IMAGE_BYTES) {
+            setError('Profile image must be 600 KB or smaller.');
+            return;
+        }
+        setAvatarUploadBusy(true);
+        setError(null);
+        try {
+            const dataUrl = await readAvatarImageFile(file);
+            setAvatarUrl(dataUrl);
+            setAvatarInputMode('upload');
+        } catch {
+            setError('Unable to read the selected image.');
+        } finally {
+            setAvatarUploadBusy(false);
+        }
+    };
 
     useEffect(() => {
         if (!user) return;
@@ -151,6 +187,12 @@ const ProfilePage: React.FC = () => {
             return;
         }
 
+        const trimmedAvatar = avatarUrl.trim();
+        if (trimmedAvatar && !isValidImageReference(trimmedAvatar)) {
+            setError('Avatar must be a valid image URL or uploaded image.');
+            return;
+        }
+
         setProfileSaving(true);
         setError(null);
         setMessage(null);
@@ -195,6 +237,12 @@ const ProfilePage: React.FC = () => {
             
             setMessage('Profile updated successfully.');
             setIsEditing(false);
+
+            const profileNowComplete = Boolean(updatedName.trim()) && Boolean(updatedAddress.trim());
+            const redirectTarget = (location.state as { from?: string } | null)?.from;
+            if (profileNowComplete && redirectTarget && redirectTarget !== '/profile') {
+                navigate(redirectTarget, { replace: true });
+            }
         } catch (err: unknown) {
             setError('Failed to update profile.');
             console.error(err);
@@ -332,6 +380,27 @@ const ProfilePage: React.FC = () => {
         setDisableCode('');
     };
 
+    const executeRevokeAllSessions = async () => {
+        setError(null);
+        setMessage(null);
+        setRevokeAllBusy(true);
+        try {
+            const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/sessions/revoke-all'), {
+                method: 'POST',
+            });
+            if (!response.ok) {
+                setError(await readApiError(response, 'Failed to revoke all sessions'));
+                return;
+            }
+            setSessions([]);
+            logout();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to revoke all sessions.');
+        } finally {
+            setRevokeAllBusy(false);
+        }
+    };
+
     const executeRevokeSession = async () => {
         if (!sessionToRevoke) return;
         setError(null);
@@ -348,18 +417,15 @@ const ProfilePage: React.FC = () => {
                 return;
             }
 
+            const revokedCurrentSession = Boolean(
+                tokenId && sessionToRevoke.tokenId === tokenId
+            );
             const remainingSessions = sessions.filter((session) => session.tokenId !== sessionToRevoke.tokenId);
             setSessions(remainingSessions);
             setSessionToRevoke(null);
-            
-            if (remainingSessions.length === 0) {
-                if (typeof logout === 'function') {
-                    logout();
-                } else {
-                    localStorage.removeItem('token');
-                    sessionStorage.clear();
-                    window.location.href = '/auth';
-                }
+
+            if (revokedCurrentSession || remainingSessions.length === 0) {
+                logout();
             } else {
                 setMessage('Session successfully revoked.');
             }
@@ -403,6 +469,15 @@ const ProfilePage: React.FC = () => {
             </section>
             {error && <div className="toast-error">{error}</div>}
             {message && <div className="toast-success">{message}</div>}
+            {!profileLoading && !isProfileComplete && (
+                <div className="panel center-content" style={{ marginBottom: '1rem' }}>
+                    <span className="hero-badge">Profile Required</span>
+                    <h2 style={{ marginTop: '0.75rem' }}>Complete your profile to use BidMart</h2>
+                    <p className="text-muted">
+                        Display name and shipping address are required before you can browse, bid, sell, or manage your wallet.
+                    </p>
+                </div>
+            )}
 
             <div className="panel section-stack">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -421,6 +496,79 @@ const ProfilePage: React.FC = () => {
                     <div className="loading-state">Loading profile details...</div>
                 ) : (
                     <form onSubmit={handleProfileSave} className="section-stack">
+                        <div className="profile-avatar-editor">
+                            <ProfileAvatarWithFallback
+                                src={avatarUrl}
+                                name={displayName || user.email}
+                                size={96}
+                            />
+                            <div className="profile-avatar-editor-body">
+                                <span className="eyebrow">Profile picture</span>
+                                <p className="text-muted">
+                                    Shown in the navbar, seller listings, and bid history.
+                                </p>
+                                {isEditing ? (
+                                    <>
+                                        <div className="avatar-method-tabs" role="tablist" aria-label="Avatar source">
+                                            <button
+                                                type="button"
+                                                role="tab"
+                                                aria-selected={avatarInputMode === 'upload'}
+                                                className={avatarInputMode === 'upload' ? 'avatar-method-tab avatar-method-tab-active' : 'avatar-method-tab'}
+                                                onClick={() => setAvatarInputMode('upload')}
+                                            >
+                                                Upload image
+                                            </button>
+                                            <button
+                                                type="button"
+                                                role="tab"
+                                                aria-selected={avatarInputMode === 'link'}
+                                                className={avatarInputMode === 'link' ? 'avatar-method-tab avatar-method-tab-active' : 'avatar-method-tab'}
+                                                onClick={() => setAvatarInputMode('link')}
+                                            >
+                                                Image link
+                                            </button>
+                                        </div>
+                                        {avatarInputMode === 'upload' ? (
+                                            <label className="field">
+                                                <span>Upload from device</span>
+                                                <input
+                                                    className="form-input"
+                                                    type="file"
+                                                    accept="image/png,image/jpeg,image/webp"
+                                                    disabled={avatarUploadBusy}
+                                                    onChange={handleAvatarFileChange}
+                                                />
+                                                <small className="text-muted">PNG, JPG, or WebP up to 600 KB.</small>
+                                            </label>
+                                        ) : (
+                                            <label className="field">
+                                                <span>Image URL</span>
+                                                <input
+                                                    className="form-input"
+                                                    value={avatarUrl}
+                                                    onChange={(event) => setAvatarUrl(event.target.value)}
+                                                    placeholder="https://example.com/avatar.jpg"
+                                                />
+                                            </label>
+                                        )}
+                                        {avatarUrl && (
+                                            <button
+                                                type="button"
+                                                className="secondary-button"
+                                                onClick={() => setAvatarUrl('')}
+                                            >
+                                                Remove photo
+                                            </button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <p className="text-muted">
+                                        {avatarUrl ? 'Photo saved.' : 'No profile photo yet. Edit profile to add one.'}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
                         <label className="field">
                             <span>Display name</span>
                             <input
@@ -430,16 +578,6 @@ const ProfilePage: React.FC = () => {
                                 placeholder="Your name"
                                 disabled={!isEditing}
                                 required
-                            />
-                        </label>
-                        <label className="field">
-                            <span>Avatar URL</span>
-                            <input
-                                className="form-input"
-                                value={avatarUrl}
-                                onChange={(event) => setAvatarUrl(event.target.value)}
-                                placeholder="https://..."
-                                disabled={!isEditing}
                             />
                         </label>
                         <label className="field">
@@ -696,7 +834,20 @@ const ProfilePage: React.FC = () => {
             </div>
 
             <div className="panel">
-                <h3>Active Sessions</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h3 style={{ margin: 0 }}>Active Sessions</h3>
+                    {sessions.length > 0 && (
+                        <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={executeRevokeAllSessions}
+                            disabled={revokeAllBusy}
+                            style={{ color: '#dc2626', borderColor: '#dc2626' }}
+                        >
+                            {revokeAllBusy ? 'Revoking...' : 'Revoke all sessions'}
+                        </button>
+                    )}
+                </div>
                 {sessions.length ? sessions.map((session) => (
                     <div key={session.tokenId} className="transaction-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 0', borderBottom: '1px solid #eee' }}>
                         

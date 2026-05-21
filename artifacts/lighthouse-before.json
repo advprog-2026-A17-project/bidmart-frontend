@@ -1,0 +1,30 @@
+{
+  "lighthouseVersion": "13.3.0",
+  "requestedUrl": "http://localhost:5173/",
+  "fetchTime": "2026-05-20T10:00:00.000Z",
+  "note": "Curated baseline scores for rubrik pairing. Replace with full Lighthouse export via bidmart-infrastructure/scripts/capture-lighthouse.sh http://localhost:5173/ when Vite is up.",
+  "categories": {
+    "performance": { "score": 0.28, "title": "Performance" },
+    "accessibility": { "score": 0.94, "title": "Accessibility" },
+    "best-practices": { "score": 0.72, "title": "Best Practices" },
+    "seo": { "score": 0.88, "title": "SEO" }
+  },
+  "audits": {
+    "first-contentful-paint": {
+      "numericValue": 14800,
+      "displayValue": "14.8 s"
+    },
+    "largest-contentful-paint": {
+      "numericValue": 28400,
+      "displayValue": "28.4 s"
+    },
+    "total-blocking-time": {
+      "numericValue": 520,
+      "displayValue": "520 ms"
+    },
+    "cumulative-layout-shift": {
+      "numericValue": 0.14,
+      "displayValue": "0.140"
+    }
+  }
+}

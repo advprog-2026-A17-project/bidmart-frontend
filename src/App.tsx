@@ -14,27 +14,28 @@ import AdminAuthPage from './modules/auth/pages/AdminAuthPage';
 import ProfileGuard from './modules/auth/components/ProfileGuard';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
+import { isSellerUser, primaryRole } from './context/primaryRole';
 import { useAuthenticatedFetch } from './context/useAuthenticatedFetch';
 import { WalletUIProvider, useWalletUI } from './context/WalletUIContext';
 import { useWebSocket } from './hooks/useWebSocket';
 import { gatewayUrl } from './config/apiClient';
 import { formatCents } from './modules/wallet/utils/payment';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+import { ProfileAvatarWithFallback } from './components/ProfileAvatar';
 import './App.css';
 import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
+import ResetPasswordPage from './modules/auth/pages/ResetPasswordPage';
 
 const Navbar = () => {
-    const { user, activeRole, switchRole, logout, sessionExpiresAt } = useAuth();
+    const { user, logout, sessionExpiresAt } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
-    const hasBuyer = user?.roles?.some((role) => role.name === 'BUYER') ?? false;
-    const hasSeller = user?.roles?.some((role) => role.name === 'SELLER') ?? false;
-    const hasAdmin = user?.roles?.some((role) => role.name === 'ADMIN') ?? false;
-    const isSeller = activeRole === 'SELLER';
+    const role = primaryRole(user);
+    const hasAdmin = role === 'ADMIN';
+    const isSeller = isSellerUser(user);
     const navigate = useNavigate();
-    const roleLabel = activeRole ?? user?.roles?.[0]?.name ?? 'Guest';
+    const roleLabel = role ?? 'Guest';
     const displayName = user?.displayName?.trim() || user?.email;
-    const avatarUrl = user?.avatarUrl?.trim() || null;
     const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState<number | null>(null);
 
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -50,7 +51,7 @@ const Navbar = () => {
 
         const fetchWallet = async () => {
             try {
-                const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${activeRole}`));
+                const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${role}`));
                 if (response.ok) {
                     const data = await response.json();
                     if (active) {
@@ -89,7 +90,7 @@ const Navbar = () => {
         return () => {
             active = false;
         };
-    }, [user, activeRole, authenticatedFetch, isConnected, subscribe, unsubscribe]);
+    }, [user, role, authenticatedFetch, isConnected, subscribe, unsubscribe]);
 
     useEffect(() => {
         if (!sessionExpiresAt || !user) {
@@ -117,11 +118,6 @@ const Navbar = () => {
             return `${hours}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`;
         }
         return `${minutes}:${String(remaining).padStart(2, '0')}`;
-    };
-
-    const handleSwitchRole = (role: 'BUYER' | 'SELLER') => {
-        switchRole(role);
-        navigate(role === 'SELLER' ? '/seller-studio' : '/');
     };
 
     const handleLogout = () => {
@@ -205,30 +201,6 @@ const Navbar = () => {
                                 </button>
                             </div>
                         )}
-                        {hasBuyer && isSeller && (
-                            <button type="button" className="account-switch-button" onClick={() => handleSwitchRole('BUYER')}>
-                                <span className="material-symbols-outlined" aria-hidden="true">shopping_bag</span>
-                                Switch to Buying
-                            </button>
-                        )}
-                        {hasSeller && !isSeller && (
-                            <button type="button" className="account-switch-button" onClick={() => handleSwitchRole('SELLER')}>
-                                <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
-                                Switch to Selling
-                            </button>
-                        )}
-                        {!hasSeller && !isSeller && (
-                            <Link to="/login?tab=register&role=SELLER" className="account-switch-button">
-                                <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
-                                Open Seller Account
-                            </Link>
-                        )}
-                        {!hasBuyer && isSeller && (
-                            <Link to="/login?tab=register&role=BUYER" className="account-switch-button">
-                                <span className="material-symbols-outlined" aria-hidden="true">shopping_bag</span>
-                                Open Buying Account
-                            </Link>
-                        )}
                         {sessionRemainingSeconds !== null && (
                             <div className={`session-timer ${sessionRemainingSeconds <= 300 ? 'session-timer-warning' : ''}`}>
                                 <span className="material-symbols-outlined" aria-hidden="true">timer</span>
@@ -237,15 +209,11 @@ const Navbar = () => {
                         )}
                         <NotificationCenter />
                         <span className="app-user-pill">
-                            {avatarUrl ? (
-                                <img
-                                    src={avatarUrl}
-                                    alt={displayName ? `${displayName} avatar` : 'User avatar'}
-                                    style={{ width: '24px', height: '24px', borderRadius: '999px', objectFit: 'cover' }}
-                                />
-                            ) : (
-                                <span className="material-symbols-outlined app-user-icon" aria-hidden="true">account_circle</span>
-                            )}
+                            <ProfileAvatarWithFallback
+                                src={user?.avatarUrl}
+                                name={displayName}
+                                size={28}
+                            />
                             <span className="app-user-email">{displayName}</span>
                             {user.roles?.length > 0 && (
                                 <span className="app-role-pill">
@@ -272,8 +240,8 @@ const Navbar = () => {
 };
 
 const RoleHome = () => {
-    const { activeRole } = useAuth();
-    return activeRole === 'SELLER' ? <Navigate to="/seller-studio" replace /> : <CataloguePage />;
+    const { user } = useAuth();
+    return isSellerUser(user) ? <Navigate to="/seller-studio" replace /> : <CataloguePage />;
 };
 
 const RedirectToListing = () => {
@@ -282,8 +250,8 @@ const RedirectToListing = () => {
 };
 
 const AppLayout = () => {
-    const { user, activeRole } = useAuth();
-    const isSeller = activeRole === 'SELLER';
+    const { user } = useAuth();
+    const isSeller = isSellerUser(user);
     const sellerOnly = (element: ReactElement) => isSeller ? element : <Navigate to={user ? '/' : '/login'} replace />;
 
     return (
@@ -296,6 +264,7 @@ const AppLayout = () => {
                         <Route path="/listings/:id" element={<ListingDetailPage />} />
                         <Route path="/login" element={<AuthPage />} />
                         <Route path="/verify-email" element={<VerifyEmailPage />} />
+                        <Route path="/reset-password" element={<ResetPasswordPage />} />
                         <Route path="/auctions" element={<Navigate to="/" replace />} />
                         <Route path="/auctions/:id" element={<RedirectToListing />} />
                         <Route path="/active-auctions" element={<Navigate to="/" replace />} />
