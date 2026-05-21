@@ -52,7 +52,7 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(app, /ProfilePage/);
   assert.match(app, /GlobalErrorBoundary/);
   assert.match(globalErrorBoundary, /role="alert"/);
-  assert.match(globalErrorBoundary, /toast-error/);
+  assert.match(globalErrorBoundary, /inline-alert-error/);
   assert.match(sellPage, /\/api\/v1\/catalogue\/listings/);
   assert.doesNotMatch(sellPage, /\/api\/v1\/auctions/);
   assert.doesNotMatch(sellPage, /categoryId/);
@@ -139,8 +139,10 @@ test('frontend sell flow is gated to seller accounts before any listing request 
   const app = read('./src/App.tsx');
 
   assert.match(sellPage, /role\.name === 'SELLER'/);
-  assert.match(sellPage, /Only seller accounts can publish listings/);
-  assert.match(sellPage, /Seller access required/);
+  assert.match(sellPage, /Listing permissions are required to publish/);
+  assert.match(sellPage, /Listing access required/);
+  assert.doesNotMatch(sellPage, /seller account/i);
+  assert.doesNotMatch(sellPage, /Start with a seller account/);
   assert.match(app, /isSellerUser/);
   assert.match(app, /sellerOnly/);
   assert.doesNotMatch(app, /Switch to Selling/);

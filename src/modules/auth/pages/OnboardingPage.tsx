@@ -5,6 +5,7 @@ import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { primaryRole } from '../../../context/primaryRole';
 import PasswordField from '../../../components/PasswordField';
+import PageToast from '../../../components/PageToast';
 
 type OnboardingStatus = {
     profileCompleted: boolean;
@@ -130,7 +131,7 @@ const OnboardingPage: React.FC = () => {
                     ))}
                 </div>
 
-                {error && <div className="toast-error">{error}</div>}
+                <PageToast error={error} />
 
                 <form className="onboarding-form auth-form" onSubmit={submit}>
                     {status?.needsPassword && (

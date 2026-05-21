@@ -1999,21 +1999,108 @@ button {
 }
 
 .notification-error,
-.toast-error {
+.inline-alert-error {
   background: var(--danger-soft);
   color: var(--danger);
 }
 
-.toast-success {
+.inline-alert-success {
   background: var(--success-soft);
   color: #047857;
 }
 
-.toast-error,
-.toast-success {
+.inline-alert-error,
+.inline-alert-success {
   border-radius: 6px;
   padding: 11px 13px;
   font-weight: 800;
+}
+
+.toast-viewport {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast-popup {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  font-weight: 700;
+  line-height: 1.4;
+  animation: toast-slide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.toast-popup-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: rgba(186, 26, 26, 0.22);
+}
+
+.toast-popup-success {
+  background: var(--success-soft);
+  color: #047857;
+  border-color: rgba(4, 120, 87, 0.2);
+}
+
+.toast-popup-icon {
+  font-size: 1.25rem;
+  margin-top: 1px;
+}
+
+.toast-popup-message {
+  margin: 0;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.toast-popup-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
+.toast-popup-close:hover {
+  opacity: 1;
+}
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .toast-viewport {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+  }
 }
 
 .auth-wrap {

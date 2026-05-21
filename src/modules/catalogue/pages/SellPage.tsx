@@ -13,6 +13,7 @@ import { catalogueListingToAuction, type CatalogueListing } from '../utils/listi
 import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
 import { CATALOGUE_CATEGORIES_TREE_PATH } from '../api/endpoints';
 import { flattenCategoryTree, type CategoryNode, type CategoryOption } from '../utils/categories';
+import PageToast from '../../../components/PageToast';
 
 type StudioView = 'dashboard' | 'listing-create' | 'listing-manage';
 
@@ -529,7 +530,7 @@ const SellPage: React.FC = () => {
     const saveListing = async (publishImmediate = false) => {
         if (submitting) return;
         if (!user || !isSeller) {
-            setError('Only seller accounts can publish listings. Sign in with a SELLER role to continue.');
+            setError('Listing permissions are required to publish. Sign in with an account that can manage listings.');
             return;
         }
 
@@ -698,17 +699,17 @@ const SellPage: React.FC = () => {
         return (
             <div className="page-wrap">
                 <section className="page-head">
-                    <h1>{isSignedOut ? 'Sell on BidMart' : 'Seller access required'}</h1>
-                    <p>{isSignedOut ? 'Create an account as a seller to publish auction listings.' : 'Buyer accounts can browse, bid, and manage wallet funds.'}</p>
+                    <h1>{isSignedOut ? 'Seller Studio' : 'Listing access required'}</h1>
+                    <p>{isSignedOut ? 'Sign in to manage listings and publish auctions on BidMart.' : 'Your account does not include listing permissions yet.'}</p>
                 </section>
 
                 <section className="panel access-panel center-content">
-                    <span className="hero-badge">{isSignedOut ? 'Public Preview' : 'Buyer Account'}</span>
-                    <h2>{isSignedOut ? 'Start with a seller account' : 'This page is for sellers'}</h2>
+                    <span className="hero-badge">{isSignedOut ? 'Public Preview' : 'Marketplace Account'}</span>
+                    <h2>{isSignedOut ? 'Sign in to continue' : 'Seller Studio is restricted'}</h2>
                     <p className="text-muted">
                         {isSignedOut
-                            ? 'Seller accounts can create listings, attach product photos, configure auction rules, and publish to the marketplace.'
-                            : 'Your current role does not allow listing creation. Use a seller account when you need to publish items.'}
+                            ? 'Seller Studio lets you create listings, attach product photos, configure auction rules, and publish to the marketplace.'
+                            : 'Complete onboarding with seller permissions or contact support if you need to publish items.'}
                     </p>
                     {user && <p className="access-role-summary">Current role: {roleSummary}</p>}
                     <div className="access-actions">
@@ -788,9 +789,10 @@ const SellPage: React.FC = () => {
                     </span>
                 </section>
 
-                {notice && <div className="toast-success">{notice}</div>}
-                {error && <div className="toast-error">{error}</div>}
-                {analyticsError && activeView === 'dashboard' && <div className="toast-error">{analyticsError}</div>}
+                <PageToast
+                    error={error ?? (activeView === 'dashboard' ? analyticsError : null)}
+                    success={notice}
+                />
 
                 {activeView === 'dashboard' && (
                     <>

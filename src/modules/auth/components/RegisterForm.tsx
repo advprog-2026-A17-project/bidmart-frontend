@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { requestRegistration } from '../utils/auth-api';
 import PasswordField from '../../../components/PasswordField';
+import PageToast from '../../../components/PageToast';
 import GoogleLoginButton from './GoogleLoginButton';
 import TwoFactorForm from './TwoFactorForm';
 
@@ -35,7 +36,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchTab }) => {
                 return;
             }
             setSuccess(
-                'Akun dibuat. Verifikasi email Anda, lalu masuk. Setelah login, lengkapi profil dan pilih peran (Pembeli atau Penjual).'
+                'Akun dibuat. Verifikasi email Anda, lalu masuk. Setelah login, lengkapi profil di halaman onboarding.'
             );
             setPassword('');
         } catch (err: unknown) {
@@ -57,8 +58,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchTab }) => {
 
     return (
         <form onSubmit={handleRegister} className="auth-form">
-            {error && <div className="toast-error">{error}</div>}
-            {success && <div className="toast-success">{success}</div>}
+            <PageToast error={error} success={success} />
 
             <label className="field">
                 <span>Email</span>

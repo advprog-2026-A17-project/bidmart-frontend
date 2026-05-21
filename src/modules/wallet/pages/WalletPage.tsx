@@ -8,6 +8,7 @@ import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { useWalletUI } from '../../../context/WalletUIContext';
 import { useNotificationsWebSocket } from '../../../context/NotificationsWebSocketContext';
 import { normalizeMoneyInput, toAmountCents } from '../../../utils/money';
+import PageToast from '../../../components/PageToast';
 import {
     formatCents,
     paymentExpiryMs,
@@ -422,8 +423,7 @@ const WalletPage: React.FC = () => {
                 </span>
             </section>
 
-            {error && <div className="toast-error">{error}</div>}
-            {success && <div className="toast-success">{success}</div>}
+            <PageToast error={error} success={success} />
 
             {loading ? (
                 walletSkeleton

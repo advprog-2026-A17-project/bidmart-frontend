@@ -10,6 +10,7 @@ import { flattenCategoryTree, type CategoryNode, type CategoryOption } from '../
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
 import type { AuctionRealtimeEvent } from '../../auction/hooks/useAuctionRealtime';
 import { buildCatalogueItemPatchFromRealtimeEvent } from '../../auction/utils/auction-realtime-patch';
+import PageToast from '../../../components/PageToast';
 
 interface CatalogueItem {
     id: number | string;
@@ -228,10 +229,6 @@ const CataloguePage: React.FC = () => {
                             <span className="material-symbols-outlined" aria-hidden="true">sensors</span>
                             View Live Lots
                         </a>
-                        <Link to="/seller-studio" className="secondary-button">
-                            <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
-                            Start Selling
-                        </Link>
                     </div>
                 </div>
                 <div className="market-hero-panel" aria-label="Marketplace summary">
@@ -329,7 +326,7 @@ const CataloguePage: React.FC = () => {
                 </form>
             </div>
 
-            {error && <div className="toast-error">{error}</div>}
+            <PageToast error={error} />
 
             {loading ? (
                 catalogueSkeleton

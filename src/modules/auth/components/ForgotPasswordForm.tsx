@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PageToast from '../../../components/PageToast';
 import { requestForgotPassword } from '../utils/auth-api';
 
 interface ForgotPasswordFormProps {
@@ -36,8 +37,7 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBackToLogin }
                 </p>
             </div>
 
-            {error && <div className="toast-error">{error}</div>}
-            {success && <div className="toast-success">{success}</div>}
+            <PageToast error={error} success={success} />
 
             <label className="field">
                 <span>Email Address</span>
