@@ -5,7 +5,7 @@ import { getGatewayBaseUrl } from './helpers/env';
 test('admin console loads users and roles without manual refresh', async ({ page, request }) => {
   const admin = await authenticateAdminViaApi(request);
   const targetEmail = buildTestEmail('role-target');
-  const target = await registerUserViaApi(request, targetEmail, 'Bidmart!12345', 'BUYER');
+  await registerUserViaApi(request, targetEmail, 'Bidmart!12345', 'BUYER');
 
   await page.goto('/login');
   await page.evaluate(({ token, user }) => {

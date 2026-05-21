@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { buildTestEmail, generateTotpCode, loginViaUi, registerUserViaApi } from './helpers/auth';
+import { buildTestEmail, generateTotpCode, registerUserViaApi } from './helpers/auth';
 import { getGatewayBaseUrl } from './helpers/env';
 
 const password = 'Bidmart!12345';

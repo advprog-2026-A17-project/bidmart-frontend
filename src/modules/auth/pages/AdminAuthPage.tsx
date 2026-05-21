@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
-import { ProfileAvatar } from '../../../components/ProfileAvatar';
+import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
@@ -380,7 +380,7 @@ const AdminAuthPage = () => {
                             return (
                                 <article key={adminUser.id} className="admin-user-card">
                                     <div className="admin-user-card-head">
-                                        <ProfileAvatar
+                                        <ProfileAvatarWithFallback
                                             name={adminUser.displayName ?? adminUser.email}
                                             src={adminUser.avatarUrl}
                                             size={48}
