@@ -7,6 +7,7 @@ import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { QRCodeSVG } from 'qrcode.react';
 import GoogleLoginButton from '../components/GoogleLoginButton';
 import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
+import PasswordField from '../../../components/PasswordField';
 import { isValidImageReference, MAX_AVATAR_IMAGE_BYTES, readAvatarImageFile } from '../../../utils/avatar-image';
 
 type AvatarInputMode = 'upload' | 'link';
@@ -33,7 +34,7 @@ interface UserProfileResponse {
 const formatSessionDate = (dateString: string | undefined | null) => {
     if (!dateString) return 'Unknown Date';
     const date = new Date(dateString);
-    return isNaN(date.getTime()) ? 'Invalid Format' : date.toLocaleString();
+    return Number.isNaN(date.getTime()) ? 'Invalid Format' : date.toLocaleString();
 };
 
 const ProfilePage: React.FC = () => {
@@ -74,6 +75,8 @@ const ProfilePage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [sessionToRevoke, setSessionToRevoke] = useState<Session | null>(null);
     const [revokeAllBusy, setRevokeAllBusy] = useState(false);
+    const [deleteAccountBusy, setDeleteAccountBusy] = useState(false);
+    const [deleteBlockers, setDeleteBlockers] = useState<string[]>([]);
     const [avatarInputMode, setAvatarInputMode] = useState<AvatarInputMode>('link');
     const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
     const isProfileComplete = Boolean(displayName.trim()) && Boolean(shippingAddress.trim());
@@ -161,14 +164,33 @@ const ProfilePage: React.FC = () => {
     }, [authenticatedFetch, updateUserProfile, user]);
 
     useEffect(() => {
-        if (!user) return;
-        authenticatedFetch(gatewayUrl('/api/v1/auth/sessions'))
-            .then(async (response) => {
-                if (!response.ok) throw new Error(await readApiError(response, 'Session lookup failed'));
-                return response.json();
-            })
-            .then((payload: Session[]) => setSessions(payload))
-            .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to load sessions'));
+        if (!user) {
+            return;
+        }
+        let active = true;
+
+        const fetchSessions = async () => {
+            try {
+                const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/sessions'));
+                if (!response.ok) {
+                    throw new Error(await readApiError(response, 'Session lookup failed'));
+                }
+                const payload = await response.json() as Session[];
+                if (active) {
+                    setSessions(payload);
+                }
+            } catch (err: unknown) {
+                if (active) {
+                    setError(err instanceof Error ? err.message : 'Failed to load sessions');
+                }
+            }
+        };
+
+        void fetchSessions();
+
+        return () => {
+            active = false;
+        };
     }, [authenticatedFetch, user]);
 
     const handleProfileSave = async (event: React.FormEvent) => {
@@ -401,6 +423,37 @@ const ProfilePage: React.FC = () => {
         }
     };
 
+    const deleteAccount = async () => {
+        if (!window.confirm('Delete your BidMart account permanently? This cannot be undone.')) {
+            return;
+        }
+        setDeleteAccountBusy(true);
+        setError(null);
+        setMessage(null);
+        setDeleteBlockers([]);
+        try {
+            const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/account'), {
+                method: 'DELETE',
+            });
+            if (response.status === 409) {
+                const payload = await response.json() as { blockers?: string[] };
+                setDeleteBlockers(payload.blockers ?? []);
+                setError('Account deletion is blocked until active marketplace activity is resolved.');
+                return;
+            }
+            if (!response.ok) {
+                setError(await readApiError(response, 'Failed to delete account'));
+                return;
+            }
+            logout();
+            navigate('/login', { replace: true });
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to delete account.');
+        } finally {
+            setDeleteAccountBusy(false);
+        }
+    };
+
     const executeRevokeSession = async () => {
         if (!sessionToRevoke) return;
         setError(null);
@@ -619,46 +672,22 @@ const ProfilePage: React.FC = () => {
                     Add a password so you can sign in without Google OAuth.
                 </p>
                 <form onSubmit={handlePasswordSave} className="section-stack">
-                    <label className="field">
-                        <span>New password</span>
-                        <div className="password-row">
-                            <input
-                                className="form-input"
-                                type={showPassword ? 'text' : 'password'}
-                                placeholder="••••••••"
-                                value={password}
-                                onChange={(event) => setPassword(event.target.value)}
-                                required
-                            />
-                            <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => setShowPassword((value) => !value)}
-                            >
-                                {showPassword ? 'Hide' : 'Show'}
-                            </button>
-                        </div>
-                    </label>
-                    <label className="field">
-                        <span>Confirm password</span>
-                        <div className="password-row">
-                            <input
-                                className="form-input"
-                                type={showPasswordConfirm ? 'text' : 'password'}
-                                placeholder="••••••••"
-                                value={passwordConfirm}
-                                onChange={(event) => setPasswordConfirm(event.target.value)}
-                                required
-                            />
-                            <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => setShowPasswordConfirm((value) => !value)}
-                            >
-                                {showPasswordConfirm ? 'Hide' : 'Show'}
-                            </button>
-                        </div>
-                    </label>
+                    <PasswordField
+                        label="New password"
+                        value={password}
+                        onChange={setPassword}
+                        required
+                        visible={showPassword}
+                        onVisibleChange={setShowPassword}
+                    />
+                    <PasswordField
+                        label="Confirm password"
+                        value={passwordConfirm}
+                        onChange={setPasswordConfirm}
+                        required
+                        visible={showPasswordConfirm}
+                        onVisibleChange={setShowPasswordConfirm}
+                    />
                     <button className="primary-button" type="submit" disabled={passwordSaving}>
                         {passwordSaving ? 'Saving...' : 'Save Password'}
                     </button>
@@ -869,6 +898,28 @@ const ProfilePage: React.FC = () => {
                         </button>
                     </div>
                 )) : <div className="empty-state">No active sessions found.</div>}
+            </div>
+
+            <div className="panel section-stack" style={{ marginTop: '1.5rem' }}>
+                <h3>Delete account</h3>
+                <p className="text-muted">
+                    Permanently remove your account when you have no active listings, bids, orders, or wallet balance.
+                </p>
+                {deleteBlockers.length > 0 && (
+                    <ul className="text-muted">
+                        {deleteBlockers.map((blocker) => (
+                            <li key={blocker}>{blocker}</li>
+                        ))}
+                    </ul>
+                )}
+                <button
+                    type="button"
+                    className="danger-button"
+                    onClick={deleteAccount}
+                    disabled={deleteAccountBusy}
+                >
+                    {deleteAccountBusy ? 'Deleting...' : 'Delete account'}
+                </button>
             </div>
 
             {sessionToRevoke && (

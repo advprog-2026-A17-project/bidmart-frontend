@@ -6,6 +6,7 @@ import { useAuth } from '../../../context/useAuth';
 import { isSellerUser } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney } from '../../../utils/money';
+import OrderStatusCard from '../components/OrderStatusCard';
 
 type OrderRecord = {
     id: string;
@@ -28,9 +29,6 @@ type ListingSummary = {
     title?: string | null;
     imageUrl?: string | null;
 };
-
-const orderStatusLabel = (order: OrderRecord): string =>
-    order.shippingStatus || order.status;
 
 const OrdersPage: React.FC = () => {
     const { user } = useAuth();
@@ -91,6 +89,29 @@ const OrdersPage: React.FC = () => {
         () => orders.reduce((sum, order) => sum + Number(order.finalPrice || 0), 0),
         [orders]
     );
+
+    const updateOrderStatus = async (orderId: string, status: 'PACKED' | 'SHIPPED', carrier?: string) => {
+        try {
+            setError(null);
+            setNotice(null);
+            const body: { status: string; carrier?: string } = { status };
+            if (carrier) {
+                body.carrier = carrier;
+            }
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/orders/${encodeURIComponent(orderId)}/status`), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Update order failed'));
+            }
+            setNotice(status === 'PACKED' ? 'Order marked as packed.' : 'Order marked as shipped.');
+            await fetchOrders();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Unable to update order.');
+        }
+    };
 
     const confirmReceipt = async (orderId: string) => {
         try {
@@ -178,10 +199,18 @@ const OrdersPage: React.FC = () => {
                     {orders.map((order) => {
                         const listing = listingsById[order.listingId];
                         const isBuyer = user?.id === order.buyerId;
+                        const isOrderSeller = user?.id === order.sellerId;
+                        const orderRole = isOrderSeller ? 'seller' as const : 'buyer' as const;
                         return (
-                            <article key={order.id} className="management-card">
+                            <article key={order.id} className="management-card order-management-card">
+                                <OrderStatusCard
+                                    status={order.status}
+                                    role={orderRole}
+                                    compact
+                                    trackingNumber={order.trackingNumber}
+                                    carrier={order.carrier}
+                                />
                                 <div>
-                                    <span className={`status-badge status-${order.status}`}>{orderStatusLabel(order)}</span>
                                     <h3>{listing?.title || 'Won Auction'}</h3>
                                     <p className="text-muted">
                                         Created {new Date(order.createdAt).toLocaleString()}
@@ -211,7 +240,16 @@ const OrdersPage: React.FC = () => {
                                 </div>
                                 <div className="management-actions">
                                     <Link className="secondary-button" to={`/orders/${order.id}`}>View Details</Link>
-                                    <Link className="secondary-button" to={`/listings/${order.listingId ?? order.auctionId}`}>View Listing</Link>
+                                    {isOrderSeller && order.status === 'CREATED' && (
+                                        <button type="button" className="primary-button" onClick={() => updateOrderStatus(order.id, 'PACKED')}>
+                                            Mark Packed
+                                        </button>
+                                    )}
+                                    {isOrderSeller && order.status === 'PACKED' && (
+                                        <button type="button" className="primary-button" onClick={() => updateOrderStatus(order.id, 'SHIPPED', 'JNE')}>
+                                            Mark Shipped
+                                        </button>
+                                    )}
                                     {isBuyer && order.status === 'SHIPPED' && (
                                         <button type="button" className="primary-button" onClick={() => confirmReceipt(order.id)}>
                                             Confirm Receipt

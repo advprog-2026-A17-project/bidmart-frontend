@@ -2998,3 +2998,90 @@ button {
   gap: 10px;
   margin-top: 16px;
 }
+
+.order-management-card {
+  grid-template-columns: 1fr;
+}
+
+.order-status-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.order-status-card-compact {
+  padding: 12px;
+}
+
+.order-status-card-header {
+  display: grid;
+  gap: 4px;
+}
+
+.order-status-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.order-status-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.order-status-step-done {
+  border-color: var(--accent, #2563eb);
+  color: var(--primary);
+}
+
+.order-status-step-active {
+  background: rgba(37, 99, 235, 0.12);
+  border-color: var(--accent, #2563eb);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.order-status-step-disputed {
+  border-color: #b45309;
+  color: #b45309;
+}
+
+.order-status-step-icon {
+  font-size: 1rem;
+}
+
+.order-status-shipment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.proxy-bid-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  display: grid;
+  gap: 8px;
+}
+
+.ended-auction-panel h2 {
+  margin: 0.25rem 0;
+}
+
+.ended-auction-won {
+  border-color: rgba(34, 197, 94, 0.35);
+}

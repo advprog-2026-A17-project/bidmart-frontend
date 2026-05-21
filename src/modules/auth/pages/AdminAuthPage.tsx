@@ -87,6 +87,25 @@ const AdminAuthPage = () => {
         setError(null);
     };
 
+    const runAdminMutation = async (
+        action: () => Promise<void>,
+        fallbackError: string,
+        options?: { closeConfirm?: boolean },
+    ) => {
+        setLoading(true);
+        clearFeedback();
+        try {
+            await action();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : fallbackError);
+        } finally {
+            setLoading(false);
+            if (options?.closeConfirm) {
+                setConfirmAction(null);
+            }
+        }
+    };
+
     const loadRoles = useCallback(async () => {
         const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/roles'));
         if (!response.ok) {
@@ -199,9 +218,7 @@ const AdminAuthPage = () => {
 
     const createRole = async (event: FormEvent) => {
         event.preventDefault();
-        setLoading(true);
-        clearFeedback();
-        try {
+        await runAdminMutation(async () => {
             const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/roles'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -217,24 +234,18 @@ const AdminAuthPage = () => {
             setNewRolePermissions(new Set());
             setMessage('Role created.');
             await refreshCatalog();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to create role');
-        } finally {
-            setLoading(false);
-        }
+        }, 'Failed to create role');
     };
 
     const saveRolePermissions = async (roleName: string) => {
-        setLoading(true);
-        clearFeedback();
-        try {
+        await runAdminMutation(async () => {
             const response = await authenticatedFetch(
                 gatewayUrl(`/api/v1/auth/roles/${encodeURIComponent(roleName)}/permissions`),
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ permissions: Array.from(editPermissions) }),
-                }
+                },
             );
             if (!response.ok) {
                 throw new Error(await readApiError(response, 'Failed to update role permissions'));
@@ -242,20 +253,14 @@ const AdminAuthPage = () => {
             setEditingRole(null);
             setMessage(`Permissions updated for ${roleName}.`);
             await refreshCatalog();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to update role permissions');
-        } finally {
-            setLoading(false);
-        }
+        }, 'Failed to update role permissions');
     };
 
     const deleteRole = async (roleName: string) => {
-        setLoading(true);
-        clearFeedback();
-        try {
+        await runAdminMutation(async () => {
             const response = await authenticatedFetch(
                 gatewayUrl(`/api/v1/auth/roles/${encodeURIComponent(roleName)}`),
-                { method: 'DELETE' }
+                { method: 'DELETE' },
             );
             if (!response.ok) {
                 throw new Error(await readApiError(response, 'Failed to delete role'));
@@ -265,11 +270,7 @@ const AdminAuthPage = () => {
             }
             setMessage(`Role ${roleName} deleted.`);
             await refreshAll();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to delete role');
-        } finally {
-            setLoading(false);
-        }
+        }, 'Failed to delete role');
     };
 
     const assignUserRole = async (userId: string) => {
@@ -277,49 +278,36 @@ const AdminAuthPage = () => {
         if (!role) {
             return;
         }
-        setLoading(true);
-        clearFeedback();
-        try {
+        await runAdminMutation(async () => {
             const response = await authenticatedFetch(
                 gatewayUrl(`/api/v1/auth/users/${encodeURIComponent(userId)}/roles`),
                 {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ role }),
-                }
+                },
             );
             if (!response.ok) {
                 throw new Error(await readApiError(response, 'Failed to assign role'));
             }
             setMessage(`Role ${role} assigned.`);
             await loadUsers(userSearch);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to assign role');
-        } finally {
-            setLoading(false);
-        }
+        }, 'Failed to assign role');
     };
 
     const setUserEnabled = async (email: string, enabled: boolean) => {
-        setLoading(true);
-        clearFeedback();
-        try {
+        await runAdminMutation(async () => {
             const endpoint = enabled ? 'enable-user' : 'disable-user';
             const response = await authenticatedFetch(
                 gatewayUrl(`/api/v1/auth/admin/${endpoint}?email=${encodeURIComponent(email)}`),
-                { method: 'POST' }
+                { method: 'POST' },
             );
             if (!response.ok) {
                 throw new Error(await readApiError(response, enabled ? 'Failed to unban user' : 'Failed to ban user'));
             }
             setMessage(enabled ? 'User unbanned.' : 'User banned and sessions revoked.');
             await loadUsers(userSearch);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to update user status');
-        } finally {
-            setLoading(false);
-            setConfirmAction(null);
-        }
+        }, 'Failed to update user status', { closeConfirm: true });
     };
 
     const startEditingRole = (role: RoleResponse) => {
@@ -407,7 +395,9 @@ const AdminAuthPage = () => {
                                                 }))}
                                                 disabled={loading || isSelf}
                                             >
-                                                {roles.map((role) => (
+                                                {roles
+                                                    .filter((role) => role.name !== 'ADMIN')
+                                                    .map((role) => (
                                                     <option key={role.id} value={role.name}>{role.name}</option>
                                                 ))}
                                             </select>

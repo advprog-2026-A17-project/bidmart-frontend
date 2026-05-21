@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import PasswordField from '../../../components/PasswordField';
 import { requestResetPassword } from '../utils/auth-api';
 
 const ResetPasswordPage = () => {
@@ -13,6 +14,13 @@ const ResetPasswordPage = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => () => {
+        if (redirectTimerRef.current) {
+            clearTimeout(redirectTimerRef.current);
+        }
+    }, []);
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
@@ -38,7 +46,7 @@ const ResetPasswordPage = () => {
         }
 
         setSuccess('Password updated. You can sign in with your new password.');
-        setTimeout(() => navigate('/login'), 1500);
+        redirectTimerRef.current = setTimeout(() => navigate('/login'), 1500);
     };
 
     return (
@@ -51,30 +59,24 @@ const ResetPasswordPage = () => {
                 {success && <div className="toast-success">{success}</div>}
 
                 <form onSubmit={handleSubmit} className="auth-form">
-                    <label className="field">
-                        <span>New password</span>
-                        <input
-                            className="form-input"
-                            type="password"
-                            value={password}
-                            onChange={(event) => setPassword(event.target.value)}
-                            required
-                            minLength={8}
-                            autoComplete="new-password"
-                        />
-                    </label>
-                    <label className="field">
-                        <span>Confirm password</span>
-                        <input
-                            className="form-input"
-                            type="password"
-                            value={confirmPassword}
-                            onChange={(event) => setConfirmPassword(event.target.value)}
-                            required
-                            minLength={8}
-                            autoComplete="new-password"
-                        />
-                    </label>
+                    <PasswordField
+                        label="New password"
+                        value={password}
+                        onChange={setPassword}
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                        showToggle={false}
+                    />
+                    <PasswordField
+                        label="Confirm password"
+                        value={confirmPassword}
+                        onChange={setConfirmPassword}
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                        showToggle={false}
+                    />
                     <button className="primary-button" type="submit" disabled={loading || !token}>
                         {loading ? 'Updating...' : 'Update password'}
                     </button>

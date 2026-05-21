@@ -2,8 +2,6 @@ import { fetchPublicSellerProfile, type PublicSellerProfile } from './auth-api';
 
 export type PublicUserProfile = PublicSellerProfile;
 
-export const fetchPublicUserProfile = fetchPublicSellerProfile;
-
 export const fetchPublicUserProfiles = async (
     userIds: string[],
 ): Promise<Record<string, PublicUserProfile>> => {
@@ -14,7 +12,7 @@ export const fetchPublicUserProfiles = async (
 
     const entries = await Promise.all(
         uniqueIds.map(async (userId) => {
-            const profile = await fetchPublicUserProfile(userId);
+            const profile = await fetchPublicSellerProfile(userId);
             return profile ? ([userId, profile] as const) : null;
         }),
     );
