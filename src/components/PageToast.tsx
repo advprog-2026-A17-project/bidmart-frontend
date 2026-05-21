@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId } from 'react';
 import { useToast, type ToastVariant } from '../context/ToastContext';
 
 type PageToastProps = {
@@ -14,7 +14,6 @@ type PageToastProps = {
 const PageToast: React.FC<PageToastProps> = ({ error, success, notice }) => {
     const { publish, dismissBySource } = useToast();
     const sourceId = useId();
-    const lastPublishedRef = useRef<string | null>(null);
 
     useEffect(() => {
         const errorMsg = error?.trim() ?? '';
@@ -33,28 +32,12 @@ const PageToast: React.FC<PageToastProps> = ({ error, success, notice }) => {
             message = noticeMsg;
         }
 
-        const signature = message ? `${variant}:${message}` : '';
-
-        if (!signature) {
-            if (lastPublishedRef.current) {
-                dismissBySource(sourceId);
-                lastPublishedRef.current = null;
-            }
-            return () => {
-                dismissBySource(sourceId);
-                lastPublishedRef.current = null;
-            };
-        }
-
-        if (lastPublishedRef.current !== signature) {
-            publish(message, variant, { sourceId });
-            lastPublishedRef.current = signature;
-        }
-
-        return () => {
+        if (!message) {
             dismissBySource(sourceId);
-            lastPublishedRef.current = null;
-        };
+            return;
+        }
+
+        publish(message, variant, { sourceId });
     }, [dismissBySource, error, notice, publish, sourceId, success]);
 
     return null;

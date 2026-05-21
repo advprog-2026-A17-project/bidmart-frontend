@@ -91,7 +91,9 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         return () => {
             active = false;
         };
-    }, [authenticatedFetch, location.pathname, navigate, retryTick, shouldGuard, user]);
+    // Re-run only when the signed-in user changes, not on every profile field update
+    // (updateUserProfile mutates `user` and would remount children, dismissing toasts).
+    }, [authenticatedFetch, location.pathname, navigate, retryTick, shouldGuard, user?.id]);
 
     if (!shouldGuard) {
         return <>{children}</>;
