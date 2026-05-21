@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
+import { isSellerUser } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney } from '../../../utils/money';
 
@@ -42,7 +43,8 @@ const orderStatusLabel = (order: OrderRecord): string =>
 
 const OrderDetailPage: React.FC = () => {
     const { orderId } = useParams();
-    const { user, activeRole } = useAuth();
+    const { user } = useAuth();
+    const isSellerView = isSellerUser(user);
     const authenticatedFetch = useAuthenticatedFetch();
     const [order, setOrder] = useState<OrderRecord | null>(null);
     const [listing, setListing] = useState<ListingSummary | null>(null);
@@ -191,7 +193,7 @@ const OrderDetailPage: React.FC = () => {
             <section className="page-head studio-head">
                 <div>
                     <BackButton fallback="/orders" />
-                    <p className="eyebrow">{activeRole === 'SELLER' ? 'Seller Workspace' : 'Buyer Workspace'}</p>
+                    <p className="eyebrow">{isSellerView ? 'Seller Workspace' : 'Buyer Workspace'}</p>
                     <h1>Order Details</h1>
                     <p>Monitor shipping progress and finalize delivery confirmation.</p>
                 </div>

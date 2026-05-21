@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
 import { requestTwoFactorLogin } from '../utils/auth-api';
+import { resolvePostLoginPath } from '../utils/post-auth-navigation';
 
 interface TwoFactorFormProps {
     challengeToken: string;
@@ -35,7 +36,7 @@ const TwoFactorForm: React.FC<TwoFactorFormProps> = ({ challengeToken, onCancel 
                 return;
             }
             login(result.payload);
-            navigate('/');
+            navigate(await resolvePostLoginPath(result.payload.accessToken));
         } catch (err: unknown) {
             setError('Failed to verify two-factor challenge via API Gateway.');
             console.error(err);
