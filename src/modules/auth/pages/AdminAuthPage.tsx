@@ -395,7 +395,9 @@ const AdminAuthPage = () => {
                                                 }))}
                                                 disabled={loading || isSelf}
                                             >
-                                                {roles.map((role) => (
+                                                {roles
+                                                    .filter((role) => role.name !== 'ADMIN')
+                                                    .map((role) => (
                                                     <option key={role.id} value={role.name}>{role.name}</option>
                                                 ))}
                                             </select>

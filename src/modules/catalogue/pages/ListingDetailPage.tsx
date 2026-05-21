@@ -5,11 +5,19 @@ import { apiUrl } from '../../../config/api';
 import { readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
-import { formatMoney, normalizeMoneyInput, toMoneyAmount } from '../../../utils/money';
+import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
+import type { AuctionRealtimeEvent } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta } from '../../auction/utils/auction-card-meta';
+import { buildListingPatchFromRealtimeEvent, eventTargetsListing } from '../../auction/utils/auction-realtime-patch';
 import { biddingListingPath } from '../../auction/utils/bidding-paths';
-import { activeListingStatuses, catalogueListingToAuction, type CatalogueListing } from '../utils/listing-to-auction';
+import {
+    activeListingStatuses,
+    catalogueListingToAuction,
+    isEndedListing,
+    shouldLoadBidHistory,
+    type CatalogueListing,
+} from '../utils/listing-to-auction';
 import { useNowTick } from '../../../hooks/useNowTick';
 import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
 import { fetchPublicSellerProfile, type PublicSellerProfile } from '../../auth/utils/auth-api';
@@ -66,6 +74,9 @@ const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE', 'CLO
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
     meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
 
+const bidAmountFromItem = (bid: BidHistoryItem): number =>
+    bid.bidAmount ?? (typeof bid.bid_amount_cents === 'number' ? bid.bid_amount_cents / 100 : 0);
+
 const toIsoDate = (value?: string | null): string | null => {
     if (!value) return null;
     const parsed = new Date(value);
@@ -96,11 +107,25 @@ const ListingDetailPage: React.FC = () => {
     const [bids, setBids] = useState<BidHistoryItem[]>([]);
     const [bidderProfiles, setBidderProfiles] = useState<Record<string, PublicSellerProfile>>({});
     const [bidInput, setBidInput] = useState('');
+    const [proxyMaxInput, setProxyMaxInput] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const nowMs = useNowTick();
 
     const listingId = id ? String(id) : '';
+
+    const fetchBids = useCallback(async () => {
+        if (!listingId) return;
+        try {
+            const bidResponse = await fetch(apiUrl(biddingListingPath(listingId, '/bids')));
+            if (bidResponse.ok) {
+                const bidPayload = await bidResponse.json() as BidHistoryItem[] | { items?: BidHistoryItem[] };
+                setBids(Array.isArray(bidPayload) ? bidPayload : bidPayload.items ?? []);
+            }
+        } catch {
+            /* keep existing bids on transient failure */
+        }
+    }, [listingId]);
 
     useEffect(() => {
         const bidderIds = bids
@@ -175,7 +200,8 @@ const ListingDetailPage: React.FC = () => {
         }
     }, [listingId]);
 
-    const fetchListing = useCallback(async () => {
+    const fetchListing = useCallback(async (options?: { silent?: boolean }) => {
+        const silent = options?.silent ?? false;
         if (!listingId) {
             setError('Missing listing id.');
             setLoading(false);
@@ -183,7 +209,9 @@ const ListingDetailPage: React.FC = () => {
         }
 
         try {
-            setLoading(true);
+            if (!silent) {
+                setLoading(true);
+            }
             setError(null);
 
             const listingResponse = await fetch(apiUrl(`/api/v1/catalogue/listings/${encodeURIComponent(listingId)}`));
@@ -211,43 +239,27 @@ const ListingDetailPage: React.FC = () => {
             setSellerProfile(profile);
 
             const meta = buildAuctionCardMeta(catalogueListingToAuction(mergedListing as unknown as CatalogueListing));
-            setBidInput(normalizeMoneyInput(meta.minNextBid));
+            setBidInput(normalizeRupiahInput(meta.minNextBid));
 
-            if (activeListingStatuses.has((mergedListing.status ?? '').toUpperCase())) {
-                try {
-                    const bidResponse = await fetch(apiUrl(biddingListingPath(listingId, '/bids')));
-                    if (bidResponse.ok) {
-                        const bidPayload = await bidResponse.json() as BidHistoryItem[] | { items?: BidHistoryItem[] };
-                        setBids(Array.isArray(bidPayload) ? bidPayload : bidPayload.items ?? []);
-                    } else {
-                        setBids([]);
-                    }
-                } catch {
-                    setBids([]);
-                }
-            } else {
-                setBids([]);
+            if (shouldLoadBidHistory((mergedListing.status ?? '').toUpperCase())) {
+                await fetchBids();
             }
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Unable to load listing.');
-            setListing(null);
-            setBids([]);
+            if (!silent) {
+                setListing(null);
+                setBids([]);
+            }
         } finally {
-            setLoading(false);
+            if (!silent) {
+                setLoading(false);
+            }
         }
-    }, [ensureAuctionSession, fetchAuctionSnapshotPatch, listingId]);
+    }, [ensureAuctionSession, fetchAuctionSnapshotPatch, fetchBids, listingId]);
 
     useEffect(() => {
         void fetchListing();
     }, [fetchListing]);
-
-    useEffect(() => {
-        if (!listingId) return;
-        const timer = window.setInterval(() => {
-            void fetchListing();
-        }, 15000);
-        return () => window.clearInterval(timer);
-    }, [fetchListing, listingId]);
 
     useEffect(() => {
         if (!listingId) return;
@@ -265,9 +277,23 @@ const ListingDetailPage: React.FC = () => {
         () => (listingId ? [`/topic/listings/${listingId}`, `/topic/auctions/${listingId}`] : []),
         [listingId]
     );
-    const handleRealtimeEvent = useCallback(() => {
-        void fetchListing();
-    }, [fetchListing]);
+
+    const handleRealtimeEvent = useCallback((event: AuctionRealtimeEvent) => {
+        if (!eventTargetsListing(event, listingId)) {
+            return;
+        }
+        const patch = buildListingPatchFromRealtimeEvent(event);
+        if (patch) {
+            setListing((prev) => prev ? { ...prev, ...patch } : prev);
+            const meta = buildAuctionCardMeta(
+                catalogueListingToAuction({ ...(listing ?? {}), ...patch } as unknown as CatalogueListing),
+                nowMs
+            );
+            setBidInput(normalizeRupiahInput(meta.minNextBid));
+        }
+        void fetchBids();
+    }, [fetchBids, listing, listingId, nowMs]);
+
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
 
     const imageSrc = useMemo(() => {
@@ -276,16 +302,32 @@ const ListingDetailPage: React.FC = () => {
     }, [listing]);
 
     const listingMeta = listing ? buildAuctionCardMeta(catalogueListingToAuction(listing as unknown as CatalogueListing), nowMs) : null;
-    const isLive = listing ? activeListingStatuses.has((listing.status ?? '').toUpperCase()) : false;
+    const listingStatus = (listing?.status ?? '').toUpperCase();
+    const isLive = listing ? activeListingStatuses.has(listingStatus) : false;
+    const isEnded = listing ? isEndedListing(listingStatus) : false;
+    const isDraft = listingStatus === 'DRAFT';
     const isSeller = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId);
+
+    const inferredWinnerId = useMemo(() => {
+        if (!bids.length) return null;
+        const sorted = [...bids].sort((a, b) => bidAmountFromItem(b) - bidAmountFromItem(a));
+        const top = sorted[sorted.length - 1];
+        return top?.bidderId ?? top?.bidder_id ?? null;
+    }, [bids]);
+
+    const winnerProfile = inferredWinnerId ? bidderProfiles[inferredWinnerId] : undefined;
+    const userWon = Boolean(user?.id && inferredWinnerId && user.id === inferredWinnerId && listingStatus === 'WON');
+    const userParticipated = Boolean(user?.id && bids.some((b) => (b.bidderId ?? b.bidder_id) === user.id));
+
     const canViewListing = Boolean(
         listing && (
             isSeller ||
-            PUBLIC_LISTING_STATUSES.has((listing.status ?? '').toUpperCase())
+            PUBLIC_LISTING_STATUSES.has(listingStatus)
         )
     );
+
     const placeBid = async () => {
-        const amount = toMoneyAmount(bidInput);
+        const amount = toRupiahAmount(bidInput);
         if (!amount || !listingId) return;
         if (!user) {
             setError('Please sign in before placing a bid.');
@@ -316,10 +358,96 @@ const ListingDetailPage: React.FC = () => {
                 throw new Error(await readApiError(response, 'Bid placement failed'));
             }
             setError(null);
-            await fetchListing();
+            await fetchListing({ silent: true });
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Bid placement failed.');
         }
+    };
+
+    const placeProxyBid = async () => {
+        const maxAmount = toRupiahAmount(proxyMaxInput);
+        if (!maxAmount || !listingId) return;
+        if (!user) {
+            setError('Please sign in before setting a proxy bid.');
+            return;
+        }
+        if (isSeller) {
+            setError('Sellers cannot bid on their own listings.');
+            return;
+        }
+
+        try {
+            const response = await authenticatedFetch(apiUrl(biddingListingPath(listingId, '/bids/cursor')), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bidderId: user.id, maxBidAmount: maxAmount }),
+            });
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Proxy bid failed'));
+            }
+            setError(null);
+            setProxyMaxInput('');
+            await fetchListing({ silent: true });
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Proxy bid failed.');
+        }
+    };
+
+    const sellerDisplayName = sellerProfile?.displayName?.trim() || 'Seller';
+
+    const endedPanel = () => {
+        if (isDraft) {
+            return (
+                <aside className="panel section-stack">
+                    <p className="eyebrow">Listing status</p>
+                    <h2>Not published yet</h2>
+                    <p className="text-muted">This listing is still a draft.</p>
+                </aside>
+            );
+        }
+        if (!isEnded) {
+            return null;
+        }
+        if (listingStatus === 'UNSOLD') {
+            return (
+                <aside className="panel section-stack ended-auction-panel">
+                    <p className="eyebrow">Auction ended</p>
+                    <h2>No sale</h2>
+                    <p className="text-muted">This auction ended without meeting the reserve or receiving qualifying bids.</p>
+                </aside>
+            );
+        }
+        if (listingStatus === 'WON') {
+            if (userWon) {
+                return (
+                    <aside className="panel section-stack ended-auction-panel ended-auction-won">
+                        <p className="eyebrow">Auction ended</p>
+                        <h2>You won this auction</h2>
+                        <p className="text-muted">Complete payment and track fulfillment from your orders.</p>
+                        <Link className="primary-button" to="/orders">View your order</Link>
+                    </aside>
+                );
+            }
+            const winnerName = winnerProfile?.displayName?.trim()
+                || (inferredWinnerId ? `Bidder ${inferredWinnerId.slice(0, 8)}` : 'another bidder');
+            return (
+                <aside className="panel section-stack ended-auction-panel">
+                    <p className="eyebrow">Auction ended</p>
+                    <h2>{userParticipated ? 'Auction won by another bidder' : 'Auction sold'}</h2>
+                    <p className="text-muted">
+                        Won by <strong>{winnerName}</strong>
+                        {listingMeta ? ` at ${formatMoney(listingMeta.currentHighest)}` : ''}.
+                    </p>
+                </aside>
+            );
+        }
+        return (
+            <aside className="panel section-stack ended-auction-panel">
+                <p className="eyebrow">Auction ended</p>
+                <h2>Auction closed</h2>
+                <p className="text-muted">This listing is no longer open for bidding.</p>
+            </aside>
+        );
     };
 
     if (loading) {
@@ -385,32 +513,24 @@ const ListingDetailPage: React.FC = () => {
                             />
                             <div>
                                 <span className="text-muted" style={{ fontSize: '0.85rem' }}>Seller</span>
-                                <div style={{ fontWeight: 600 }}>
-                                    {sellerProfile?.displayName?.trim() || `Seller ${listing.sellerId.slice(0, 8)}`}
-                                </div>
+                                <div style={{ fontWeight: 600 }}>{sellerDisplayName}</div>
                             </div>
                         </div>
                         <p className="text-muted">{listing.description || 'No description provided by the seller.'}</p>
 
-                        {listing.sellerId && (
+                        {listing.condition && (
                             <div className="seller-info-block">
-                                <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                                <span className="material-symbols-outlined" aria-hidden="true">inventory_2</span>
                                 <div>
-                                    <span className="metric-label">Seller</span>
-                                    <strong>{listing.sellerId.length > 12 ? `${listing.sellerId.slice(0, 6)}…${listing.sellerId.slice(-4)}` : listing.sellerId}</strong>
+                                    <span className="metric-label">Condition</span>
+                                    <strong style={{ textTransform: 'capitalize' }}>{listing.condition}</strong>
                                 </div>
-                                {listing.condition && (
-                                    <div>
-                                        <span className="metric-label">Condition</span>
-                                        <strong style={{ textTransform: 'capitalize' }}>{listing.condition}</strong>
-                                    </div>
-                                )}
                             </div>
                         )}
 
                         <div className="auction-spec-grid">
                             <div>
-                                <span>Starting Price (IDR)</span>
+                                <span>Starting Price</span>
                                 <strong>{formatMoney(listing.startingPrice)}</strong>
                             </div>
                             <div>
@@ -445,16 +565,15 @@ const ListingDetailPage: React.FC = () => {
                                     <small>Minimum next bid: {formatMoney(listingMeta.minNextBid)}</small>
                                 </div>
                                 <label className="field">
-                                    <span>Your amount</span>
+                                    <span>Your bid (IDR)</span>
                                     <input
                                         type="number"
                                         className="form-input"
                                         value={bidInput}
-                                        step={listing.minimumIncrement ?? 1}
-                                        min={listingMeta.minNextBid}
+                                        step={1}
+                                        min={Math.ceil(listingMeta.minNextBid)}
                                         disabled={listingMeta.isClosed}
-                                        onChange={(event) => setBidInput(event.target.value)}
-                                        onBlur={() => setBidInput(normalizeMoneyInput(bidInput))}
+                                        onChange={(event) => setBidInput(normalizeRupiahInput(event.target.value))}
                                     />
                                 </label>
                                 <button
@@ -472,12 +591,35 @@ const ListingDetailPage: React.FC = () => {
                                             type="button"
                                             className="quick-bid-button"
                                             disabled={listingMeta.isClosed}
-                                            onClick={() => setBidInput(normalizeMoneyInput(option.amount))}
+                                            onClick={() => setBidInput(normalizeRupiahInput(option.amount))}
                                         >
                                             <span>{option.increment === 0 ? 'Minimum' : `+ ${formatMoney(option.increment)}`}</span>
                                             <strong>{formatMoney(option.amount)}</strong>
                                         </button>
                                     ))}
+                                </div>
+                                <div className="proxy-bid-section">
+                                    <p className="eyebrow">Automatic bid (proxy)</p>
+                                    <label className="field">
+                                        <span>Maximum amount (IDR)</span>
+                                        <input
+                                            type="number"
+                                            className="form-input"
+                                            value={proxyMaxInput}
+                                            step={1}
+                                            min={Math.ceil(listingMeta.minNextBid)}
+                                            disabled={listingMeta.isClosed}
+                                            onChange={(event) => setProxyMaxInput(normalizeRupiahInput(event.target.value))}
+                                        />
+                                    </label>
+                                    <button
+                                        type="button"
+                                        className="secondary-button"
+                                        onClick={placeProxyBid}
+                                        disabled={listingMeta.isClosed || !user || !proxyMaxInput}
+                                    >
+                                        Set proxy bid
+                                    </button>
                                 </div>
                             </div>
                         </aside>
@@ -491,15 +633,7 @@ const ListingDetailPage: React.FC = () => {
                             </p>
                         </aside>
                     ) : (
-                        <aside className="panel section-stack">
-                            <p className="eyebrow">Listing status</p>
-                            <h2>{listing.status === 'DRAFT' ? 'Not published yet' : 'Not open for bidding'}</h2>
-                            <p className="text-muted">
-                                {listing.status === 'DRAFT'
-                                    ? 'This listing is still a draft.'
-                                    : 'Bidding is only available while the listing is live.'}
-                            </p>
-                        </aside>
+                        endedPanel()
                     )}
 
                     <section className="auction-history-panel">
@@ -515,7 +649,7 @@ const ListingDetailPage: React.FC = () => {
                         <div className="bid-history-card-grid">
                             {bids.length > 0 ? (
                                 bids.map((bid) => {
-                                    const amount = bid.bidAmount ?? (typeof bid.bid_amount_cents === 'number' ? bid.bid_amount_cents / 100 : 0);
+                                    const amount = bidAmountFromItem(bid);
                                     const bidderId = bid.bidderId ?? bid.bidder_id ?? '';
                                     const isOwnBid = Boolean(user?.id && bidderId === user.id);
                                     const profile = bidderId ? bidderProfiles[bidderId] : undefined;
@@ -549,10 +683,12 @@ const ListingDetailPage: React.FC = () => {
                                 <div className="bid-history-card bid-history-card-empty">
                                     <span className="material-symbols-outlined" aria-hidden="true">gavel</span>
                                     <div>
-                                        <strong>No bids yet</strong>
-                                        <span>Be the first to bid when the listing is live.</span>
+                                        <strong>{isEnded ? 'No bids recorded' : 'No bids yet'}</strong>
+                                        <span>{isEnded ? 'This auction ended without bid history.' : 'Be the first to bid when the listing is live.'}</span>
                                     </div>
-                                    <span className="bid-history-card-amount">{formatMoney(listingMeta.minNextBid)}</span>
+                                    {!isEnded && (
+                                        <span className="bid-history-card-amount">{formatMoney(listingMeta.minNextBid)}</span>
+                                    )}
                                 </div>
                             )}
                         </div>

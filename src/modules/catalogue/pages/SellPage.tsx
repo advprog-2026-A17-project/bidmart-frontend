@@ -442,6 +442,22 @@ const SellPage: React.FC = () => {
         imageUrl: form.imageUrl.trim() || form.images[0] || null,
     });
 
+    const createPublishedListingUpdatePayload = (form: ListingFormState) => ({
+        description: form.description.trim(),
+        imageUrl: form.imageUrl.trim() || form.images[0] || null,
+    });
+
+    const validatePublishedListingEdit = (): ListingFormErrors => {
+        const errors: ListingFormErrors = {};
+        if (!listingForm.description.trim()) {
+            errors.description = 'Description is required.';
+        }
+        if (!isValidImageReference(listingForm.imageUrl)) {
+            errors.imageUrl = 'Use a valid http(s) image URL or upload an image file.';
+        }
+        return errors;
+    };
+
     const validateListingForm = (): ListingFormErrors => {
         const errors: ListingFormErrors = {};
         const startingBid = Number(listingForm.startingBid);
@@ -500,7 +516,11 @@ const SellPage: React.FC = () => {
             return;
         }
 
-        const validationErrors = validateListingForm();
+        const isPublishedEdit = Boolean(editingListingId)
+            && (editingListingStatus === 'ACTIVE' || editingListingStatus === 'EXTENDED');
+        const validationErrors = isPublishedEdit
+            ? validatePublishedListingEdit()
+            : validateListingForm();
         if (Object.keys(validationErrors).length > 0) {
             setListingFormErrors(validationErrors);
             setError('Resolve the highlighted listing fields before saving.');
@@ -515,12 +535,15 @@ const SellPage: React.FC = () => {
 
         try {
             const isEditing = Boolean(editingListingId);
+            const requestBody = isEditing && isPublishedEdit
+                ? createPublishedListingUpdatePayload(listingForm)
+                : createListingPayload(listingForm);
             const response = await authenticatedFetch(
                 gatewayUrl(isEditing ? `/api/v1/catalogue/listings/${editingListingId}` : '/api/v1/catalogue/listings'),
                 {
                     method: isEditing ? 'PUT' : 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(createListingPayload(listingForm)),
+                    body: JSON.stringify(requestBody),
                 }
             );
             if (!response.ok) {
@@ -1085,8 +1108,7 @@ const SellPage: React.FC = () => {
                                     const status = (listing.status ?? 'UNKNOWN').toUpperCase();
                                     const finalized = FINAL_AUCTION_STATUSES.has(status);
                                     const locked = listing.hasBids || finalized;
-                                    const isLiveStatus = status === 'ACTIVE' || status === 'EXTENDED';
-                                    const canEdit = (!listing.hasBids && !finalized) || isLiveStatus;
+                                    const canEdit = !listing.hasBids && !finalized;
                                     const canCancel = !listing.hasBids && status !== 'WON' && status !== 'UNSOLD' && status !== 'CLOSED' && status !== 'CANCELLED';
                                     const canDelete = !listing.hasBids && status === 'DRAFT';
                                     const canPublishDraft = status === 'DRAFT';
