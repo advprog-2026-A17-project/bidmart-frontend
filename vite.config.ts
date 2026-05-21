@@ -43,6 +43,8 @@ export default defineConfig(() => {
     || parseEnvValue(localEnvPath, 'VITE_API_BASE_URL')
     || ''
 
+  const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:8000'
+
   return {
     plugins: [react()],
     define: {
@@ -59,12 +61,12 @@ export default defineConfig(() => {
     server: {
       proxy: {
         '/api': {
-          target: 'http://localhost:8000',
+          target: proxyTarget,
           changeOrigin: true,
           secure: false,
         },
         '/ws': {
-          target: 'http://localhost:8000',
+          target: proxyTarget,
           ws: true,
           changeOrigin: true,
           secure: false,
