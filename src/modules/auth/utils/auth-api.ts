@@ -94,11 +94,11 @@ export const requestOAuthLogin = async (provider: 'google', idToken: string): Pr
     return { kind: 'success', payload: payload as AuthLoginResult };
 };
 
-export const requestRegistration = async (email: string, password: string, role: string): Promise<RegistrationOutcome> => {
+export const requestRegistration = async (email: string, password: string): Promise<RegistrationOutcome> => {
     const response = await fetch(apiUrl('/api/v1/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role }),
+        body: JSON.stringify({ email, password }),
     });
 
     if (response.ok) {

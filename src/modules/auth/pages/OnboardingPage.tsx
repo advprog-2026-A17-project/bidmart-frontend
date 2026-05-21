@@ -107,7 +107,9 @@ const OnboardingPage: React.FC = () => {
         <div className="page-wrap narrow-form">
             <section className="page-head">
                 <h1>Complete your account</h1>
-                <p className="text-muted">Choose your marketplace role and set a password before continuing.</p>
+                <p className="text-muted">
+                    Lengkapi profil, pilih peran (Pembeli atau Penjual), dan set password jika Anda masuk dengan Google.
+                </p>
             </section>
             {error && <div className="toast-error">{error}</div>}
             <form className="panel section-stack" onSubmit={submit}>

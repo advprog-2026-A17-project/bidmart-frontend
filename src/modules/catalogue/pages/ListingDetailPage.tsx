@@ -261,20 +261,8 @@ const ListingDetailPage: React.FC = () => {
         void fetchListing();
     }, [fetchListing]);
 
-    useEffect(() => {
-        if (!listingId) return;
-        const timer = window.setInterval(() => {
-            void (async () => {
-                const patch = await fetchAuctionSnapshotPatch();
-                if (!patch) return;
-                setListing((prev) => prev ? { ...prev, ...patch } : prev);
-            })();
-        }, 5000);
-        return () => window.clearInterval(timer);
-    }, [fetchAuctionSnapshotPatch, listingId]);
-
     const realtimeDestinations = useMemo(
-        () => (listingId ? [`/topic/listings/${listingId}`, `/topic/auctions/${listingId}`] : []),
+        () => (listingId ? [`/topic/listings/${listingId}`] : []),
         [listingId]
     );
 
@@ -295,6 +283,18 @@ const ListingDetailPage: React.FC = () => {
     }, [fetchBids, listing, listingId, nowMs]);
 
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
+
+    useEffect(() => {
+        if (!listingId || isConnected) return;
+        const timer = window.setInterval(() => {
+            void (async () => {
+                const patch = await fetchAuctionSnapshotPatch();
+                if (!patch) return;
+                setListing((prev) => prev ? { ...prev, ...patch } : prev);
+            })();
+        }, 5000);
+        return () => window.clearInterval(timer);
+    }, [fetchAuctionSnapshotPatch, isConnected, listingId]);
 
     const imageSrc = useMemo(() => {
         if (!listing) return '';

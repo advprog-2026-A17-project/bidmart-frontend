@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { gatewayUrl, readApiError, readApiJson } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
+import { useCanManageListings } from '../../../hooks/useHasPermission';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
@@ -61,13 +62,16 @@ type StudioNavGroup = {
 
 const CATEGORIES = [
     'Electronics',
+    'Elektronik',
+    'Fashion',
     'Furniture',
     'Collectibles',
-    'Fashion',
     'Sports',
     'Art & Antiques',
     'Home & Garden',
     'Toys & Games',
+    'Vehicles',
+    'Other',
 ];
 
 const CONDITIONS = [
@@ -167,7 +171,8 @@ const isStudioView = (value: string | null): value is StudioView =>
 const SellPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
-    const isSeller = user?.roles?.some((role) => role.name === 'SELLER') ?? false;
+    const canManageListings = useCanManageListings();
+    const isSeller = canManageListings || (user?.roles?.some((role) => role.name === 'SELLER') ?? false);
     const roleSummary = user?.roles?.map((role) => role.name).join(', ') ?? 'No active role';
     const [activeView, setActiveView] = useState<StudioView>(() => {
         try {
@@ -279,7 +284,10 @@ const SellPage: React.FC = () => {
         }
     }, [activeView]);
 
-    const realtimeDestinations = useMemo(() => user ? ['/topic/listings'] : [], [user]);
+    const realtimeDestinations = useMemo(
+        () => (user?.id ? [`/topic/sellers/${user.id}/auctions`] : []),
+        [user?.id]
+    );
     const handleRealtimeEvent = useCallback(() => {
         void refreshStudio();
     }, [refreshStudio]);
@@ -429,18 +437,27 @@ const SellPage: React.FC = () => {
         });
     };
 
-    const createListingPayload = (form: ListingFormState) => ({
-        title: form.title.trim(),
-        description: form.description.trim(),
-        category: form.category,
-        condition: form.condition,
-        sellerId: user?.id,
-        startingPrice: toListingAmount(form.startingBid),
-        reservePrice: toListingAmount(form.reservePrice || form.startingBid),
-        minimumIncrement: toListingAmount(form.minimumIncrement || '1'),
-        endTime: form.endTime,
-        imageUrl: form.imageUrl.trim() || form.images[0] || null,
-    });
+    const createListingPayload = (form: ListingFormState) => {
+        const options = categoryOptions.length > 0
+            ? categoryOptions
+            : CATEGORIES.map((category, index) => ({ id: index, name: category, label: category }));
+        const selectedCategory = options.find(
+            (option) => option.name === form.category || String(option.id) === form.category
+        );
+        return {
+            title: form.title.trim(),
+            description: form.description.trim(),
+            category: selectedCategory?.name ?? form.category,
+            ...(selectedCategory ? { categoryEntity: { id: selectedCategory.id } } : {}),
+            condition: form.condition,
+            sellerId: user?.id,
+            startingPrice: toListingAmount(form.startingBid),
+            reservePrice: toListingAmount(form.reservePrice || form.startingBid),
+            minimumIncrement: toListingAmount(form.minimumIncrement || '1'),
+            endTime: form.endTime,
+            imageUrl: form.imageUrl.trim() || form.images[0] || null,
+        };
+    };
 
     const createPublishedListingUpdatePayload = (form: ListingFormState) => ({
         description: form.description.trim(),

@@ -6,7 +6,7 @@ import { useAuth } from '../../../context/useAuth';
 import { isSellerUser, primaryRole } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { useWalletUI } from '../../../context/WalletUIContext';
-import { useWebSocket } from '../../../hooks/useWebSocket';
+import { useNotificationsWebSocket } from '../../../context/NotificationsWebSocketContext';
 import { normalizeMoneyInput, toAmountCents } from '../../../utils/money';
 import {
     formatCents,
@@ -92,7 +92,7 @@ const WalletPage: React.FC = () => {
     const { user } = useAuth();
     const role = primaryRole(user);
     const authenticatedFetch = useAuthenticatedFetch();
-    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
+    const { isConnected, subscribe, unsubscribe } = useNotificationsWebSocket();
     const location = useLocation();
     const navigate = useNavigate();
     const [wallet, setWallet] = useState<Wallet | null>(null);
