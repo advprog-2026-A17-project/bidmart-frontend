@@ -17,6 +17,7 @@ import AdminUsersPage from './modules/admin/pages/AdminUsersPage';
 import AdminListingsPage from './modules/admin/pages/AdminListingsPage';
 import AdminDisputesPage from './modules/admin/pages/AdminDisputesPage';
 import { AuthProvider } from './context/AuthContext';
+import SessionSlidingRefresh from './context/SessionSlidingRefresh';
 import { useAuth } from './context/useAuth';
 import { isSellerUser, primaryRole } from './context/primaryRole';
 import { useAuthenticatedFetch } from './context/useAuthenticatedFetch';
@@ -318,6 +319,7 @@ function App() {
                 <WalletUIProvider>
                     <NotificationsWebSocketProvider>
                         <Router>
+                            <SessionSlidingRefresh />
                             <div className="app-shell">
                                 <Navbar />
                                 <AppLayout />

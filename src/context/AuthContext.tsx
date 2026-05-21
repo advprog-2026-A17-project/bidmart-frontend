@@ -7,10 +7,11 @@ import { parseStoredJson } from '../utils/safe-storage-json';
 import { readJwtNumericClaim, readJwtStringClaim } from '../utils/jwt-claims';
 
 const API_PATH_PREFIX = '/api/v1/';
-const ACTIVITY_REFRESH_DEBOUNCE_MS = 600;
-const REFRESH_BEFORE_EXPIRY_MS = 2 * 60 * 1000;
+/** Refresh access token when this much lifetime remains (sliding session, ~10 min of 15 min TTL). */
+const REFRESH_BEFORE_EXPIRY_MS = 10 * 60 * 1000;
 const SESSION_EXPIRY_UPDATE_THRESHOLD_MS = 5000;
 const DEFAULT_SESSION_WINDOW_SECONDS = 900;
+const AUTH_REFRESH_PATH = '/api/v1/auth/refresh';
 
 const trustedApiPath = (input: RequestInfo | URL): string => {
     const rawUrl = input instanceof Request ? input.url : input.toString();
@@ -40,15 +41,6 @@ const getAccessTokenExpiresAtMs = (token: string | null): number | null => {
     return exp == null ? null : exp * 1000;
 };
 
-const isEditableInteractionTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof Element)) {
-        return false;
-    }
-    return !!target.closest(
-        'input, textarea, select, option, label, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]',
-    );
-};
-
 const sessionExpiryChangedMeaningfully = (
     previous: number | null,
     next: number | null,
@@ -62,7 +54,10 @@ const sessionExpiryChangedMeaningfully = (
     if (previous === null) {
         return true;
     }
-    return next - previous >= SESSION_EXPIRY_UPDATE_THRESHOLD_MS;
+    if (next > previous) {
+        return true;
+    }
+    return previous - next >= SESSION_EXPIRY_UPDATE_THRESHOLD_MS;
 };
 
 const usersEqual = (left: AuthUser | null, right: AuthUser | null): boolean => {
@@ -257,58 +252,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [applySessionPayload, logout]);
 
+    const maybeRefreshSession = useCallback(() => {
+        if (!user || !refreshTokenRef.current) {
+            return;
+        }
+        if (!shouldRefreshAccessToken()) {
+            return;
+        }
+        void refreshAccessToken();
+    }, [refreshAccessToken, shouldRefreshAccessToken, user]);
+
+    useEffect(() => {
+        if (!user || !refreshTokenRef.current) {
+            return;
+        }
+        maybeRefreshSession();
+    }, [maybeRefreshSession, user]);
+
     useEffect(() => {
         if (!user || !refreshTokenRef.current) {
             return;
         }
 
-        let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-        const scheduleRefreshIfNeeded = () => {
-            if (debounceTimer) {
-                clearTimeout(debounceTimer);
-            }
-            debounceTimer = setTimeout(() => {
-                if (!shouldRefreshAccessToken()) {
-                    return;
-                }
-                void refreshAccessToken();
-            }, ACTIVITY_REFRESH_DEBOUNCE_MS);
-        };
-
-        const onMeaningfulActivity = (event: Event) => {
-            if (isEditableInteractionTarget(event.target)) {
-                return;
-            }
-            scheduleRefreshIfNeeded();
-        };
-
         const onVisibilityChange = () => {
             if (document.visibilityState !== 'visible') {
                 return;
             }
-            scheduleRefreshIfNeeded();
+            maybeRefreshSession();
         };
 
-        document.addEventListener('click', onMeaningfulActivity, true);
         document.addEventListener('visibilitychange', onVisibilityChange);
-
-        const expiryCheckIntervalId = window.setInterval(() => {
-            if (document.visibilityState !== 'visible' || !shouldRefreshAccessToken()) {
-                return;
-            }
-            void refreshAccessToken();
-        }, 60_000);
-
-        return () => {
-            if (debounceTimer) {
-                clearTimeout(debounceTimer);
-            }
-            document.removeEventListener('click', onMeaningfulActivity, true);
-            document.removeEventListener('visibilitychange', onVisibilityChange);
-            window.clearInterval(expiryCheckIntervalId);
-        };
-    }, [refreshAccessToken, shouldRefreshAccessToken, user]);
+        return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    }, [maybeRefreshSession, user]);
 
     const authenticatedFetch = useCallback(async (input: RequestInfo | URL, init: RequestInit = {}) => {
         const requestPath = trustedApiPath(input);
@@ -328,8 +303,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 response = await fetch(requestPath, withToken(refreshedToken));
             }
         }
+
+        const parsedPath = new URL(requestPath).pathname;
+        if (response.ok && !parsedPath.startsWith(AUTH_REFRESH_PATH)) {
+            maybeRefreshSession();
+        }
+
         return response;
-    }, [refreshAccessToken]);
+    }, [maybeRefreshSession, refreshAccessToken]);
 
     const updateUserProfile = useCallback((profile: {
         displayName?: string | null;
@@ -370,8 +351,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         updateUserProfile,
         refreshAccessToken,
+        maybeRefreshSession,
         authenticatedFetch,
-    }), [authenticatedFetch, login, logout, refreshAccessToken, sessionExpiresAt, tokenId, updateUserProfile, user]);
+    }), [authenticatedFetch, login, logout, maybeRefreshSession, refreshAccessToken, sessionExpiresAt, tokenId, updateUserProfile, user]);
 
     return (
         <AuthContext.Provider value={contextValue}>
