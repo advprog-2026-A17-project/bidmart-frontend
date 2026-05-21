@@ -75,6 +75,8 @@ const ProfilePage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [sessionToRevoke, setSessionToRevoke] = useState<Session | null>(null);
     const [revokeAllBusy, setRevokeAllBusy] = useState(false);
+    const [deleteAccountBusy, setDeleteAccountBusy] = useState(false);
+    const [deleteBlockers, setDeleteBlockers] = useState<string[]>([]);
     const [avatarInputMode, setAvatarInputMode] = useState<AvatarInputMode>('link');
     const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
     const isProfileComplete = Boolean(displayName.trim()) && Boolean(shippingAddress.trim());
@@ -418,6 +420,37 @@ const ProfilePage: React.FC = () => {
             setError(err instanceof Error ? err.message : 'Failed to revoke all sessions.');
         } finally {
             setRevokeAllBusy(false);
+        }
+    };
+
+    const deleteAccount = async () => {
+        if (!window.confirm('Delete your BidMart account permanently? This cannot be undone.')) {
+            return;
+        }
+        setDeleteAccountBusy(true);
+        setError(null);
+        setMessage(null);
+        setDeleteBlockers([]);
+        try {
+            const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/account'), {
+                method: 'DELETE',
+            });
+            if (response.status === 409) {
+                const payload = await response.json() as { blockers?: string[] };
+                setDeleteBlockers(payload.blockers ?? []);
+                setError('Account deletion is blocked until active marketplace activity is resolved.');
+                return;
+            }
+            if (!response.ok) {
+                setError(await readApiError(response, 'Failed to delete account'));
+                return;
+            }
+            logout();
+            navigate('/login', { replace: true });
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to delete account.');
+        } finally {
+            setDeleteAccountBusy(false);
         }
     };
 
@@ -865,6 +898,28 @@ const ProfilePage: React.FC = () => {
                         </button>
                     </div>
                 )) : <div className="empty-state">No active sessions found.</div>}
+            </div>
+
+            <div className="panel section-stack" style={{ marginTop: '1.5rem' }}>
+                <h3>Delete account</h3>
+                <p className="text-muted">
+                    Permanently remove your account when you have no active listings, bids, orders, or wallet balance.
+                </p>
+                {deleteBlockers.length > 0 && (
+                    <ul className="text-muted">
+                        {deleteBlockers.map((blocker) => (
+                            <li key={blocker}>{blocker}</li>
+                        ))}
+                    </ul>
+                )}
+                <button
+                    type="button"
+                    className="danger-button"
+                    onClick={deleteAccount}
+                    disabled={deleteAccountBusy}
+                >
+                    {deleteAccountBusy ? 'Deleting...' : 'Delete account'}
+                </button>
             </div>
 
             {sessionToRevoke && (

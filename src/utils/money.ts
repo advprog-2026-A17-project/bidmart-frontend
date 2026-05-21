@@ -21,10 +21,12 @@ export const toRupiahAmount = (value: string | number | null | undefined): numbe
     Number(normalizeRupiahInput(value));
 
 export const toAmountCents = (value: string | number | null | undefined): number =>
-    Math.round(toMoneyAmount(value) * 100);
+    Math.round(toRupiahAmount(value) * 100);
 
-export const formatMoney = (value: number | null | undefined): string =>
-    `IDR ${normalizeMoneyInput(value)}`;
+export const formatMoney = (value: number | null | undefined): string => {
+    const amount = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : toRupiahAmount(value);
+    return `IDR ${amount.toLocaleString('en-US')}.00`;
+};
 
 export const formatCents = (value: number | null | undefined): string =>
     formatMoney((value ?? 0) / 100);

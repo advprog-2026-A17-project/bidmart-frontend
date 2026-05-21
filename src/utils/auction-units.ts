@@ -22,3 +22,31 @@ export const toIsoFromUnixSeconds = (value?: number | null): string | undefined 
     }
     return new Date(value * 1000).toISOString();
 };
+
+/** Parse auction end/start from Unix seconds or ISO (always as UTC instant). */
+export const parseAuctionEndTime = (value?: string | number | null): Date | null => {
+    if (value == null || value === '') {
+        return null;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const ms = value < 10_000_000_000 ? value * 1000 : value;
+        const parsed = new Date(ms);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+    const raw = String(value).trim();
+    if (!raw) {
+        return null;
+    }
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+        const ms = numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+        const parsed = new Date(ms);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+        const parsed = new Date(`${raw}Z`);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+};

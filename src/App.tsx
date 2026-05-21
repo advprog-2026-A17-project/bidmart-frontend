@@ -10,8 +10,12 @@ import OrderDetailPage from './modules/orders/pages/OrderDetailPage';
 import NotificationCenter from './modules/notifications/components/NotificationCenter';
 import AuthPage from './modules/auth/pages/AuthPage';
 import ProfilePage from './modules/auth/pages/ProfilePage';
-import AdminAuthPage from './modules/auth/pages/AdminAuthPage';
 import ProfileGuard from './modules/auth/components/ProfileGuard';
+import OnboardingPage from './modules/auth/pages/OnboardingPage';
+import AdminStudioLayout from './modules/admin/layout/AdminStudioLayout';
+import AdminUsersPage from './modules/admin/pages/AdminUsersPage';
+import AdminListingsPage from './modules/admin/pages/AdminListingsPage';
+import AdminDisputesPage from './modules/admin/pages/AdminDisputesPage';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './context/useAuth';
 import { isSellerUser, primaryRole } from './context/primaryRole';
@@ -31,7 +35,7 @@ const Navbar = () => {
     const authenticatedFetch = useAuthenticatedFetch();
     const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
     const role = primaryRole(user);
-    const hasAdmin = role === 'ADMIN';
+    const isAdmin = role === 'ADMIN';
     const isSeller = isSellerUser(user);
     const navigate = useNavigate();
     const roleLabel = role ?? 'Guest';
@@ -128,16 +132,27 @@ const Navbar = () => {
     return (
         <nav className="app-nav">
             <div className="app-brand-wrap">
-                <Link to={isSeller ? '/seller-studio' : '/'} className="app-logo" aria-label="BidMart home">
+                <Link to={isAdmin ? '/admin/studio/users' : isSeller ? '/seller-studio' : '/'} className="app-logo" aria-label="BidMart home">
                     BM
                 </Link>
                 <div>
                     <strong className="app-brand">BidMart</strong>
-                    <span className="app-brand-subtitle">{isSeller ? 'Seller Studio' : 'Marketplace'}</span>
+                    <span className="app-brand-subtitle">
+                        {isAdmin ? 'Admin Studio' : isSeller ? 'Seller Studio' : 'Marketplace'}
+                    </span>
                 </div>
             </div>
             <div className="app-nav-links">
-                {isSeller ? (
+                {isAdmin ? (
+                    <>
+                        <NavLink to="/admin/studio/users" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Admin Studio
+                        </NavLink>
+                        <NavLink to="/profile" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
+                            Profile
+                        </NavLink>
+                    </>
+                ) : isSeller ? (
                     <>
                         <NavLink to="/seller-studio" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`} end>
                             Seller Studio
@@ -151,11 +166,6 @@ const Navbar = () => {
                         <NavLink to="/profile" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Profile
                         </NavLink>
-                        {hasAdmin && (
-                            <NavLink to="/admin/auth" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
-                                Admin Auth
-                            </NavLink>
-                        )}
                     </>
                 ) : (
                     <>
@@ -171,11 +181,6 @@ const Navbar = () => {
                         <NavLink to="/profile" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
                             Profile
                         </NavLink>
-                        {hasAdmin && (
-                            <NavLink to="/admin/auth" className={({ isActive }) => `app-nav-link ${isActive ? 'app-nav-link-active' : ''}`}>
-                                Admin Auth
-                            </NavLink>
-                        )}
                     </>
                 )}
             </div>
@@ -241,6 +246,10 @@ const Navbar = () => {
 
 const RoleHome = () => {
     const { user } = useAuth();
+    const role = primaryRole(user);
+    if (role === 'ADMIN') {
+        return <Navigate to="/admin/studio/users" replace />;
+    }
     return isSellerUser(user) ? <Navigate to="/seller-studio" replace /> : <CataloguePage />;
 };
 
@@ -251,8 +260,11 @@ const RedirectToListing = () => {
 
 const AppLayout = () => {
     const { user } = useAuth();
+    const role = primaryRole(user);
+    const isAdmin = role === 'ADMIN';
     const isSeller = isSellerUser(user);
     const sellerOnly = (element: ReactElement) => isSeller ? element : <Navigate to={user ? '/' : '/login'} replace />;
+    const adminOnly = (element: ReactElement) => isAdmin ? element : <Navigate to={user ? '/' : '/login'} replace />;
 
     return (
         <div className="app-body app-body-public">
@@ -263,6 +275,7 @@ const AppLayout = () => {
                         <Route path="/marketplace" element={<CataloguePage />} />
                         <Route path="/listings/:id" element={<ListingDetailPage />} />
                         <Route path="/login" element={<AuthPage />} />
+                        <Route path="/onboarding" element={<OnboardingPage />} />
                         <Route path="/verify-email" element={<VerifyEmailPage />} />
                         <Route path="/reset-password" element={<ResetPasswordPage />} />
                         <Route path="/auctions" element={<Navigate to="/" replace />} />
@@ -277,7 +290,13 @@ const AppLayout = () => {
                         <Route path="/command/wallet" element={<Navigate to="/wallet" replace />} />
                         <Route path="/command/profile" element={<Navigate to="/profile" replace />} />
                         <Route path="/profile" element={<ProfilePage />} />
-                        <Route path="/admin/auth" element={<AdminAuthPage />} />
+                        <Route path="/admin/auth" element={<Navigate to="/admin/studio/users" replace />} />
+                        <Route path="/admin/studio" element={adminOnly(<AdminStudioLayout />)}>
+                            <Route index element={<Navigate to="users" replace />} />
+                            <Route path="users" element={<AdminUsersPage />} />
+                            <Route path="listings" element={<AdminListingsPage />} />
+                            <Route path="disputes" element={<AdminDisputesPage />} />
+                        </Route>
                         <Route path="/sell" element={<Navigate to={isSeller ? '/seller-studio' : '/'} replace />} />
                         <Route path="/wallet" element={<WalletPage />} />
                         <Route path="/wallet/payments/:paymentId" element={<PaymentDetailPage />} />
