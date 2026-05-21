@@ -15,6 +15,7 @@ import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
 import { fetchPublicSellerProfile, type PublicSellerProfile } from '../../auth/utils/auth-api';
 import { fetchPublicUserProfiles } from '../../auth/utils/public-profiles';
 import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
+import { centsToAmount, toIsoFromUnixSeconds } from '../../../utils/auction-units';
 
 type ListingDetail = {
     id: string;
@@ -64,16 +65,6 @@ const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE', 'CLO
 
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
     meta.hasBids ? formatMoney(meta.currentHighest) : 'No bids';
-
-const toIsoFromUnixSeconds = (value?: number): string | undefined => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-    return new Date(value * 1000).toISOString();
-};
-
-const centsToAmount = (value?: number | null): number | undefined => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-    return value / 100;
-};
 
 const toIsoDate = (value?: string | null): string | null => {
     if (!value) return null;

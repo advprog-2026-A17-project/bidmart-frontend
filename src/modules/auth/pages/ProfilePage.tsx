@@ -7,6 +7,7 @@ import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { QRCodeSVG } from 'qrcode.react';
 import GoogleLoginButton from '../components/GoogleLoginButton';
 import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
+import PasswordField from '../../../components/PasswordField';
 import { isValidImageReference, MAX_AVATAR_IMAGE_BYTES, readAvatarImageFile } from '../../../utils/avatar-image';
 
 type AvatarInputMode = 'upload' | 'link';
@@ -33,7 +34,7 @@ interface UserProfileResponse {
 const formatSessionDate = (dateString: string | undefined | null) => {
     if (!dateString) return 'Unknown Date';
     const date = new Date(dateString);
-    return isNaN(date.getTime()) ? 'Invalid Format' : date.toLocaleString();
+    return Number.isNaN(date.getTime()) ? 'Invalid Format' : date.toLocaleString();
 };
 
 const ProfilePage: React.FC = () => {
@@ -161,14 +162,33 @@ const ProfilePage: React.FC = () => {
     }, [authenticatedFetch, updateUserProfile, user]);
 
     useEffect(() => {
-        if (!user) return;
-        authenticatedFetch(gatewayUrl('/api/v1/auth/sessions'))
-            .then(async (response) => {
-                if (!response.ok) throw new Error(await readApiError(response, 'Session lookup failed'));
-                return response.json();
-            })
-            .then((payload: Session[]) => setSessions(payload))
-            .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to load sessions'));
+        if (!user) {
+            return;
+        }
+        let active = true;
+
+        const fetchSessions = async () => {
+            try {
+                const response = await authenticatedFetch(gatewayUrl('/api/v1/auth/sessions'));
+                if (!response.ok) {
+                    throw new Error(await readApiError(response, 'Session lookup failed'));
+                }
+                const payload = await response.json() as Session[];
+                if (active) {
+                    setSessions(payload);
+                }
+            } catch (err: unknown) {
+                if (active) {
+                    setError(err instanceof Error ? err.message : 'Failed to load sessions');
+                }
+            }
+        };
+
+        void fetchSessions();
+
+        return () => {
+            active = false;
+        };
     }, [authenticatedFetch, user]);
 
     const handleProfileSave = async (event: React.FormEvent) => {
@@ -619,46 +639,22 @@ const ProfilePage: React.FC = () => {
                     Add a password so you can sign in without Google OAuth.
                 </p>
                 <form onSubmit={handlePasswordSave} className="section-stack">
-                    <label className="field">
-                        <span>New password</span>
-                        <div className="password-row">
-                            <input
-                                className="form-input"
-                                type={showPassword ? 'text' : 'password'}
-                                placeholder="••••••••"
-                                value={password}
-                                onChange={(event) => setPassword(event.target.value)}
-                                required
-                            />
-                            <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => setShowPassword((value) => !value)}
-                            >
-                                {showPassword ? 'Hide' : 'Show'}
-                            </button>
-                        </div>
-                    </label>
-                    <label className="field">
-                        <span>Confirm password</span>
-                        <div className="password-row">
-                            <input
-                                className="form-input"
-                                type={showPasswordConfirm ? 'text' : 'password'}
-                                placeholder="••••••••"
-                                value={passwordConfirm}
-                                onChange={(event) => setPasswordConfirm(event.target.value)}
-                                required
-                            />
-                            <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => setShowPasswordConfirm((value) => !value)}
-                            >
-                                {showPasswordConfirm ? 'Hide' : 'Show'}
-                            </button>
-                        </div>
-                    </label>
+                    <PasswordField
+                        label="New password"
+                        value={password}
+                        onChange={setPassword}
+                        required
+                        visible={showPassword}
+                        onVisibleChange={setShowPassword}
+                    />
+                    <PasswordField
+                        label="Confirm password"
+                        value={passwordConfirm}
+                        onChange={setPasswordConfirm}
+                        required
+                        visible={showPasswordConfirm}
+                        onVisibleChange={setShowPasswordConfirm}
+                    />
                     <button className="primary-button" type="submit" disabled={passwordSaving}>
                         {passwordSaving ? 'Saving...' : 'Save Password'}
                     </button>
