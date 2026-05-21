@@ -80,6 +80,7 @@ const CONDITIONS = [
 
 const MAX_IMAGE_BYTES = 600 * 1024;
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
+const PUBLISHED_STATUSES = new Set(['ACTIVE', 'EXTENDED']);
 const FINAL_AUCTION_STATUSES = new Set<string>(['ENDED', 'WON', 'UNSOLD', 'CLOSED', 'CANCELLED']);
 
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
@@ -151,6 +152,12 @@ const asIsoDate = (input?: string | null): string | null => {
     if (Number.isNaN(parsed.getTime())) return null;
     return parsed.toISOString();
 };
+
+const delay = (durationMs: number): Promise<void> =>
+    new Promise((resolve) => window.setTimeout(resolve, durationMs));
+
+const isPublishedListing = (listing: ListingRecord): boolean =>
+    PUBLISHED_STATUSES.has((listing.status ?? '').toUpperCase());
 
 const SELLER_STUDIO_VIEW_STORAGE_KEY = 'seller_studio_active_view';
 
@@ -371,12 +378,38 @@ const SellPage: React.FC = () => {
             throw new Error(await readApiError(response, 'Listing publish failed'));
         }
 
-        const listingResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
-        if (!listingResponse.ok) {
-            throw new Error(await readApiError(listingResponse, 'Published listing fetch failed'));
+        const publishedListing = await response.json() as ListingRecord;
+        let listing = publishedListing;
+        for (let attempt = 0; attempt < 3 && !isPublishedListing(listing); attempt += 1) {
+            await delay(250);
+            const listingResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
+            if (!listingResponse.ok) {
+                throw new Error(await readApiError(listingResponse, 'Published listing fetch failed'));
+            }
+            listing = await listingResponse.json() as ListingRecord;
         }
-        const listing = await listingResponse.json() as ListingRecord;
-        await ensureBiddingSessionForListing(listing);
+        if (!isPublishedListing(listing)) {
+            throw new Error('Listing publish did not activate the listing.');
+        }
+
+        try {
+            await ensureBiddingSessionForListing(listing);
+        } catch (err: unknown) {
+            if (!toErrorMessage(err).toLowerCase().includes('listing is not active')) {
+                throw err;
+            }
+
+            await delay(500);
+            const retryResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
+            if (!retryResponse.ok) {
+                throw new Error(await readApiError(retryResponse, 'Published listing fetch failed'));
+            }
+            const retryListing = await retryResponse.json() as ListingRecord;
+            if (!isPublishedListing(retryListing)) {
+                throw err;
+            }
+            await ensureBiddingSessionForListing(retryListing);
+        }
     };
 
     const resetListingForm = () => {
