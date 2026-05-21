@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
+import PageToast from '../../../components/PageToast';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { isSellerUser } from '../../../context/primaryRole';
@@ -168,8 +169,7 @@ const OrdersPage: React.FC = () => {
                 </Link>
             </section>
 
-            {error && <div className="toast-error">{error}</div>}
-            {notice && <div className="toast-success">{notice}</div>}
+            <PageToast error={error} success={notice} />
 
             <section className="seller-studio-overview" aria-label="Order summary">
                 <div className="studio-kpi-card">

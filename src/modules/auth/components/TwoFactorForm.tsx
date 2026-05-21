@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PageToast from '../../../components/PageToast';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
 import { requestTwoFactorLogin } from '../utils/auth-api';
@@ -47,8 +48,8 @@ const TwoFactorForm: React.FC<TwoFactorFormProps> = ({ challengeToken, onCancel 
 
     return (
         <form onSubmit={handleTwoFactorLogin} className="auth-form">
-            {error && <div className="toast-error">{error}</div>}
-            <div className="toast-success">Two-factor verification required.</div>
+            <PageToast error={error} />
+            <div className="inline-alert-success">Two-factor verification required.</div>
             
             <label className="field">
                 <span>Two-factor code</span>

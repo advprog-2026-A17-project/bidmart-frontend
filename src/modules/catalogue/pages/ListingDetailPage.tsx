@@ -7,6 +7,7 @@ import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
+import PageToast from '../../../components/PageToast';
 import type { AuctionRealtimeEvent } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta } from '../../auction/utils/auction-card-meta';
 import { buildListingPatchFromRealtimeEvent, eventTargetsListing } from '../../auction/utils/auction-realtime-patch';
@@ -484,7 +485,7 @@ const ListingDetailPage: React.FC = () => {
     return (
         <div className="page-wrap">
             <BackButton fallback="/" />
-            {error && <div className="toast-error">{error}</div>}
+            <PageToast error={error} />
 
             <section className="auction-command-grid">
                 <section className="auction-asset-panel">

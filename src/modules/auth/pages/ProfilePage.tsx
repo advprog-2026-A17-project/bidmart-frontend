@@ -10,6 +10,7 @@ import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
 import PasswordField from '../../../components/PasswordField';
 import { isValidImageReference, MAX_AVATAR_IMAGE_BYTES, readAvatarImageFile } from '../../../utils/avatar-image';
 import { registerWebPushSubscription } from '../../../utils/web-push';
+import PageToast from '../../../components/PageToast';
 
 type AvatarInputMode = 'upload' | 'link';
 
@@ -522,8 +523,7 @@ const ProfilePage: React.FC = () => {
                 <h1>Profile</h1>
                 <p>{user.email}</p>
             </section>
-            {error && <div className="toast-error">{error}</div>}
-            {message && <div className="toast-success">{message}</div>}
+            <PageToast error={error} success={message} />
             {!profileLoading && !isProfileComplete && (
                 <div className="panel center-content" style={{ marginBottom: '1rem' }}>
                     <span className="hero-badge">Profile Required</span>
@@ -545,7 +545,7 @@ const ProfilePage: React.FC = () => {
                 </div>
                 
                 {!profileLoading && !isProfileComplete && (
-                    <div className="toast-error">Complete your profile to access the rest of BidMart.</div>
+                    <div className="inline-alert-error">Complete your profile to access the rest of BidMart.</div>
                 )}
                 {profileLoading ? (
                     <div className="loading-state">Loading profile details...</div>
@@ -963,7 +963,7 @@ const ProfilePage: React.FC = () => {
                         <h3 style={{ marginTop: 0 }}>Revoke Session</h3>
                         <p>Are you sure you want to revoke the session created on <strong>{formatSessionDate(sessionToRevoke.createdAt)}</strong>?</p>
                         
-                        <div className="toast-error" style={{ margin: '12px 0', padding: '10px', fontSize: '0.9em' }}>
+                        <div className="inline-alert-error" style={{ margin: '12px 0', padding: '10px', fontSize: '0.9em' }}>
                             <strong>Warning:</strong> If you revoke your currently active session, you will be logged out immediately.
                         </div>
                         

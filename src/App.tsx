@@ -25,6 +25,7 @@ import { NotificationsWebSocketProvider, useNotificationsWebSocket } from './con
 import { gatewayUrl } from './config/apiClient';
 import { formatCents } from './modules/wallet/utils/payment';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+import { ToastProvider } from './context/ToastContext';
 import { ProfileAvatarWithFallback } from './components/ProfileAvatar';
 import './App.css';
 import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
@@ -312,6 +313,7 @@ const AppLayout = () => {
 function App() {
     return (
         <GlobalErrorBoundary>
+            <ToastProvider>
             <AuthProvider>
                 <WalletUIProvider>
                     <NotificationsWebSocketProvider>
@@ -324,6 +326,7 @@ function App() {
                     </NotificationsWebSocketProvider>
                 </WalletUIProvider>
             </AuthProvider>
+            </ToastProvider>
         </GlobalErrorBoundary>
     );
 }
