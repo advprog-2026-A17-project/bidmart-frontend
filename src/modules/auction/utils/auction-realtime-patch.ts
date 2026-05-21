@@ -1,22 +1,5 @@
 import type { AuctionRealtimeEvent } from '../hooks/useAuctionRealtime';
-
-const centsToAmount = (value: unknown): number | undefined => {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        return value / 100;
-    }
-    if (typeof value === 'string' && value.trim() !== '') {
-        const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed / 100 : undefined;
-    }
-    return undefined;
-};
-
-const toIsoFromUnixSeconds = (value: unknown): string | undefined => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return undefined;
-    }
-    return new Date(value * 1000).toISOString();
-};
+import { centsToAmountFromUnknown, toIsoFromUnixSeconds } from '../../../utils/auction-units';
 
 export const eventTargetsListing = (event: AuctionRealtimeEvent, listingId: string): boolean => {
     const payload = (event.payload ?? {}) as Record<string, unknown>;
@@ -44,10 +27,16 @@ export const buildListingPatchFromRealtimeEvent = (
         return null;
     }
 
-    const currentPrice = centsToAmount(payload.amountCents ?? payload.currentPrice ?? payload.finalPrice);
+    const currentPrice = centsToAmountFromUnknown(payload.amountCents ?? payload.currentPrice ?? payload.finalPrice);
     const endTime = typeof payload.endTime === 'string'
         ? payload.endTime
-        : toIsoFromUnixSeconds(payload.end_time ?? payload.endTime);
+        : toIsoFromUnixSeconds(
+            typeof payload.end_time === 'number'
+                ? payload.end_time
+                : typeof payload.endTime === 'number'
+                    ? payload.endTime
+                    : null,
+        );
 
     const patch: Partial<{
         currentPrice: number;

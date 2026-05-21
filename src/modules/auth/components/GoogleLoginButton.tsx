@@ -116,7 +116,7 @@ const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({
             client_id: clientId,
             callback: handleCredential,
         });
-        buttonRef.current.innerHTML = '';
+        buttonRef.current.replaceChildren();
         window.google.accounts.id.renderButton(buttonRef.current, {
             theme: 'outline',
             size: 'large',

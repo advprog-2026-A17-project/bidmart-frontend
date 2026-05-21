@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { requestRegistration } from '../utils/auth-api';
 import GoogleLoginButton from './GoogleLoginButton';
+import PasswordField from '../../../components/PasswordField';
 
 interface RegisterFormProps {
     initialRole?: 'BUYER' | 'SELLER';
@@ -77,22 +78,14 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ initialRole = 'BUYER', onSw
                     onChange={(e) => setEmail(e.target.value)}
                 />
             </label>
-            <label className="field">
-                <span>Password</span>
-                <div className="password-row">
-                    <input
-                        className="form-input"
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="••••••••"
-                        value={password}
-                        required
-                        onChange={(e) => setPassword(e.target.value)}
-                    />
-                     <button type="button" className="secondary-button" onClick={() => setShowPassword((v) => !v)}>
-                        {showPassword ? 'Hide' : 'Show'}
-                    </button>
-                </div>
-            </label>
+            <PasswordField
+                label="Password"
+                value={password}
+                onChange={setPassword}
+                required
+                visible={showPassword}
+                onVisibleChange={setShowPassword}
+            />
             <div className="field">
                 <span>Daftar sebagai</span>
                 <div className="account-type-grid" role="radiogroup" aria-label="Daftar sebagai">
