@@ -114,18 +114,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 const ToastViewport: React.FC<{
     toasts: ToastItem[];
     onDismiss: (id: string) => void;
-}> = ({ toasts, onDismiss }) => {
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    if (!mounted) {
-        return null;
-    }
-
-    return createPortal(
+}> = ({ toasts, onDismiss }) => createPortal(
         <div className="toast-viewport" aria-live="polite" aria-relevant="additions text">
             {toasts.map((toast) => (
                 <div
@@ -149,8 +138,7 @@ const ToastViewport: React.FC<{
             ))}
         </div>,
         document.body,
-    );
-};
+);
 
 export const useToast = (): ToastContextValue => {
     const context = useContext(ToastContext);
