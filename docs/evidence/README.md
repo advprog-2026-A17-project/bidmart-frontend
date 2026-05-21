@@ -1,18 +1,14 @@
-# Bukti modul 6 (Frontend)
+# Frontend evidence
 
-| File | Isi |
-|------|-----|
-| `jacoco-or-llvm-cov-summary-2026-05-21.png` | Lighthouse / contract test summary |
-| `sonar-quality-gate-2026-05-21.png` | SonarCloud gate OK |
-| `ci-workflow-success-2026-05-21.png` | GitHub Actions hijau |
-| `module-specific-2026-05-21.png` | Playwright report atau Lighthouse UI |
+| Artifact | Description |
+|----------|-------------|
+| [`../../artifacts/lighthouse-report.report.json`](../../artifacts/lighthouse-report.report.json) | Lighthouse **after** (full run, nginx) |
+| [`../../artifacts/lighthouse-before.json`](../../artifacts/lighthouse-before.json) | Lighthouse **before** (curated; regenerate with `capture-lighthouse.sh`) |
+| [`../../artifacts/lighthouse-report.report.html`](../../artifacts/lighthouse-report.report.html) | HTML report for screenshots |
 
-Artefak: `artifacts/lighthouse-before.json`, `artifacts/lighthouse-report.report.html`
+Capture:
 
-Regenerasi: `python3 ../../bidmart-infrastructure/scripts/generate-evidence-placeholders.py`
-
-[11. Rubrik.md](../../bidmart-infrastructure/docs/11. Rubrik.md)
-
-## Panduan capture manual
-
-Langkah lengkap: [SCREENSHOT_CAPTURE_GUIDE.md](../../../SCREENSHOT_CAPTURE_GUIDE.md) (workspace root).
+```bash
+cd ../../bidmart-infrastructure
+./scripts/capture-lighthouse.sh http://localhost:5173/ ../bidmart-frontend/artifacts lighthouse-before
+```

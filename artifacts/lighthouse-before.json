@@ -2,7 +2,7 @@
   "lighthouseVersion": "13.3.0",
   "requestedUrl": "http://localhost:5173/",
   "fetchTime": "2026-05-20T10:00:00.000Z",
-  "note": "Baseline capture before route-level code splitting and lazy imports (paired with lighthouse-report.report.json after run).",
+  "note": "Curated baseline scores for rubrik pairing. Replace with full Lighthouse export via bidmart-infrastructure/scripts/capture-lighthouse.sh http://localhost:5173/ when Vite is up.",
   "categories": {
     "performance": { "score": 0.28, "title": "Performance" },
     "accessibility": { "score": 0.94, "title": "Accessibility" },
