@@ -146,6 +146,12 @@ const WalletPage: React.FC = () => {
         setTimeout(() => setSuccess(null), 3000);
     }, []);
 
+    const showSuccess = useCallback((msg: string) => {
+        setSuccess(msg);
+        setError(null);
+        setTimeout(() => setSuccess(null), 3000);
+    }, []);
+
     useEffect(() => {
         fetchWallet();
     }, [fetchWallet]);
