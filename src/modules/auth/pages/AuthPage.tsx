@@ -10,7 +10,6 @@ type Tab = 'login' | 'register' | 'forgot-password';
 const AuthPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const requestedTab = searchParams.get('tab') === 'register' ? 'register' : 'login';
-    const requestedRole = searchParams.get('role') === 'SELLER' ? 'SELLER' : 'BUYER';
     const [tab, setTab] = useState<Tab>(requestedTab);
 
     return (
@@ -42,7 +41,7 @@ const AuthPage: React.FC = () => {
                     />
                 )}
                 {tab === 'register' && (
-                    <RegisterForm initialRole={requestedRole} onSwitchTab={() => setTab('login')} />
+                    <RegisterForm onSwitchTab={() => setTab('login')} />
                 )}
                 {tab === 'forgot-password' && (
                     <ForgotPasswordForm onBackToLogin={() => setTab('login')} />

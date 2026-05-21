@@ -9,6 +9,8 @@ import GoogleLoginButton from '../components/GoogleLoginButton';
 import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
 import PasswordField from '../../../components/PasswordField';
 import { isValidImageReference, MAX_AVATAR_IMAGE_BYTES, readAvatarImageFile } from '../../../utils/avatar-image';
+import { registerWebPushSubscription } from '../../../utils/web-push';
+import PageToast from '../../../components/PageToast';
 
 type AvatarInputMode = 'upload' | 'link';
 
@@ -77,6 +79,7 @@ const ProfilePage: React.FC = () => {
     const [revokeAllBusy, setRevokeAllBusy] = useState(false);
     const [deleteAccountBusy, setDeleteAccountBusy] = useState(false);
     const [deleteBlockers, setDeleteBlockers] = useState<string[]>([]);
+    const [pushBusy, setPushBusy] = useState(false);
     const [avatarInputMode, setAvatarInputMode] = useState<AvatarInputMode>('link');
     const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
     const isProfileComplete = Boolean(displayName.trim()) && Boolean(shippingAddress.trim());
@@ -441,7 +444,7 @@ const ProfilePage: React.FC = () => {
                 setError('Account deletion is blocked until active marketplace activity is resolved.');
                 return;
             }
-            if (!response.ok) {
+            if (response.status !== 204) {
                 setError(await readApiError(response, 'Failed to delete account'));
                 return;
             }
@@ -520,8 +523,7 @@ const ProfilePage: React.FC = () => {
                 <h1>Profile</h1>
                 <p>{user.email}</p>
             </section>
-            {error && <div className="toast-error">{error}</div>}
-            {message && <div className="toast-success">{message}</div>}
+            <PageToast error={error} success={message} />
             {!profileLoading && !isProfileComplete && (
                 <div className="panel center-content" style={{ marginBottom: '1rem' }}>
                     <span className="hero-badge">Profile Required</span>
@@ -543,7 +545,7 @@ const ProfilePage: React.FC = () => {
                 </div>
                 
                 {!profileLoading && !isProfileComplete && (
-                    <div className="toast-error">Complete your profile to access the rest of BidMart.</div>
+                    <div className="inline-alert-error">Complete your profile to access the rest of BidMart.</div>
                 )}
                 {profileLoading ? (
                     <div className="loading-state">Loading profile details...</div>
@@ -901,6 +903,35 @@ const ProfilePage: React.FC = () => {
             </div>
 
             <div className="panel section-stack" style={{ marginTop: '1.5rem' }}>
+                <h3>Browser Push Notifications</h3>
+                <p className="text-muted">
+                    Enable browser push to receive outbid and auction alerts when you are not on the listing page.
+                </p>
+                <button
+                    type="button"
+                    className="primary-button"
+                    disabled={pushBusy}
+                    onClick={async () => {
+                        setPushBusy(true);
+                        setError(null);
+                        setMessage(null);
+                        try {
+                            const result = await registerWebPushSubscription(authenticatedFetch);
+                            if (result.ok) {
+                                setMessage('Browser push notifications enabled for this device.');
+                            } else {
+                                setError(result.message ?? 'Failed to enable browser push notifications.');
+                            }
+                        } finally {
+                            setPushBusy(false);
+                        }
+                    }}
+                >
+                    {pushBusy ? 'Enabling...' : 'Enable browser notifications'}
+                </button>
+            </div>
+
+            <div className="panel section-stack" style={{ marginTop: '1.5rem' }}>
                 <h3>Delete account</h3>
                 <p className="text-muted">
                     Permanently remove your account when you have no active listings, bids, orders, or wallet balance.
@@ -932,7 +963,7 @@ const ProfilePage: React.FC = () => {
                         <h3 style={{ marginTop: 0 }}>Revoke Session</h3>
                         <p>Are you sure you want to revoke the session created on <strong>{formatSessionDate(sessionToRevoke.createdAt)}</strong>?</p>
                         
-                        <div className="toast-error" style={{ margin: '12px 0', padding: '10px', fontSize: '0.9em' }}>
+                        <div className="inline-alert-error" style={{ margin: '12px 0', padding: '10px', fontSize: '0.9em' }}>
                             <strong>Warning:</strong> If you revoke your currently active session, you will be logged out immediately.
                         </div>
                         

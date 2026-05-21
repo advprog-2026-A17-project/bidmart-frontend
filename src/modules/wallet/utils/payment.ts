@@ -1,8 +1,8 @@
-import { formatCents as formatIdrCents } from '../../../utils/money';
+import { formatMoney } from '../../../utils/money';
 
 export interface PaymentIntent {
     paymentId: string;
-    amountCents: number;
+    amount: number;
     status: string;
     redirectUrl: string;
     vaNumber?: string | null;
@@ -15,7 +15,7 @@ export interface PaymentIntent {
 const PAYMENT_TTL_MS = 10 * 60 * 1000;
 const paymentExpiryStorageKey = (paymentId: string): string => `bidmart:payment-expiry:${paymentId}`;
 
-export const formatCents = (value: number | undefined): string => formatIdrCents(value);
+export const formatCents = (value: number | undefined): string => formatMoney(value);
 
 export const formatPaymentMethod = (value?: string | null): string =>
     (value ?? '')

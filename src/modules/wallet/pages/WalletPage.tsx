@@ -6,8 +6,9 @@ import { useAuth } from '../../../context/useAuth';
 import { isSellerUser, primaryRole } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { useWalletUI } from '../../../context/WalletUIContext';
-import { useWebSocket } from '../../../hooks/useWebSocket';
-import { normalizeMoneyInput, toAmountCents } from '../../../utils/money';
+import { useNotificationsWebSocket } from '../../../context/NotificationsWebSocketContext';
+import PageToast from '../../../components/PageToast';
+import { normalizeMoneyInput, toRupiahAmount } from '../../../utils/money';
 import {
     formatCents,
     paymentExpiryMs,
@@ -35,7 +36,7 @@ interface WalletTransaction {
 
 interface WithdrawalRequestState {
     withdrawalId: string;
-    amountCents: number;
+    amount: number;
     status: string;
     bankCode?: string | null;
     accountNumber?: string | null;
@@ -92,7 +93,7 @@ const WalletPage: React.FC = () => {
     const { user } = useAuth();
     const role = primaryRole(user);
     const authenticatedFetch = useAuthenticatedFetch();
-    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
+    const { isConnected, subscribe, unsubscribe } = useNotificationsWebSocket();
     const location = useLocation();
     const navigate = useNavigate();
     const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -251,8 +252,8 @@ const WalletPage: React.FC = () => {
     );
 
     const handleTopUp = async () => {
-        const amountCents = toAmountCents(topUpAmount);
-        if (!amountCents || amountCents <= 0) {
+        const amount = toRupiahAmount(topUpAmount);
+        if (!amount || amount <= 0) {
             setError('Please enter a valid top-up amount.');
             return;
         }
@@ -265,7 +266,7 @@ const WalletPage: React.FC = () => {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amountCents, paymentMethod, role }),
+                    body: JSON.stringify({ amount, paymentMethod, role }),
                 }
             );
             if (!response.ok) {
@@ -277,7 +278,7 @@ const WalletPage: React.FC = () => {
             const paymentWithLocalExpiry = { ...payment, expiresAt: new Date(expiresAt).toISOString() };
             setPendingPayment(paymentWithLocalExpiry);
             setTopUpAmount('');
-            showSuccess(`Payment created for ${formatCents(paymentWithLocalExpiry.amountCents)}.`);
+            showSuccess(`Payment created for ${formatCents(paymentWithLocalExpiry.amount)}.`);
             navigate(`/wallet/payments/${payment.paymentId}`);
         } catch (err: unknown) {
             setError(`Top-up failed: ${toErrorMessage(err)}`);
@@ -343,8 +344,8 @@ const WalletPage: React.FC = () => {
     ].sort((a, b) => b.timestamp - a.timestamp), [history, unpaidPayments]);
 
     const handleWithdraw = async () => {
-        const amountCents = toAmountCents(withdrawAmount);
-        if (!amountCents || amountCents <= 0) {
+        const amount = toRupiahAmount(withdrawAmount);
+        if (!amount || amount <= 0) {
             setError('Please enter a valid withdrawal amount.');
             return;
         }
@@ -363,7 +364,7 @@ const WalletPage: React.FC = () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        amountCents,
+                        amount,
                         bankCode: withdrawBankCode,
                         accountNumber: normalizedAccountNumber,
                         role,
@@ -378,7 +379,7 @@ const WalletPage: React.FC = () => {
             setPendingWithdrawal(withdrawal);
             setWithdrawAmount('');
             setWithdrawAccountNumber('');
-            showSuccess(`Withdrawal requested for ${formatCents(withdrawal.amountCents)}.`);
+            showSuccess(`Withdrawal requested for ${formatCents(withdrawal.amount)}.`);
             await fetchWallet();
         } catch (err: unknown) {
             setError(`Withdrawal failed: ${toErrorMessage(err)}`);
@@ -422,8 +423,7 @@ const WalletPage: React.FC = () => {
                 </span>
             </section>
 
-            {error && <div className="toast-error">{error}</div>}
-            {success && <div className="toast-success">{success}</div>}
+            <PageToast error={error} success={success} />
 
             {loading ? (
                 walletSkeleton
@@ -573,7 +573,7 @@ const WalletPage: React.FC = () => {
                             {pendingWithdrawal && (
                                 <div className="summary-box payment-status-card">
                                     <div>Withdrawal ref: {pendingWithdrawal.withdrawalId.slice(0, 8).toUpperCase()}</div>
-                                    <div>Amount: {formatCents(pendingWithdrawal.amountCents)}</div>
+                                    <div>Amount: {formatCents(pendingWithdrawal.amount)}</div>
                                     {pendingWithdrawal.accountName && <div>Account name: {pendingWithdrawal.accountName}</div>}
                                     {pendingWithdrawal.payoutReference && <div>Payout ref: {pendingWithdrawal.payoutReference}</div>}
                                     <div>Status: {pendingWithdrawal.status}</div>
@@ -612,7 +612,7 @@ const WalletPage: React.FC = () => {
                                                         </span>
                                                     </div>
                                                     <span className="transaction-amount">
-                                                        {showBalance ? formatCents(row.payment.amountCents) : '••••••'}
+                                                        {showBalance ? formatCents(row.payment.amount) : '••••••'}
                                                     </span>
                                                 </Link>
                                             );

@@ -12,6 +12,7 @@ import {
     paymentReference,
     type PaymentIntent,
 } from '../utils/payment';
+import PageToast from '../../../components/PageToast';
 
 const toErrorMessage = (err: unknown): string =>
     err instanceof Error ? err.message : 'Unknown error';
@@ -132,7 +133,7 @@ const PaymentDetailPage: React.FC = () => {
                 <p>Review your payment instruction and complete the transfer before it expires.</p>
             </section>
 
-            {error && <div className="toast-error">{error}</div>}
+            <PageToast error={error} />
 
             {loading ? (
                 <div className="panel section-stack" aria-busy="true" aria-label="Loading payment">
@@ -179,7 +180,7 @@ const PaymentDetailPage: React.FC = () => {
                             </div>
                             <div>
                                 <span>Amount</span>
-                                <strong>{formatCents(payment.amountCents)}</strong>
+                                <strong>{formatCents(payment.amount)}</strong>
                             </div>
                             <div>
                                 <span>Method</span>

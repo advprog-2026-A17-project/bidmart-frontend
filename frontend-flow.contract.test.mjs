@@ -52,7 +52,7 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(app, /ProfilePage/);
   assert.match(app, /GlobalErrorBoundary/);
   assert.match(globalErrorBoundary, /role="alert"/);
-  assert.match(globalErrorBoundary, /toast-error/);
+  assert.match(globalErrorBoundary, /inline-alert-error/);
   assert.match(sellPage, /\/api\/v1\/catalogue\/listings/);
   assert.doesNotMatch(sellPage, /\/api\/v1\/auctions/);
   assert.doesNotMatch(sellPage, /categoryId/);
@@ -67,7 +67,7 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(packageJson, /"test"/);
 });
 
-test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtime notifications', () => {
+test('frontend demo flow uses lifecycle calls, rupiah wallet amounts, and realtime notifications', () => {
   const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
   const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
   const paymentDetailPage = read('./src/modules/wallet/pages/PaymentDetailPage.tsx');
@@ -83,11 +83,11 @@ test('frontend demo flow uses lifecycle calls, cents wallet amounts, and realtim
   assert.doesNotMatch(sellPage, /Continue to Auction Setup/);
   assert.match(sellPage, /auctionType:\s*'ENGLISH'/);
 
-  assert.match(walletPage, /toAmountCents/);
+  assert.match(walletPage, /toRupiahAmount/);
   assert.match(walletPage, /Wallet Account/);
   assert.doesNotMatch(walletPage, /User ID/);
   assert.match(walletPage, /top-up\/intent/);
-  assert.match(walletPage, /amountCents/);
+  assert.match(walletPage, /amount/);
   assert.match(walletPage, /pendingPayment/);
   assert.match(walletPage, /midtrans\/payments\/return/);
   assert.match(walletPage, /midtrans\/payments\/\$\{pendingPayment\.paymentId\}\/sync/);
@@ -139,8 +139,10 @@ test('frontend sell flow is gated to seller accounts before any listing request 
   const app = read('./src/App.tsx');
 
   assert.match(sellPage, /role\.name === 'SELLER'/);
-  assert.match(sellPage, /Only seller accounts can publish listings/);
-  assert.match(sellPage, /Seller access required/);
+  assert.match(sellPage, /Listing permissions are required to publish/);
+  assert.match(sellPage, /Listing access required/);
+  assert.doesNotMatch(sellPage, /seller account/i);
+  assert.doesNotMatch(sellPage, /Start with a seller account/);
   assert.match(app, /isSellerUser/);
   assert.match(app, /sellerOnly/);
   assert.doesNotMatch(app, /Switch to Selling/);

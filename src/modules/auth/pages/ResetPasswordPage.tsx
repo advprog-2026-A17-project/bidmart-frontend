@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PasswordField from '../../../components/PasswordField';
 import { requestResetPassword } from '../utils/auth-api';
+import PageToast from '../../../components/PageToast';
 
 const ResetPasswordPage = () => {
     const [searchParams] = useSearchParams();
@@ -55,8 +56,7 @@ const ResetPasswordPage = () => {
                 <h1>Choose a new password</h1>
                 <p className="text-muted">Enter a strong password for your BidMart account.</p>
 
-                {error && <div className="toast-error">{error}</div>}
-                {success && <div className="toast-success">{success}</div>}
+                <PageToast error={error} success={success} />
 
                 <form onSubmit={handleSubmit} className="auth-form">
                     <PasswordField

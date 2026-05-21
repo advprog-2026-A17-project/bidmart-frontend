@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import PageToast from '../../../components/PageToast';
 
 type ListingRecord = {
     id: string;
@@ -65,8 +66,7 @@ const AdminListingsPage: React.FC = () => {
                 <h1>Listings</h1>
                 <p className="text-muted">Review marketplace listings and disable policy violations.</p>
             </section>
-            {error && <div className="toast-error">{error}</div>}
-            {notice && <div className="toast-success">{notice}</div>}
+            <PageToast error={error} success={notice} />
             {loading ? (
                 <div className="loading-state">Loading listings...</div>
             ) : (
