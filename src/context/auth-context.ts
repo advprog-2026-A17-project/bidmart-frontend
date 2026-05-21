@@ -31,6 +31,7 @@ export interface AuthContextType {
         shippingAddress?: string | null;
     }) => void;
     refreshAccessToken: () => Promise<string | null>;
+    maybeRefreshSession: () => void;
     authenticatedFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }
 
@@ -42,5 +43,6 @@ export const AuthContext = createContext<AuthContextType>({
     logout: () => {},
     updateUserProfile: () => {},
     refreshAccessToken: async () => null,
+    maybeRefreshSession: () => {},
     authenticatedFetch: async (input, init) => fetch(input, init),
 });
