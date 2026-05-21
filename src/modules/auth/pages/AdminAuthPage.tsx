@@ -5,6 +5,7 @@ import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
+import PageToast from '../../../components/PageToast';
 
 type RoleResponse = {
     id: string;
@@ -342,8 +343,7 @@ const AdminAuthPage = () => {
                 <p className="text-muted">
                     Kelola peran kustom dengan permission granular, dan moderasi akun pengguna.
                 </p>
-                {message && <div className="toast-success">{message}</div>}
-                {error && <div className="toast-error">{error}</div>}
+                <PageToast error={error} success={message} />
             </section>
 
             <section className="panel">

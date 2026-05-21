@@ -7,6 +7,7 @@ import { isSellerUser } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney } from '../../../utils/money';
 import OrderStatusCard from '../components/OrderStatusCard';
+import PageToast from '../../../components/PageToast';
 
 type OrderRecord = {
     id: string;
@@ -205,7 +206,7 @@ const OrderDetailPage: React.FC = () => {
                     <BackButton fallback="/orders" />
                     <h1>Order Details</h1>
                 </section>
-                {error && <div className="toast-error">{error}</div>}
+                <PageToast error={error} />
                 <section className="panel center-content">
                     <span className="material-symbols-outlined section-title-icon" aria-hidden="true">receipt_long</span>
                     <h2>Order not found</h2>
@@ -231,8 +232,7 @@ const OrderDetailPage: React.FC = () => {
                 </Link>
             </section>
 
-            {error && <div className="toast-error">{error}</div>}
-            {notice && <div className="toast-success">{notice}</div>}
+            <PageToast error={error} success={notice} />
 
             <OrderStatusCard
                 status={order.status}

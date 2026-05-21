@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { requestEmailVerification } from '../utils/auth-api';
+import PageToast from '../../../components/PageToast';
 
 const VerifyEmailPage: React.FC = () => {
     const [searchParams] = useSearchParams();
@@ -44,8 +45,12 @@ const VerifyEmailPage: React.FC = () => {
         verify();
     }, [token]);
 
+    const toastError = status === 'error' ? errorMessage : null;
+    const toastSuccess = status === 'success' ? 'Your email has been verified.' : null;
+
     return (
         <div className="auth-wrap">
+            <PageToast error={toastError} success={toastSuccess} />
             <div className="auth-card" style={{ textAlign: 'center' }}>
                 <div className="auth-logo-wrap">
                     <div className="app-logo">BM</div>
@@ -62,9 +67,7 @@ const VerifyEmailPage: React.FC = () => {
 
                 {status === 'success' && (
                     <div style={{ padding: '1rem 0' }}>
-                        <div className="toast-success" style={{ marginBottom: '2rem' }}>
-                            Success! Your email has been verified.
-                        </div>
+                        <h2 style={{ marginTop: 0 }}>Email verified</h2>
                         <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
                             Your BidMart account is now fully active. You can log in to start bidding and selling.
                         </p>
@@ -79,11 +82,9 @@ const VerifyEmailPage: React.FC = () => {
 
                 {status === 'error' && (
                     <div style={{ padding: '1rem 0' }}>
-                        <div className="toast-error" style={{ marginBottom: '2rem' }}>
-                            {errorMessage}
-                        </div>
+                        <h2 style={{ marginTop: 0 }}>Verification failed</h2>
                         <p className="text-muted" style={{ marginBottom: '1.5rem' }}>
-                            If you are having trouble, try requesting a new verification link from the login page.
+                            {errorMessage} If you are having trouble, try requesting a new verification link from the login page.
                         </p>
                         <button 
                             className="secondary-button" 

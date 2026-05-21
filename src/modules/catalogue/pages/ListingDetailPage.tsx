@@ -7,6 +7,7 @@ import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
+import PageToast from '../../../components/PageToast';
 import type { AuctionRealtimeEvent } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta } from '../../auction/utils/auction-card-meta';
 import { buildListingPatchFromRealtimeEvent, eventTargetsListing } from '../../auction/utils/auction-realtime-patch';
@@ -261,20 +262,8 @@ const ListingDetailPage: React.FC = () => {
         void fetchListing();
     }, [fetchListing]);
 
-    useEffect(() => {
-        if (!listingId) return;
-        const timer = window.setInterval(() => {
-            void (async () => {
-                const patch = await fetchAuctionSnapshotPatch();
-                if (!patch) return;
-                setListing((prev) => prev ? { ...prev, ...patch } : prev);
-            })();
-        }, 5000);
-        return () => window.clearInterval(timer);
-    }, [fetchAuctionSnapshotPatch, listingId]);
-
     const realtimeDestinations = useMemo(
-        () => (listingId ? [`/topic/listings/${listingId}`, `/topic/auctions/${listingId}`] : []),
+        () => (listingId ? [`/topic/listings/${listingId}`] : []),
         [listingId]
     );
 
@@ -295,6 +284,18 @@ const ListingDetailPage: React.FC = () => {
     }, [fetchBids, listing, listingId, nowMs]);
 
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
+
+    useEffect(() => {
+        if (!listingId || isConnected) return;
+        const timer = window.setInterval(() => {
+            void (async () => {
+                const patch = await fetchAuctionSnapshotPatch();
+                if (!patch) return;
+                setListing((prev) => prev ? { ...prev, ...patch } : prev);
+            })();
+        }, 5000);
+        return () => window.clearInterval(timer);
+    }, [fetchAuctionSnapshotPatch, isConnected, listingId]);
 
     const imageSrc = useMemo(() => {
         if (!listing) return '';
@@ -484,7 +485,7 @@ const ListingDetailPage: React.FC = () => {
     return (
         <div className="page-wrap">
             <BackButton fallback="/" />
-            {error && <div className="toast-error">{error}</div>}
+            <PageToast error={error} />
 
             <section className="auction-command-grid">
                 <section className="auction-asset-panel">

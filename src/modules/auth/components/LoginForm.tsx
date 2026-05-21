@@ -6,6 +6,7 @@ import { resolvePostLoginPath } from '../utils/post-auth-navigation';
 import GoogleLoginButton from './GoogleLoginButton';
 import TwoFactorForm from './TwoFactorForm';
 import PasswordField from '../../../components/PasswordField';
+import PageToast from '../../../components/PageToast';
 
 export const LOGIN_VERIFY_ENDPOINT = '/api/v1/auth/2fa/login-verify';
 
@@ -99,8 +100,13 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
 
     return (
         <form onSubmit={handleLogin} className="auth-form">
+            <PageToast
+                success={resendSuccess
+                    ? 'Verification email sent! Please check your inbox and spam folder.'
+                    : null}
+            />
             {error && (
-                <div className="toast-error">
+                <div className="inline-alert-error">
                     {error}
                     {unverifiedEmail && !resendSuccess && (
                         <div style={{ marginTop: '8px' }}>
@@ -115,11 +121,6 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                             </button>
                         </div>
                     )}
-                </div>
-            )}
-            {resendSuccess && (
-                <div className="toast-success">
-                    ✅ Verification email sent! Please check your inbox and spam folder.
                 </div>
             )}
             

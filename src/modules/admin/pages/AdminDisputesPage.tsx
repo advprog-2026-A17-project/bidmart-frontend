@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import PageToast from '../../../components/PageToast';
 
 type OrderRecord = {
     id: string;
@@ -64,7 +65,7 @@ const AdminDisputesPage: React.FC = () => {
                 <h1>Disputes</h1>
                 <p className="text-muted">Resolve open order disputes.</p>
             </section>
-            {error && <div className="toast-error">{error}</div>}
+            <PageToast error={error} />
             {loading ? (
                 <div className="loading-state">Loading disputes...</div>
             ) : (

@@ -17,14 +17,16 @@ import AdminUsersPage from './modules/admin/pages/AdminUsersPage';
 import AdminListingsPage from './modules/admin/pages/AdminListingsPage';
 import AdminDisputesPage from './modules/admin/pages/AdminDisputesPage';
 import { AuthProvider } from './context/AuthContext';
+import SessionSlidingRefresh from './context/SessionSlidingRefresh';
 import { useAuth } from './context/useAuth';
 import { isSellerUser, primaryRole } from './context/primaryRole';
 import { useAuthenticatedFetch } from './context/useAuthenticatedFetch';
 import { WalletUIProvider, useWalletUI } from './context/WalletUIContext';
-import { useWebSocket } from './hooks/useWebSocket';
+import { NotificationsWebSocketProvider, useNotificationsWebSocket } from './context/NotificationsWebSocketContext';
 import { gatewayUrl } from './config/apiClient';
 import { formatCents } from './modules/wallet/utils/payment';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+import { ToastProvider } from './context/ToastContext';
 import { ProfileAvatarWithFallback } from './components/ProfileAvatar';
 import './App.css';
 import VerifyEmailPage from './modules/auth/pages/VerifyEmailPage';
@@ -33,7 +35,7 @@ import ResetPasswordPage from './modules/auth/pages/ResetPasswordPage';
 const Navbar = () => {
     const { user, logout, sessionExpiresAt } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
-    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
+    const { isConnected, subscribe, unsubscribe } = useNotificationsWebSocket();
     const role = primaryRole(user);
     const isAdmin = role === 'ADMIN';
     const isSeller = isSellerUser(user);
@@ -312,16 +314,21 @@ const AppLayout = () => {
 function App() {
     return (
         <GlobalErrorBoundary>
+            <ToastProvider>
             <AuthProvider>
                 <WalletUIProvider>
-                    <Router>
-                        <div className="app-shell">
-                            <Navbar />
-                            <AppLayout />
-                        </div>
-                    </Router>
+                    <NotificationsWebSocketProvider>
+                        <Router>
+                            <SessionSlidingRefresh />
+                            <div className="app-shell">
+                                <Navbar />
+                                <AppLayout />
+                            </div>
+                        </Router>
+                    </NotificationsWebSocketProvider>
                 </WalletUIProvider>
             </AuthProvider>
+            </ToastProvider>
         </GlobalErrorBoundary>
     );
 }

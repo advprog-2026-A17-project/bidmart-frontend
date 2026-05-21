@@ -13,7 +13,8 @@ type OnboardingStatus = {
     needsRole?: boolean;
 };
 
-const AUTH_ROUTES = new Set(['/login', '/verify-email', '/reset-password', '/onboarding']);
+/** Routes reachable before onboarding is complete (profile is not included). */
+const PRE_ONBOARDING_ROUTES = new Set(['/login', '/verify-email', '/reset-password', '/onboarding']);
 
 const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user } = useAuth();
@@ -32,10 +33,7 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         if (isAdmin) {
             return false;
         }
-        if (AUTH_ROUTES.has(location.pathname)) {
-            return false;
-        }
-        if (location.pathname === '/profile' || location.pathname === '/onboarding') {
+        if (PRE_ONBOARDING_ROUTES.has(location.pathname)) {
             return false;
         }
         return true;
@@ -93,7 +91,9 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         return () => {
             active = false;
         };
-    }, [authenticatedFetch, location.pathname, navigate, retryTick, shouldGuard, user]);
+    // Re-run only when the signed-in user changes, not on every profile field update
+    // (updateUserProfile mutates `user` and would remount children, dismissing toasts).
+    }, [authenticatedFetch, location.pathname, navigate, retryTick, shouldGuard, user?.id]);
 
     if (!shouldGuard) {
         return <>{children}</>;
