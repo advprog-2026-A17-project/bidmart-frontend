@@ -3,17 +3,17 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type GuardStatus = 'idle' | 'loading' | 'complete' | 'incomplete' | 'error';
 
-type UserProfileResponse = {
-    displayName?: string | null;
-    shippingAddress?: string | null;
+type OnboardingStatus = {
+    profileCompleted?: boolean;
+    needsPassword?: boolean;
+    needsRole?: boolean;
 };
 
-const AUTH_ROUTES = new Set(['/login', '/verify-email', '/reset-password']);
-
-const isBlank = (value?: string | null): boolean => !value || value.trim() === '';
+const AUTH_ROUTES = new Set(['/login', '/verify-email', '/reset-password', '/onboarding']);
 
 const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user } = useAuth();
@@ -35,7 +35,7 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         if (AUTH_ROUTES.has(location.pathname)) {
             return false;
         }
-        if (location.pathname === '/profile') {
+        if (location.pathname === '/profile' || location.pathname === '/onboarding') {
             return false;
         }
         return true;
@@ -54,22 +54,29 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
             setStatus('loading');
             setError(null);
             try {
-                const response = await authenticatedFetch(
-                    gatewayUrl('/api/v1/auth/profile')
-                );
-
-                if (!response.ok) {
-                    throw new Error(await readApiError(response, 'Profile lookup failed'));
+                let response: Response | null = null;
+                for (let attempt = 0; attempt <= 2; attempt += 1) {
+                    response = await authenticatedFetch(gatewayUrl('/api/v1/auth/onboarding'));
+                    if (response.ok || ![502, 503, 504].includes(response.status) || attempt === 2) {
+                        break;
+                    }
+                    await sleep(400 * (attempt + 1));
                 }
 
-                const payload = await response.json() as UserProfileResponse;
-                const isComplete = !isBlank(payload.displayName) && !isBlank(payload.shippingAddress);
+                if (!response || !response.ok) {
+                    throw new Error(await readApiError(response ?? new Response(null, { status: 503 }), 'Onboarding lookup failed'));
+                }
+
+                const payload = await response.json() as OnboardingStatus;
+                const needsOnboarding = payload.profileCompleted === false
+                    || payload.needsPassword === true
+                    || payload.needsRole === true;
 
                 if (!active) return;
 
-                if (!isComplete) {
+                if (needsOnboarding) {
                     setStatus('incomplete');
-                    navigate('/profile', { replace: true, state: { from: location.pathname } });
+                    navigate('/onboarding', { replace: true, state: { from: location.pathname } });
                     return;
                 }
 

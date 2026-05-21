@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
-import { gatewayUrl, readApiError } from '../../../config/apiClient';
+import { gatewayUrl, readApiError, readApiJson } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
@@ -80,6 +80,7 @@ const CONDITIONS = [
 
 const MAX_IMAGE_BYTES = 600 * 1024;
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
+const PUBLISHED_STATUSES = new Set(['ACTIVE', 'EXTENDED']);
 const FINAL_AUCTION_STATUSES = new Set<string>(['ENDED', 'WON', 'UNSOLD', 'CLOSED', 'CANCELLED']);
 
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
@@ -151,6 +152,12 @@ const asIsoDate = (input?: string | null): string | null => {
     if (Number.isNaN(parsed.getTime())) return null;
     return parsed.toISOString();
 };
+
+const delay = (durationMs: number): Promise<void> =>
+    new Promise((resolve) => window.setTimeout(resolve, durationMs));
+
+const isPublishedListing = (listing: ListingRecord): boolean =>
+    PUBLISHED_STATUSES.has((listing.status ?? '').toUpperCase());
 
 const SELLER_STUDIO_VIEW_STORAGE_KEY = 'seller_studio_active_view';
 
@@ -371,12 +378,38 @@ const SellPage: React.FC = () => {
             throw new Error(await readApiError(response, 'Listing publish failed'));
         }
 
-        const listingResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
-        if (!listingResponse.ok) {
-            throw new Error(await readApiError(listingResponse, 'Published listing fetch failed'));
+        const publishedListing = await readApiJson<ListingRecord>(response);
+        let listing = publishedListing ?? ({ id: listingId } as ListingRecord);
+        for (let attempt = 0; attempt < 3 && !isPublishedListing(listing); attempt += 1) {
+            await delay(250);
+            const listingResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
+            if (!listingResponse.ok) {
+                throw new Error(await readApiError(listingResponse, 'Published listing fetch failed'));
+            }
+            listing = await listingResponse.json() as ListingRecord;
         }
-        const listing = await listingResponse.json() as ListingRecord;
-        await ensureBiddingSessionForListing(listing);
+        if (!isPublishedListing(listing)) {
+            throw new Error('Listing publish did not activate the listing.');
+        }
+
+        try {
+            await ensureBiddingSessionForListing(listing);
+        } catch (err: unknown) {
+            if (!toErrorMessage(err).toLowerCase().includes('listing is not active')) {
+                throw err;
+            }
+
+            await delay(500);
+            const retryResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
+            if (!retryResponse.ok) {
+                throw new Error(await readApiError(retryResponse, 'Published listing fetch failed'));
+            }
+            const retryListing = await retryResponse.json() as ListingRecord;
+            if (!isPublishedListing(retryListing)) {
+                throw err;
+            }
+            await ensureBiddingSessionForListing(retryListing);
+        }
     };
 
     const resetListingForm = () => {
@@ -408,6 +441,22 @@ const SellPage: React.FC = () => {
         endTime: form.endTime,
         imageUrl: form.imageUrl.trim() || form.images[0] || null,
     });
+
+    const createPublishedListingUpdatePayload = (form: ListingFormState) => ({
+        description: form.description.trim(),
+        imageUrl: form.imageUrl.trim() || form.images[0] || null,
+    });
+
+    const validatePublishedListingEdit = (): ListingFormErrors => {
+        const errors: ListingFormErrors = {};
+        if (!listingForm.description.trim()) {
+            errors.description = 'Description is required.';
+        }
+        if (!isValidImageReference(listingForm.imageUrl)) {
+            errors.imageUrl = 'Use a valid http(s) image URL or upload an image file.';
+        }
+        return errors;
+    };
 
     const validateListingForm = (): ListingFormErrors => {
         const errors: ListingFormErrors = {};
@@ -467,7 +516,11 @@ const SellPage: React.FC = () => {
             return;
         }
 
-        const validationErrors = validateListingForm();
+        const isPublishedEdit = Boolean(editingListingId)
+            && (editingListingStatus === 'ACTIVE' || editingListingStatus === 'EXTENDED');
+        const validationErrors = isPublishedEdit
+            ? validatePublishedListingEdit()
+            : validateListingForm();
         if (Object.keys(validationErrors).length > 0) {
             setListingFormErrors(validationErrors);
             setError('Resolve the highlighted listing fields before saving.');
@@ -482,12 +535,15 @@ const SellPage: React.FC = () => {
 
         try {
             const isEditing = Boolean(editingListingId);
+            const requestBody = isEditing && isPublishedEdit
+                ? createPublishedListingUpdatePayload(listingForm)
+                : createListingPayload(listingForm);
             const response = await authenticatedFetch(
                 gatewayUrl(isEditing ? `/api/v1/catalogue/listings/${editingListingId}` : '/api/v1/catalogue/listings'),
                 {
                     method: isEditing ? 'PUT' : 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(createListingPayload(listingForm)),
+                    body: JSON.stringify(requestBody),
                 }
             );
             if (!response.ok) {
@@ -1052,8 +1108,7 @@ const SellPage: React.FC = () => {
                                     const status = (listing.status ?? 'UNKNOWN').toUpperCase();
                                     const finalized = FINAL_AUCTION_STATUSES.has(status);
                                     const locked = listing.hasBids || finalized;
-                                    const isLiveStatus = status === 'ACTIVE' || status === 'EXTENDED';
-                                    const canEdit = (!listing.hasBids && !finalized) || isLiveStatus;
+                                    const canEdit = !listing.hasBids && !finalized;
                                     const canCancel = !listing.hasBids && status !== 'WON' && status !== 'UNSOLD' && status !== 'CLOSED' && status !== 'CANCELLED';
                                     const canDelete = !listing.hasBids && status === 'DRAFT';
                                     const canPublishDraft = status === 'DRAFT';

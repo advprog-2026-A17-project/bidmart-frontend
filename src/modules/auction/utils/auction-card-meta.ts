@@ -2,16 +2,9 @@ import type { Auction } from '../contracts/auction-card-ui-contract';
 
 const CLOSED_STATUSES = new Set(['CLOSED', 'ENDED', 'WON', 'UNSOLD']);
 
-const parseAuctionDate = (value: string): Date | null => {
-    if (!value || !value.trim()) return null;
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) {
-        const parsed = new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric);
-        return Number.isNaN(parsed.getTime()) ? null : parsed;
-    }
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
+import { parseAuctionEndTime } from '../../../utils/auction-units';
+
+const parseAuctionDate = (value: string): Date | null => parseAuctionEndTime(value);
 
 export const buildAuctionCardMeta = (auction: Auction, nowMs = Date.now()) => {
     const hasBids = auction.currentHighestBid !== null;

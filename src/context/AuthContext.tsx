@@ -3,6 +3,8 @@ import { AuthContext, type AuthLoginResult, type AuthUser } from './auth-context
 import { apiUrl } from '../config/api';
 import { useSessionRevocation } from '../hooks/useSessionRevocation';
 import { getPersistentItem, setPersistentItem, removePersistentItem } from '../utils/storage';
+import { parseStoredJson } from '../utils/safe-storage-json';
+import { readJwtNumericClaim, readJwtStringClaim } from '../utils/jwt-claims';
 
 const API_PATH_PREFIX = '/api/v1/';
 const ACTIVITY_REFRESH_DEBOUNCE_MS = 600;
@@ -30,39 +32,12 @@ const trustedApiPath = (input: RequestInfo | URL): string => {
     return parsedUrl.toString();
 };
 
-const decodeJwtPayload = (token: string | null): Record<string, unknown> | null => {
-    if (!token) return null;
-    try {
-        const parts = token.split('.');
-        if (parts.length !== 3) return null;
-
-        const base64Url = parts[1];
-        let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-
-        while (base64.length % 4 !== 0) {
-            base64 += '=';
-        }
-
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-
-        return JSON.parse(jsonPayload) as Record<string, unknown>;
-    } catch {
-        return null;
-    }
-};
-
-const extractTokenIdFromJwt = (token: string | null): string | null => {
-    const payload = decodeJwtPayload(token);
-    const tokenId = payload?.tokenId;
-    return typeof tokenId === 'string' ? tokenId : null;
-};
+const extractTokenIdFromJwt = (token: string | null): string | null =>
+    readJwtStringClaim(token, 'tokenId');
 
 const getAccessTokenExpiresAtMs = (token: string | null): number | null => {
-    const payload = decodeJwtPayload(token);
-    const exp = payload?.exp;
-    return typeof exp === 'number' ? exp * 1000 : null;
+    const exp = readJwtNumericClaim(token, 'exp');
+    return exp == null ? null : exp * 1000;
 };
 
 const isEditableInteractionTarget = (target: EventTarget | null): boolean => {
@@ -124,8 +99,12 @@ const persistSession = (
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser | null>(() => {
-        const saved = getPersistentItem('auth_user');
-        return saved ? JSON.parse(saved) : null;
+        const raw = getPersistentItem('auth_user');
+        const saved = parseStoredJson<AuthUser>(raw);
+        if (raw && !saved) {
+            removePersistentItem('auth_user');
+        }
+        return saved;
     });
     const [tokenId, setTokenId] = useState<string | null>(() => {
         const token = getPersistentItem('access_token');
@@ -229,12 +208,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const msRemaining = sessionExpiresAt - Date.now();
         if (msRemaining <= 0) {
-            setTimeout(() => logout(), 0);
+            setTimeout(() => {
+                void logout();
+            }, 0);
             return;
         }
 
         const timerId = window.setTimeout(() => {
-            logout();
+            void logout();
         }, msRemaining);
 
         return () => window.clearTimeout(timerId);
