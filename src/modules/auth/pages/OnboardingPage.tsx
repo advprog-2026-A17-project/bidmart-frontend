@@ -22,6 +22,7 @@ const OnboardingPage: React.FC = () => {
     const navigate = useNavigate();
     const [status, setStatus] = useState<OnboardingStatus | null>(null);
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [role, setRole] = useState<'BUYER' | 'SELLER'>('BUYER');
     const [displayName, setDisplayName] = useState('');
     const [shippingAddress, setShippingAddress] = useState('');
@@ -93,53 +94,145 @@ const OnboardingPage: React.FC = () => {
 
     if (!user) {
         return (
-            <div className="panel center-content">
-                <p className="text-muted">Sign in to continue onboarding.</p>
+            <div className="onboarding-wrap">
+                <div className="onboarding-card panel center-content">
+                    <p className="text-muted">Masuk untuk melanjutkan pengaturan akun.</p>
+                </div>
             </div>
         );
     }
 
     if (loading) {
-        return <div className="loading-state">Preparing your account...</div>;
+        return (
+            <div className="onboarding-wrap">
+                <div className="onboarding-card panel loading-state">Menyiapkan akun Anda...</div>
+            </div>
+        );
     }
 
+    const stepCount = (status?.needsPassword ? 1 : 0) + (status?.needsRole ? 1 : 0) + 1;
+
     return (
-        <div className="page-wrap narrow-form">
-            <section className="page-head">
-                <h1>Complete your account</h1>
-                <p className="text-muted">
-                    Lengkapi profil, pilih peran (Pembeli atau Penjual), dan set password jika Anda masuk dengan Google.
-                </p>
-            </section>
-            {error && <div className="toast-error">{error}</div>}
-            <form className="panel section-stack" onSubmit={submit}>
-                {status?.needsPassword && (
-                    <PasswordField label="Password" value={password} onChange={setPassword} autoComplete="new-password" />
-                )}
-                {status?.needsRole && (
-                    <label>
-                        Marketplace role
-                        <select value={role} onChange={(event) => setRole(event.target.value as 'BUYER' | 'SELLER')}>
-                            <option value="BUYER">Buyer</option>
-                            <option value="SELLER">Seller</option>
-                        </select>
-                    </label>
-                )}
-                <label>
-                    Display name
-                    <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />
-                </label>
-                <label>
-                    Shipping address
-                    <textarea value={shippingAddress} onChange={(event) => setShippingAddress(event.target.value)} required />
-                </label>
-                <button type="submit" className="primary-button" disabled={saving}>
-                    {saving ? 'Saving...' : 'Continue to BidMart'}
-                </button>
-                <button type="button" className="secondary-button" onClick={logout}>
-                    Sign out
-                </button>
-            </form>
+        <div className="onboarding-wrap">
+            <div className="onboarding-card panel">
+                <div className="auth-logo-wrap onboarding-brand">
+                    <div className="app-logo">BM</div>
+                    <p className="eyebrow">Selamat datang</p>
+                    <h1>Lengkapi akun Anda</h1>
+                    <p className="text-muted onboarding-lead">
+                        Satu langkah lagi sebelum mulai menawar atau berjualan di BidMart.
+                    </p>
+                </div>
+
+                <div className="onboarding-steps" aria-hidden="true">
+                    {Array.from({ length: stepCount }, (_, index) => (
+                        <span key={index} className="onboarding-step-dot onboarding-step-dot-active" />
+                    ))}
+                </div>
+
+                {error && <div className="toast-error">{error}</div>}
+
+                <form className="onboarding-form auth-form" onSubmit={submit}>
+                    {status?.needsPassword && (
+                        <section className="onboarding-section">
+                            <div className="onboarding-section-head">
+                                <span className="material-symbols-outlined onboarding-section-icon" aria-hidden="true">
+                                    lock
+                                </span>
+                                <div>
+                                    <h2>Password login</h2>
+                                    <p className="text-muted">Agar Anda bisa masuk tanpa Google di lain waktu.</p>
+                                </div>
+                            </div>
+                            <PasswordField
+                                label="Password"
+                                value={password}
+                                onChange={setPassword}
+                                autoComplete="new-password"
+                                visible={showPassword}
+                                onVisibleChange={setShowPassword}
+                            />
+                        </section>
+                    )}
+
+                    {status?.needsRole && (
+                        <section className="onboarding-section">
+                            <div className="onboarding-section-head">
+                                <span className="material-symbols-outlined onboarding-section-icon" aria-hidden="true">
+                                    badge
+                                </span>
+                                <div>
+                                    <h2>Pilih peran</h2>
+                                    <p className="text-muted">Tentukan cara Anda menggunakan marketplace.</p>
+                                </div>
+                            </div>
+                            <div className="account-type-grid" role="group" aria-label="Marketplace role">
+                                <button
+                                    type="button"
+                                    className={`account-type-card ${role === 'BUYER' ? 'account-type-card-active' : ''}`}
+                                    onClick={() => setRole('BUYER')}
+                                    aria-pressed={role === 'BUYER'}
+                                >
+                                    <span className="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
+                                    <strong>Pembeli</strong>
+                                    <small>Ikut lelang dan beli barang</small>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`account-type-card ${role === 'SELLER' ? 'account-type-card-active' : ''}`}
+                                    onClick={() => setRole('SELLER')}
+                                    aria-pressed={role === 'SELLER'}
+                                >
+                                    <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                                    <strong>Penjual</strong>
+                                    <small>Pasang listing dan kelola lelang</small>
+                                </button>
+                            </div>
+                        </section>
+                    )}
+
+                    <section className="onboarding-section">
+                        <div className="onboarding-section-head">
+                            <span className="material-symbols-outlined onboarding-section-icon" aria-hidden="true">
+                                person
+                            </span>
+                            <div>
+                                <h2>Profil</h2>
+                                <p className="text-muted">Nama tampilan dan alamat pengiriman untuk transaksi.</p>
+                            </div>
+                        </div>
+                        <label className="field">
+                            <span className="field-label">Nama tampilan</span>
+                            <input
+                                className="form-input"
+                                value={displayName}
+                                onChange={(event) => setDisplayName(event.target.value)}
+                                placeholder="Contoh: Aldo"
+                                required
+                            />
+                        </label>
+                        <label className="field">
+                            <span className="field-label">Alamat pengiriman</span>
+                            <textarea
+                                className="form-input form-textarea"
+                                value={shippingAddress}
+                                onChange={(event) => setShippingAddress(event.target.value)}
+                                placeholder="Jalan, kota, kode pos"
+                                required
+                            />
+                        </label>
+                    </section>
+
+                    <div className="onboarding-actions">
+                        <button type="submit" className="primary-button auth-primary-action" disabled={saving}>
+                            {saving ? 'Menyimpan...' : 'Lanjut ke BidMart'}
+                        </button>
+                        <button type="button" className="secondary-button" onClick={logout}>
+                            Keluar
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 };

@@ -443,7 +443,7 @@ const ProfilePage: React.FC = () => {
                 setError('Account deletion is blocked until active marketplace activity is resolved.');
                 return;
             }
-            if (!response.ok) {
+            if (response.status !== 204) {
                 setError(await readApiError(response, 'Failed to delete account'));
                 return;
             }
