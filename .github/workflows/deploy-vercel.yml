@@ -1,0 +1,85 @@
+name: Deploy Vercel
+
+on:
+  workflow_run:
+    workflows: ["Continuous Integration"]
+    branches: [staging, main]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Vercel deployment target'
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - prod
+
+concurrency:
+  group: bidmart-frontend-vercel-${{ github.event.workflow_run.head_branch || github.ref_name || 'manual' }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy frontend to Vercel
+    runs-on: ubuntu-latest
+    if: github.repository == 'advprog-2026-A17-project/bidmart-frontend' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    environment:
+      name: ${{ steps.resolve.outputs.target }}
+    steps:
+      - name: Resolve target
+        id: resolve
+        env:
+          INPUT_TARGET: ${{ github.event.inputs.target }}
+          WORKFLOW_RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            target="${INPUT_TARGET:-staging}"
+          elif [ "$WORKFLOW_RUN_BRANCH" = "main" ]; then
+            target=prod
+          else
+            target=staging
+          fi
+          if [ "$target" != "prod" ] && [ "$target" != "staging" ]; then
+            target=staging
+          fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          if [ "$target" = "prod" ]; then
+            echo "vercel_args=--prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "vercel_args=" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Deploying frontend to Vercel ($target)"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pull Vercel environment
+        run: npx vercel pull --yes --environment=${{ steps.resolve.outputs.target == 'prod' && 'production' || 'preview' }} --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build with Vercel
+        run: npx vercel build ${{ steps.resolve.outputs.vercel_args }} --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy prebuilt output
+        run: npx vercel deploy --prebuilt ${{ steps.resolve.outputs.vercel_args }} --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

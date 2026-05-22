@@ -14,3 +14,7 @@ export const primaryRole = (user: AuthUser | null): PrimaryRole | null => {
 };
 
 export const isSellerUser = (user: AuthUser | null): boolean => primaryRole(user) === 'SELLER';
+
+/** Wallet service only supports BUYER/SELLER marketplace wallets. */
+export const walletApiRole = (user: AuthUser | null): 'BUYER' | 'SELLER' =>
+    isSellerUser(user) ? 'SELLER' : 'BUYER';

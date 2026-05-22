@@ -19,7 +19,7 @@ import AdminDisputesPage from './modules/admin/pages/AdminDisputesPage';
 import { AuthProvider } from './context/AuthContext';
 import SessionSlidingRefresh from './context/SessionSlidingRefresh';
 import { useAuth } from './context/useAuth';
-import { isSellerUser, primaryRole } from './context/primaryRole';
+import { isSellerUser, primaryRole, walletApiRole } from './context/primaryRole';
 import { useAuthenticatedFetch } from './context/useAuthenticatedFetch';
 import { WalletUIProvider, useWalletUI } from './context/WalletUIContext';
 import { NotificationsWebSocketProvider } from './context/NotificationsWebSocketContext';
@@ -49,16 +49,19 @@ const Navbar = () => {
     const { showBalance, setShowBalance } = useWalletUI();
 
     useEffect(() => {
-        if (!user) {
+        if (!user || isAdmin) {
             setTimeout(() => setWalletBalance(null), 0);
             return;
         }
 
         let active = true;
+        const marketplaceRole = walletApiRole(user);
 
         const fetchWallet = async () => {
             try {
-                const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${role}`));
+                const response = await authenticatedFetch(
+                    gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${marketplaceRole}`)
+                );
                 if (response.ok) {
                     const data = await response.json();
                     if (active) {
@@ -96,7 +99,7 @@ const Navbar = () => {
         return () => {
             active = false;
         };
-    }, [user, role, authenticatedFetch, isConnected, subscribe]);
+    }, [user, isAdmin, authenticatedFetch, isConnected, subscribe]);
 
     useEffect(() => {
         if (!sessionExpiresAt || !user) {
