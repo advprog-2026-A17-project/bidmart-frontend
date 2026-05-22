@@ -1,0 +1,9 @@
+# BidMart
+
+BidMart is a marketplace auction web application for browsing catalogue listings, bidding on live auctions, managing wallet payments, and tracking orders.
+
+## Links
+
+- [Marketplace](https://bidmart.example/marketplace): Browse active listings and auctions.
+- [Wallet](https://bidmart.example/wallet): Manage top-up, withdrawals, and transaction history.
+- [Orders](https://bidmart.example/orders): Track auction-won and marketplace orders.

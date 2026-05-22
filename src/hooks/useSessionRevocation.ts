@@ -11,7 +11,7 @@ export const useSessionRevocation = (
     tokenId: string | null,
     logout: (() => void) | null,
 ) => {
-    const { subscribe, isConnected } = useWebSocket();
+    const { subscribe, isConnected } = useWebSocket('/ws', tokenId);
 
     useEffect(() => {
         console.log('[SessionRevocation] Hook triggered:', { isConnected, hasUser: !!user, tokenId });

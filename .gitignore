@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 artifacts/*.log
+artifacts/lighthouse-*.report.html
+artifacts/lighthouse-*.report.json
 dist-ssr
 *.local
 

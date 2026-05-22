@@ -48,15 +48,45 @@ const NotificationCenter = () => {
     const notifications = user ? storedNotifications : [];
     const unreadCount = notifications.filter((item) => !item.read).length;
 
+    const fetchNotifications = useCallback(async (options?: { silent?: boolean }) => {
+        if (!user) {
+            setStoredNotifications([]);
+            return;
+        }
+        if (!options?.silent) {
+            setIsLoading(true);
+        }
+        try {
+            const response = await authenticatedFetch(gatewayUrl('/api/v1/notifications'));
+            if (!response.ok) {
+                setError(await readApiError(response, 'Notification lookup failed'));
+                return;
+            }
+            const payload = await response.json() as BidmartNotification[] | { notifications?: BidmartNotification[] };
+            const next = Array.isArray(payload) ? payload : payload.notifications ?? [];
+            setStoredNotifications(next.slice(0, 20));
+            setError(null);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Notification lookup failed');
+        } finally {
+            if (!options?.silent) {
+                setIsLoading(false);
+            }
+        }
+    }, [authenticatedFetch, user]);
+
     const prependNotification = useCallback((payload: unknown) => {
         const next = notificationFromPayload(payload);
         setStoredNotifications((current) => {
-            if (current.some((item) => item.id === next.id)) {
+            if (current.some((item) => item.id === next.id || (next.sourceEventId && item.sourceEventId === next.sourceEventId))) {
                 return current;
             }
             return [next, ...current].slice(0, 20);
         });
-    }, []);
+        window.setTimeout(() => {
+            void fetchNotifications({ silent: true });
+        }, 150);
+    }, [fetchNotifications]);
 
     const replaceNotification = useCallback((updated: BidmartNotification) => {
         setStoredNotifications((current) => {
@@ -71,25 +101,14 @@ const NotificationCenter = () => {
             return;
         }
 
-        const fetchNotifications = async () => {
-            setIsLoading(true);
-            try {
-                const response = await authenticatedFetch(gatewayUrl('/api/v1/notifications'));
-                if (!response.ok) {
-                    setError(await readApiError(response, 'Notification lookup failed'));
-                    return;
-                }
-                const payload = await response.json() as BidmartNotification[] | { notifications?: BidmartNotification[] };
-                setStoredNotifications(Array.isArray(payload) ? payload.slice(0, 20) : (payload.notifications ?? []).slice(0, 20));
-            } catch (err: unknown) {
-                setError(err instanceof Error ? err.message : 'Notification lookup failed');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
         void fetchNotifications();
-    }, [authenticatedFetch, user]);
+    }, [fetchNotifications, user]);
+
+    useEffect(() => {
+        if (user && isConnected) {
+            void fetchNotifications({ silent: true });
+        }
+    }, [fetchNotifications, isConnected, user]);
 
     useEffect(() => {
         if (!user || !isConnected) {

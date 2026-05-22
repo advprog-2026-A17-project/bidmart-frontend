@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiUrl } from '../../../config/api';
 import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
 import { CATALOGUE_CATEGORIES_TREE_PATH } from '../api/endpoints';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { formatMoney, normalizeMoneyInput } from '../../../utils/money';
 import { useNowTick } from '../../../hooks/useNowTick';
 import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
@@ -45,11 +45,13 @@ interface SearchParams {
 }
 
 const CataloguePage: React.FC = () => {
+    const [urlSearchParams] = useSearchParams();
+    const initialCategory = urlSearchParams.get('category') ?? '';
     const [items, setItems] = useState<CatalogueItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
-    const [searchParams, setSearchParams] = useState<SearchParams>(EMPTY_SEARCH_PARAMS);
-    const [appliedParams, setAppliedParams] = useState<SearchParams>(EMPTY_SEARCH_PARAMS);
+    const [searchParams, setSearchParams] = useState<SearchParams>({ ...EMPTY_SEARCH_PARAMS, category: initialCategory });
+    const [appliedParams, setAppliedParams] = useState<SearchParams>({ ...EMPTY_SEARCH_PARAMS, category: initialCategory });
     const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
     const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
     const nowMs = useNowTick();

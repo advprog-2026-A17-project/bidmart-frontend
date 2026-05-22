@@ -1,7 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import SockJS from 'sockjs-client';
-import { Client } from '@stomp/stompjs';
-import type { IFrame, StompSubscription } from '@stomp/stompjs';
+import type { Client, IFrame, StompSubscription } from '@stomp/stompjs';
 import { apiUrl } from '../config/api';
 import { getPersistentItem } from '../utils/storage';
 
@@ -65,7 +63,16 @@ export const useWebSocket = (socketPath = '/ws', connectionKey?: string | null) 
         console.log('[WebSocket] Unsubscribed from:', destination);
     }, []);
 
-    const connect = useCallback(() => {
+    const connect = useCallback(async () => {
+        if (!connectionKey) {
+            return;
+        }
+
+        const [{ default: SockJS }, { Client }] = await Promise.all([
+            import('sockjs-client'),
+            import('@stomp/stompjs'),
+        ]);
+
         return new Promise<void>((resolve, reject) => {
             try {
                 const socketUrl = apiUrl(socketPath);
@@ -106,7 +113,7 @@ export const useWebSocket = (socketPath = '/ws', connectionKey?: string | null) 
                 reject(error);
             }
         });
-    }, [ensureStompSubscription, socketPath]);
+    }, [connectionKey, ensureStompSubscription, socketPath]);
 
     const attemptReconnect = useCallback(() => {
         if (reconnectAttemptsRef.current >= maxReconnectAttemptsRef.current) {
@@ -160,6 +167,17 @@ export const useWebSocket = (socketPath = '/ws', connectionKey?: string | null) 
     }, [removeStompSubscription]);
 
     useEffect(() => {
+        if (!connectionKey) {
+            if (clientRef.current?.active) {
+                clientRef.current.deactivate();
+            }
+            clientRef.current = null;
+            stompSubscriptionsRef.current.clear();
+            listenersRef.current.clear();
+            setIsConnected(false);
+            return;
+        }
+
         attemptReconnectRef.current = attemptReconnect;
         connect().catch((err) => console.error('[WebSocket] Initial connection failed:', err));
 

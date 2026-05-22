@@ -1,4 +1,5 @@
 import React from 'react';
+import AppIcon from '../../../components/AppIcon';
 
 export type OrderStatusValue =
     | 'CREATED'
@@ -6,19 +7,20 @@ export type OrderStatusValue =
     | 'SHIPPED'
     | 'CONFIRMED'
     | 'DISPUTED'
+    | 'REFUNDED'
     | string;
 
 type Step = {
     key: string;
     label: string;
-    icon: string;
+    icon: React.ComponentProps<typeof AppIcon>['name'];
 };
 
 const FULFILLMENT_STEPS: Step[] = [
-    { key: 'CREATED', label: 'Placed', icon: 'receipt_long' },
-    { key: 'PACKED', label: 'Packed', icon: 'inventory_2' },
-    { key: 'SHIPPED', label: 'Shipped', icon: 'local_shipping' },
-    { key: 'DONE', label: 'Complete', icon: 'check_circle' },
+    { key: 'CREATED', label: 'Placed', icon: 'list' },
+    { key: 'PACKED', label: 'Packed', icon: 'package' },
+    { key: 'SHIPPED', label: 'Shipped', icon: 'truck' },
+    { key: 'DONE', label: 'Complete', icon: 'check' },
 ];
 
 const statusRank = (status: OrderStatusValue): number => {
@@ -31,6 +33,7 @@ const statusRank = (status: OrderStatusValue): number => {
             return 2;
         case 'CONFIRMED':
         case 'DISPUTED':
+        case 'REFUNDED':
             return 3;
         default:
             return 0;
@@ -46,11 +49,13 @@ const statusHeadline = (status: OrderStatusValue): string => {
         case 'SHIPPED':
             return 'In transit';
         case 'CONFIRMED':
-            return 'Delivered & confirmed';
+            return 'Resolved for seller';
         case 'DISPUTED':
             return 'Dispute open';
+        case 'REFUNDED':
+            return 'Refunded to buyer';
         default:
-            return status;
+            return status ? status.replaceAll('_', ' ') : 'Unknown status';
     }
 };
 
@@ -63,9 +68,11 @@ const statusHint = (status: OrderStatusValue, role?: 'seller' | 'buyer'): string
         case 'SHIPPED':
             return role === 'buyer' ? 'Confirm receipt when the item arrives.' : 'Waiting for buyer confirmation.';
         case 'CONFIRMED':
-            return 'Payout is scheduled for the seller.';
+            return 'Dispute or delivery is resolved. Seller payout enters the hold window.';
         case 'DISPUTED':
-            return 'Under review — confirmation is paused.';
+            return 'Under review. Confirmation is paused until an admin resolves the dispute.';
+        case 'REFUNDED':
+            return 'The buyer won the dispute and the payment was refunded.';
         default:
             return '';
     }
@@ -88,8 +95,10 @@ const OrderStatusCard: React.FC<OrderStatusCardProps> = ({
 }) => {
     const rank = statusRank(status);
     const isDisputed = status === 'DISPUTED';
-    const finalStepLabel = isDisputed ? 'Disputed' : 'Complete';
-    const finalStepIcon = isDisputed ? 'gavel' : 'check_circle';
+    const isRefunded = status === 'REFUNDED';
+    const isSellerResolved = status === 'CONFIRMED';
+    const finalStepLabel = isDisputed ? 'In review' : isRefunded ? 'Refunded' : isSellerResolved ? 'Resolved' : 'Complete';
+    const finalStepIcon: React.ComponentProps<typeof AppIcon>['name'] = isDisputed ? 'gavel' : isRefunded ? 'refresh' : 'check';
 
     return (
         <section
@@ -125,12 +134,12 @@ const OrderStatusCard: React.FC<OrderStatusCardProps> = ({
                                 'order-status-step',
                                 completed ? 'order-status-step-done' : '',
                                 active ? 'order-status-step-active' : '',
-                                isFinal && isDisputed ? 'order-status-step-disputed' : '',
+                                isFinal && (isDisputed || isRefunded) ? 'order-status-step-disputed' : '',
                                 isFinal && active && !isDisputed ? 'order-status-step-active' : '',
                             ].filter(Boolean).join(' ')}
                         >
-                            <span className="order-status-step-icon material-symbols-outlined" aria-hidden="true">
-                                {icon}
+                            <span className="order-status-step-icon" aria-hidden="true">
+                                <AppIcon name={icon} />
                             </span>
                             <span className="order-status-step-label">{label}</span>
                         </li>

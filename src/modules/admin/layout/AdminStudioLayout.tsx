@@ -3,7 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 const AdminStudioLayout: React.FC = () => (
     <div className="page-wrap admin-studio-layout">
-        <aside className="admin-studio-sidebar panel">
+        <header className="admin-studio-header panel">
             <p className="eyebrow">Admin Studio</p>
             <nav className="admin-studio-nav">
                 <NavLink to="/admin/studio/users" className={({ isActive }) => `admin-studio-link ${isActive ? 'is-active' : ''}`}>
@@ -16,7 +16,7 @@ const AdminStudioLayout: React.FC = () => (
                     Disputes
                 </NavLink>
             </nav>
-        </aside>
+        </header>
         <section className="admin-studio-content">
             <Outlet />
         </section>

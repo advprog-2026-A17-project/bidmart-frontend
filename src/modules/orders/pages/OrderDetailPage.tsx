@@ -9,6 +9,7 @@ import { useNotificationRealtime } from '../../../hooks/useNotificationRealtime'
 import { formatMoney } from '../../../utils/money';
 import OrderStatusCard from '../components/OrderStatusCard';
 import PageToast from '../../../components/PageToast';
+import AppIcon from '../../../components/AppIcon';
 
 type OrderRecord = {
     id: string;
@@ -213,7 +214,7 @@ const OrderDetailPage: React.FC = () => {
                 </section>
                 <PageToast error={error} />
                 <section className="panel center-content">
-                    <span className="material-symbols-outlined section-title-icon" aria-hidden="true">receipt_long</span>
+                    <AppIcon name="list" className="section-title-icon" />
                     <h2>Order not found</h2>
                     <p className="text-muted">We could not load the requested order.</p>
                     <Link className="primary-button" to="/orders">Back to orders</Link>
@@ -232,7 +233,7 @@ const OrderDetailPage: React.FC = () => {
                     <p>Monitor shipping progress and finalize delivery confirmation.</p>
                 </div>
                 <Link className="secondary-button" to={`/listings/${order.listingId}`}>
-                    <span className="material-symbols-outlined" aria-hidden="true">inventory_2</span>
+                    <AppIcon name="package" />
                     View Listing
                 </Link>
             </section>
@@ -280,42 +281,33 @@ const OrderDetailPage: React.FC = () => {
             </article>
 
             {isSeller && order.status !== 'CONFIRMED' && (
-                <section className="panel section-stack" style={{ marginTop: '1.5rem' }}>
+                <section className="panel order-action-panel section-stack">
                     <h2>Update Shipping</h2>
                     <p className="text-muted">Advance shipping status in order: Packed then Shipped.</p>
 
                     {/* Carrier dropdown — only shown when PACKED, right before marking as Shipped */}
                     {order.status === 'PACKED' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '20rem' }}>
-                            <label htmlFor="carrier-select" style={{ fontWeight: 600 }}>
+                        <div className="order-form-grid">
+                            <label htmlFor="carrier-select" className="field">
+                                <span>
                                 Courier <span style={{ color: 'var(--color-danger, #e55)' }}>*</span>
+                                </span>
+                                <select
+                                    id="carrier-select"
+                                    className={`form-input ${carrierError ? 'form-input-error' : ''}`}
+                                    value={selectedCarrier}
+                                    onChange={(e) => {
+                                        setSelectedCarrier(e.target.value);
+                                        setCarrierError(null);
+                                    }}
+                                >
+                                    <option value="">Select courier</option>
+                                    {CARRIER_OPTIONS.map((c) => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
                             </label>
-                            <select
-                                id="carrier-select"
-                                value={selectedCarrier}
-                                onChange={(e) => {
-                                    setSelectedCarrier(e.target.value);
-                                    setCarrierError(null);
-                                }}
-                                style={{
-                                    padding: '0.5rem 0.75rem',
-                                    borderRadius: '0.5rem',
-                                    border: `1px solid ${carrierError ? 'var(--color-danger, #e55)' : 'var(--color-border, #333)'}`,
-                                    background: 'var(--color-surface, #1e1e2e)',
-                                    color: 'var(--color-text, #fff)',
-                                    fontSize: '0.95rem',
-                                }}
-                            >
-                                <option value="">— Select courier —</option>
-                                {CARRIER_OPTIONS.map((c) => (
-                                    <option key={c} value={c}>{c}</option>
-                                ))}
-                            </select>
-                            {carrierError && (
-                                <p style={{ color: 'var(--color-danger, #e55)', margin: 0, fontSize: '0.875rem' }}>
-                                    {carrierError}
-                                </p>
-                            )}
+                            {carrierError && <p className="field-error">{carrierError}</p>}
                         </div>
                     )}
 
@@ -336,7 +328,7 @@ const OrderDetailPage: React.FC = () => {
             )}
 
             {isBuyer && order.status === 'SHIPPED' && (
-                <section className="panel section-stack" style={{ marginTop: '1.5rem' }}>
+                <section className="panel order-action-panel section-stack">
                     <h2>Confirm Receipt</h2>
                     <p className="text-muted">Confirm when the order has arrived.</p>
                     <button type="button" className="primary-button" onClick={confirmReceipt}>
@@ -346,16 +338,16 @@ const OrderDetailPage: React.FC = () => {
             )}
 
             {isBuyer && order.status === 'SHIPPED' && (
-                <section className="panel section-stack" style={{ marginTop: '1.5rem' }}>
+                <section className="panel order-action-panel order-dispute-panel section-stack">
                     <h2>Open Dispute</h2>
                     <p className="text-muted">Report delivery issues before confirming receipt.</p>
-                    <label>
-                        Reason
-                        <input value={disputeReason} onChange={(event) => setDisputeReason(event.target.value)} />
+                    <label className="field">
+                        <span>Reason</span>
+                        <input className="form-input" value={disputeReason} onChange={(event) => setDisputeReason(event.target.value)} />
                     </label>
-                    <label>
-                        Details
-                        <textarea value={disputeDetails} onChange={(event) => setDisputeDetails(event.target.value)} />
+                    <label className="field">
+                        <span>Details</span>
+                        <textarea className="form-input" rows={5} value={disputeDetails} onChange={(event) => setDisputeDetails(event.target.value)} />
                     </label>
                     <button type="button" className="danger-button" onClick={openDispute}>
                         Open Dispute

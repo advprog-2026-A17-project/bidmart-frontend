@@ -17,6 +17,8 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
   const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
   const app = read('./src/App.tsx');
+  const appRoutes = read('./src/layout/AppRoutes.tsx');
+  const appShell = app + appRoutes + read('./src/layout/Navbar.tsx');
   const globalErrorBoundary = read('./src/components/GlobalErrorBoundary.tsx');
   const packageJson = read('./package.json');
 
@@ -44,12 +46,12 @@ test('frontend auth and marketplace flows use real authenticated context', () =>
   assert.match(profilePage, /Set Password/);
   assert.match(profilePage, /\/api\/v1\/auth\/oauth\/link/);
   assert.match(profilePage, /Connected Accounts/);
-  assert.match(app, /\/seller-studio/);
+  assert.match(appShell, /\/seller-studio/);
   assert.doesNotMatch(authContext, /activeRole/);
   assert.doesNotMatch(authContext, /switchRole/);
   assert.match(read('./src/context/primaryRole.ts'), /export const primaryRole/);
-  assert.match(app, /RoleHome/);
-  assert.match(app, /ProfilePage/);
+  assert.match(appShell, /RoleHome/);
+  assert.match(appShell, /ProfilePage/);
   assert.match(app, /GlobalErrorBoundary/);
   assert.match(globalErrorBoundary, /role="alert"/);
   assert.match(globalErrorBoundary, /inline-alert-error/);
@@ -75,6 +77,7 @@ test('frontend demo flow uses lifecycle calls, rupiah wallet amounts, and realti
   const paymentUtils = read('./src/modules/wallet/utils/payment.ts');
   const notificationCenter = read('./src/modules/notifications/components/NotificationCenter.tsx');
   const app = read('./src/App.tsx');
+  const appShell = app + read('./src/layout/AppRoutes.tsx') + read('./src/layout/Navbar.tsx');
 
   assert.match(sellPage, /publishCreatedListing/);
   assert.match(sellPage, /createListingPayload/);
@@ -101,7 +104,7 @@ test('frontend demo flow uses lifecycle calls, rupiah wallet amounts, and realti
   assert.match(paymentDetailPage, /formatPaymentMethod/);
   assert.match(walletPage, /Continue to Payment/);
   assert.match(paymentUtils, /redirectUrl/);
-  assert.match(app, /\/wallet\/payments\/:paymentId/);
+  assert.match(appShell, /\/wallet\/payments\/:paymentId/);
   assert.match(walletPage, /\/withdrawals/);
   assert.match(walletPage, /bankCode/);
   assert.match(walletPage, /accountNumber/);
@@ -117,7 +120,7 @@ test('frontend demo flow uses lifecycle calls, rupiah wallet amounts, and realti
   assert.match(notificationCenter, /notification-bell-button/);
   assert.match(notificationCenter, /notification-popover/);
   assert.doesNotMatch(app, /<Navbar \/>\s*<NotificationCenter \/>/);
-  assert.match(app, /NotificationCenter/);
+  assert.match(appShell, /NotificationCenter/);
 });
 
 test('frontend uses skeleton loading states for core async surfaces', () => {
@@ -126,6 +129,9 @@ test('frontend uses skeleton loading states for core async surfaces', () => {
   const walletPage = read('./src/modules/wallet/pages/WalletPage.tsx');
   const notificationCenter = read('./src/modules/notifications/components/NotificationCenter.tsx');
   const appStyles = read('./src/App.css');
+  const homeListings = read('./src/modules/home/useHomeListings.ts');
+  const heroCarousel = read('./src/modules/home/components/HeroCarousel.tsx');
+  const featuredAuctions = read('./src/modules/home/components/FeaturedAuctions.tsx');
 
   assert.match(cataloguePage, /aria-label="Loading listings"/);
   assert.match(listingDetail, /aria-label="Loading listing"/);
@@ -133,11 +139,17 @@ test('frontend uses skeleton loading states for core async surfaces', () => {
   assert.match(notificationCenter, /aria-label="Loading notifications"/);
   assert.match(appStyles, /skeleton-pulse/);
   assert.match(appStyles, /skeleton-card/);
+  assert.doesNotMatch(homeListings, /fallbackListings/);
+  assert.match(homeListings, /setListings\(parsed\)/);
+  assert.match(homeListings, /setListings\(\[\]\)/);
+  assert.match(heroCarousel, /Marketplace photo highlights/);
+  assert.doesNotMatch(heroCarousel, /View Auction/);
+  assert.match(featuredAuctions, /No live auctions from backend yet/);
 });
 
 test('frontend sell flow is gated to seller accounts before any listing request is sent', () => {
   const sellPage = read('./src/modules/catalogue/pages/SellPage.tsx');
-  const app = read('./src/App.tsx');
+  const app = read('./src/App.tsx') + read('./src/layout/AppRoutes.tsx');
 
   assert.match(sellPage, /role\.name === 'SELLER'/);
   assert.match(sellPage, /Listing permissions are required to publish/);

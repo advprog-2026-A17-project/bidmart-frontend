@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import AppIcon from './AppIcon';
 
 const BackButton: React.FC<{ label?: string; fallback?: string }> = ({ label = 'Back', fallback = '/' }) => {
     const navigate = useNavigate();
@@ -14,7 +15,7 @@ const BackButton: React.FC<{ label?: string; fallback?: string }> = ({ label = '
 
     return (
         <button type="button" className="back-button" onClick={goBack}>
-            <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+            <AppIcon name="chevronLeft" size={18} />
             {label}
         </button>
     );

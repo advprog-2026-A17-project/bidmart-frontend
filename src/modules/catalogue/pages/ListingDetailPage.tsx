@@ -26,6 +26,7 @@ import { fetchPublicSellerProfile, type PublicSellerProfile } from '../../auth/u
 import { fetchPublicUserProfiles } from '../../auth/utils/public-profiles';
 import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
 import { centsToAmount, centsToAmountFromUnknown, toIsoFromUnixSeconds } from '../../../utils/auction-units';
+import AppIcon from '../../../components/AppIcon';
 
 type ListingDetail = {
     id: string;
@@ -93,6 +94,45 @@ const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
 const bidAmountFromItem = (bid: BidHistoryItem): number =>
     bid.bidAmount ?? (typeof bid.bid_amount_cents === 'number' ? bid.bid_amount_cents / 100 : 0);
 
+const bidTimeMs = (bid: BidHistoryItem): number => {
+    if (typeof bid.bid_time === 'number') return bid.bid_time * 1000;
+    const parsed = bid.bidTime ? new Date(bid.bidTime).getTime() : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const sortBidHistory = (items: BidHistoryItem[]): BidHistoryItem[] => {
+    const byId = new Map<string, BidHistoryItem>();
+    items.forEach((item) => {
+        byId.set(item.id, item);
+    });
+    return Array.from(byId.values()).sort((a, b) => {
+        const amountDiff = bidAmountFromItem(b) - bidAmountFromItem(a);
+        if (amountDiff !== 0) return amountDiff;
+        const timeDiff = bidTimeMs(b) - bidTimeMs(a);
+        if (timeDiff !== 0) return timeDiff;
+        return String(b.id).localeCompare(String(a.id));
+    });
+};
+
+const mergeListingPatch = (previous: ListingDetail, patch: Partial<ListingDetail>): ListingDetail => {
+    const next = { ...previous, ...patch };
+    if (previous.endTime && patch.endTime) {
+        const previousEnd = new Date(previous.endTime).getTime();
+        const patchEnd = new Date(patch.endTime).getTime();
+        if (Number.isFinite(previousEnd) && Number.isFinite(patchEnd) && patchEnd < previousEnd) {
+            next.endTime = previous.endTime;
+        }
+    }
+    if (
+        typeof previous.currentPrice === 'number'
+        && typeof patch.currentPrice === 'number'
+        && patch.currentPrice < previous.currentPrice
+    ) {
+        next.currentPrice = previous.currentPrice;
+    }
+    return next;
+};
+
 const proxyMaxAmountFromResponse = (payload: ProxyBidResponse): number | null => {
     if (typeof payload.maxBidAmount === 'number') {
         return payload.maxBidAmount;
@@ -140,10 +180,10 @@ const bidHistoryItemFromRealtimeEvent = (event: AuctionRealtimeEvent): BidHistor
 const mergeRealtimeBidHistory = (
     currentBids: BidHistoryItem[],
     realtimeBid: BidHistoryItem,
-): BidHistoryItem[] => [
+): BidHistoryItem[] => sortBidHistory([
     realtimeBid,
     ...currentBids.filter((bid) => bid.id !== realtimeBid.id),
-];
+]);
 
 const toIsoDate = (value?: string | null): string | null => {
     if (!value) return null;
@@ -195,7 +235,7 @@ const ListingDetailPage: React.FC = () => {
             const bidResponse = await fetch(apiUrl(biddingListingPath(listingId, '/bids')));
             if (bidResponse.ok) {
                 const bidPayload = await bidResponse.json() as BidHistoryItem[] | { items?: BidHistoryItem[] };
-                setBids(Array.isArray(bidPayload) ? bidPayload : bidPayload.items ?? []);
+                setBids(sortBidHistory(Array.isArray(bidPayload) ? bidPayload : bidPayload.items ?? []));
             }
         } catch {
             /* keep existing bids on transient failure */
@@ -345,7 +385,7 @@ const ListingDetailPage: React.FC = () => {
                     auctionPatch = await fetchAuctionSnapshotPatch();
                 }
             }
-            const mergedListing = auctionPatch ? { ...listingPayload, ...auctionPatch } : listingPayload;
+            const mergedListing = auctionPatch ? mergeListingPatch(listingPayload, auctionPatch) : listingPayload;
             setListing(mergedListing);
 
             const profile = await fetchPublicSellerProfile(String(mergedListing.sellerId));
@@ -385,9 +425,9 @@ const ListingDetailPage: React.FC = () => {
         }
         const patch = buildListingPatchFromRealtimeEvent(event);
         if (patch) {
-            setListing((prev) => prev ? { ...prev, ...patch } : prev);
+            setListing((prev) => prev ? mergeListingPatch(prev, patch) : prev);
             const meta = buildAuctionCardMeta(
-                catalogueListingToAuction({ ...(listing ?? {}), ...patch } as unknown as CatalogueListing),
+                catalogueListingToAuction(mergeListingPatch((listing ?? {}) as ListingDetail, patch) as unknown as CatalogueListing),
                 nowMs
             );
             setBidInput(normalizeRupiahInput(meta.minNextBid));
@@ -396,8 +436,12 @@ const ListingDetailPage: React.FC = () => {
         if (realtimeBid) {
             setBids((previous) => mergeRealtimeBidHistory(previous, realtimeBid));
         }
+        const eventType = (event.type ?? '').toLowerCase();
+        if (eventType.includes('ended') || eventType.includes('closed')) {
+            void fetchListing({ silent: true });
+        }
         void fetchBids();
-    }, [fetchBids, listing, listingId, nowMs]);
+    }, [fetchBids, fetchListing, listing, listingId, nowMs]);
 
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
 
@@ -409,7 +453,7 @@ const ListingDetailPage: React.FC = () => {
                 if (!patch) return;
                 setListing((prev) => {
                     if (!prev) return prev;
-                    const next = { ...prev, ...patch };
+                    const next = mergeListingPatch(prev, patch);
                     const meta = buildAuctionCardMeta(catalogueListingToAuction(next as unknown as CatalogueListing));
                     setBidInput(normalizeRupiahInput(meta.minNextBid));
                     return next;
@@ -704,7 +748,7 @@ const ListingDetailPage: React.FC = () => {
 
                         {listing.condition && (
                             <div className="seller-info-block">
-                                <span className="material-symbols-outlined" aria-hidden="true">inventory_2</span>
+                                <AppIcon name="package" />
                                 <div>
                                     <span className="metric-label">Condition</span>
                                     <strong style={{ textTransform: 'capitalize' }}>{listing.condition}</strong>
@@ -737,9 +781,7 @@ const ListingDetailPage: React.FC = () => {
                     {isLive && !isSeller ? (
                         <aside className="bid-console">
                             <div className={`bid-console-status ${listingMeta.isClosed ? 'bid-console-status-closed' : ''}`}>
-                                <span className="material-symbols-outlined" aria-hidden="true">
-                                    {listingMeta.isClosed ? 'lock' : 'gavel'}
-                                </span>
+                                <AppIcon name={listingMeta.isClosed ? 'close' : 'gavel'} />
                                 {listingMeta.isClosed ? 'Listing closed' : 'Open for bidding'}
                             </div>
                             <div className="bid-console-body">
@@ -890,7 +932,7 @@ const ListingDetailPage: React.FC = () => {
                                 })
                             ) : (
                                 <div className="bid-history-card bid-history-card-empty">
-                                    <span className="material-symbols-outlined" aria-hidden="true">gavel</span>
+                                    <AppIcon name="gavel" />
                                     <div>
                                         <strong>{isEnded ? 'No bids recorded' : 'No bids yet'}</strong>
                                         <span>{isEnded ? 'This auction ended without bid history.' : 'Be the first to bid when the listing is live.'}</span>

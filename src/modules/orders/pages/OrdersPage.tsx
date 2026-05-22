@@ -9,6 +9,7 @@ import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { useNotificationRealtime } from '../../../hooks/useNotificationRealtime';
 import { formatMoney } from '../../../utils/money';
 import OrderStatusCard from '../components/OrderStatusCard';
+import AppIcon from '../../../components/AppIcon';
 
 type OrderRecord = {
     id: string;
@@ -41,6 +42,10 @@ const OrdersPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [disputeOrder, setDisputeOrder] = useState<OrderRecord | null>(null);
+    const [disputeReason, setDisputeReason] = useState('Never received');
+    const [disputeDetails, setDisputeDetails] = useState('');
+    const [disputeSaving, setDisputeSaving] = useState(false);
 
     const fetchOrders = useCallback(async () => {
         if (!user) {
@@ -136,6 +141,39 @@ const OrdersPage: React.FC = () => {
         }
     };
 
+    const openDispute = async () => {
+        if (!disputeOrder) return;
+        if (!disputeReason.trim() || !disputeDetails.trim()) {
+            setError('Please provide a dispute reason and details.');
+            return;
+        }
+        try {
+            setDisputeSaving(true);
+            setError(null);
+            setNotice(null);
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/orders/${encodeURIComponent(disputeOrder.id)}/dispute`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reason: disputeReason.trim(),
+                    details: disputeDetails.trim(),
+                }),
+            });
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Open dispute failed'));
+            }
+            setNotice('Dispute opened. Admin will review it from the dispute console.');
+            setDisputeOrder(null);
+            setDisputeReason('Never received');
+            setDisputeDetails('');
+            await fetchOrders();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Unable to open dispute.');
+        } finally {
+            setDisputeSaving(false);
+        }
+    };
+
     if (!user) {
         return (
             <div className="page-wrap">
@@ -169,7 +207,7 @@ const OrdersPage: React.FC = () => {
                     <p>{isSellerView ? 'Monitor buyer orders, shipping progress, and settlement status for your sold listings.' : 'Track auctions you won after the seller settles them.'}</p>
                 </div>
                 <Link className="secondary-button" to="/">
-                    <span className="material-symbols-outlined" aria-hidden="true">gavel</span>
+                    <AppIcon name="gavel" />
                     Marketplace
                 </Link>
             </section>
@@ -178,7 +216,7 @@ const OrdersPage: React.FC = () => {
 
             <section className="seller-studio-overview" aria-label="Order summary">
                 <div className="studio-kpi-card">
-                    <span className="material-symbols-outlined" aria-hidden="true">inventory_2</span>
+                    <AppIcon name="package" className="studio-kpi-icon" />
                     <div>
                         <strong>{loading ? '--' : orders.length}</strong>
                         <small>{isSellerView ? 'Orders to fulfill' : 'Won auction orders'}</small>
@@ -186,7 +224,7 @@ const OrdersPage: React.FC = () => {
                 </div>
                 {isSellerView && (
                     <div className="studio-kpi-card">
-                        <span className="material-symbols-outlined" aria-hidden="true">payments</span>
+                        <AppIcon name="wallet" className="studio-kpi-icon" />
                         <div>
                             <strong>{loading ? '--' : formatMoney(totalValue)}</strong>
                             <small>Total expected receivable</small>
@@ -262,6 +300,15 @@ const OrdersPage: React.FC = () => {
                                             Confirm Receipt
                                         </button>
                                     )}
+                                    {isBuyer && order.status === 'SHIPPED' && (
+                                        <button
+                                            type="button"
+                                            className="danger-button"
+                                            onClick={() => setDisputeOrder(order)}
+                                        >
+                                            Open Dispute
+                                        </button>
+                                    )}
                                 </div>
                             </article>
                         );
@@ -280,6 +327,60 @@ const OrdersPage: React.FC = () => {
                         Browse Marketplace
                     </Link>
                 </section>
+            )}
+            {disputeOrder && (
+                <div className="modal-backdrop order-dispute-backdrop" role="presentation">
+                    <section
+                        className="panel order-dispute-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="order-dispute-title"
+                    >
+                        <div className="order-dispute-modal-head">
+                            <div>
+                                <p className="eyebrow">Buyer dispute</p>
+                                <h2 id="order-dispute-title">Open a dispute</h2>
+                                <p className="text-muted">Describe the delivery issue clearly so admin can resolve it.</p>
+                            </div>
+                            <button
+                                type="button"
+                                className="icon-button"
+                                aria-label="Close dispute form"
+                                onClick={() => setDisputeOrder(null)}
+                                disabled={disputeSaving}
+                            >
+                                <AppIcon name="close" />
+                            </button>
+                        </div>
+                        <label className="field">
+                            <span>Reason</span>
+                            <input
+                                className="form-input"
+                                value={disputeReason}
+                                onChange={(event) => setDisputeReason(event.target.value)}
+                                placeholder="Missing package, damaged item, wrong item"
+                            />
+                        </label>
+                        <label className="field">
+                            <span>Details</span>
+                            <textarea
+                                className="form-input"
+                                rows={5}
+                                value={disputeDetails}
+                                onChange={(event) => setDisputeDetails(event.target.value)}
+                                placeholder="Add timeline, tracking condition, and evidence summary"
+                            />
+                        </label>
+                        <div className="management-actions">
+                            <button type="button" className="danger-button" onClick={() => void openDispute()} disabled={disputeSaving}>
+                                {disputeSaving ? 'Submitting...' : 'Submit dispute'}
+                            </button>
+                            <button type="button" className="secondary-button" onClick={() => setDisputeOrder(null)} disabled={disputeSaving}>
+                                Cancel
+                            </button>
+                        </div>
+                    </section>
+                </div>
             )}
         </div>
     );
