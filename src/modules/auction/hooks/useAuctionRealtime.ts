@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { useNotificationsWebSocket } from '../../../context/NotificationsWebSocketContext';
+import { useEffect, useMemo, useRef } from 'react';
+import { useNotificationsWebSocket } from '../../../context/useNotificationsWebSocket';
 
 export type AuctionRealtimeEvent = {
     type?: string;
@@ -18,12 +18,16 @@ export const useAuctionRealtime = (
 ) => {
     const { isConnected, subscribe, unsubscribe } = useNotificationsWebSocket();
     const onEventRef = useRef(onEvent);
-    onEventRef.current = onEvent;
-
-    const topicKey = destinationsKey(destinations);
 
     useEffect(() => {
-        if (!isConnected || destinations.length === 0) {
+        onEventRef.current = onEvent;
+    }, [onEvent]);
+
+    const stableDestinations = useMemo(() => [...destinations], [destinations]);
+    const topicKey = destinationsKey(stableDestinations);
+
+    useEffect(() => {
+        if (!isConnected || stableDestinations.length === 0) {
             return;
         }
 
@@ -31,14 +35,14 @@ export const useAuctionRealtime = (
             onEventRef.current(payload as AuctionRealtimeEvent);
         };
 
-        destinations.forEach((destination) => {
+        stableDestinations.forEach((destination) => {
             subscribe(destination, wrappedHandler);
         });
 
         return () => {
-            destinations.forEach((destination) => unsubscribe(destination));
+            stableDestinations.forEach((destination) => unsubscribe(destination));
         };
-    }, [topicKey, isConnected, subscribe, unsubscribe]);
+    }, [topicKey, stableDestinations, isConnected, subscribe, unsubscribe]);
 
     return { isConnected };
 };

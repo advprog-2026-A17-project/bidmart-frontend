@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
-import { useNotificationsWebSocket } from '../../../context/NotificationsWebSocketContext';
+import { useNotificationsWebSocket } from '../../../context/useNotificationsWebSocket';
 
 interface BidmartNotification {
     id: string;

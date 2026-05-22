@@ -6,7 +6,7 @@ import { useAuth } from '../../../context/useAuth';
 import { isSellerUser, primaryRole } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { useWalletUI } from '../../../context/WalletUIContext';
-import { useNotificationsWebSocket } from '../../../context/NotificationsWebSocketContext';
+import { useNotificationsWebSocket } from '../../../context/useNotificationsWebSocket';
 import PageToast from '../../../components/PageToast';
 import { normalizeMoneyInput, toRupiahAmount } from '../../../utils/money';
 import {

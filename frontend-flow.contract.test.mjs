@@ -110,7 +110,7 @@ test('frontend demo flow uses lifecycle calls, rupiah wallet amounts, and realti
   assert.doesNotMatch(walletPage, /Mark Paid|Mark Failed|Expire|Fail and Reverse/);
   assert.doesNotMatch(walletPage, /Open Midtrans Simulator|Sync Payment Status|Create Sandbox Payment Intent/);
 
-  assert.match(notificationCenter, /useWebSocket/);
+  assert.match(notificationCenter, /useNotificationsWebSocket/);
   assert.match(notificationCenter, /\/user\/queue\/notifications/);
   assert.match(notificationCenter, /\/api\/v1\/notifications/);
   assert.match(notificationCenter, /notification-bell-button/);
