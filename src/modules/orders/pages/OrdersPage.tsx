@@ -200,7 +200,7 @@ const OrdersPage: React.FC = () => {
                     <span className="skeleton-button" />
                 </div>
             ) : orders.length > 0 ? (
-                <div className="management-list">
+                <div className="management-list orders-list">
                     {orders.map((order) => {
                         const listing = listingsById[order.listingId];
                         const isBuyer = user?.id === order.buyerId;

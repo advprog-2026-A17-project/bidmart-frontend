@@ -26,8 +26,8 @@ const notificationFromPayload = (payload: unknown): BidmartNotification => {
         title: String(source.title ?? source.type ?? 'Notification'),
         message: String(source.message ?? ''),
         type: String(source.type ?? 'INFO'),
-        status: source.read ? 'READ' : 'UNREAD',
-        read: Boolean(source.read ?? false),
+        status: source.read || source.status === 'READ' ? 'READ' : 'UNREAD',
+        read: Boolean(source.read ?? source.status === 'READ'),
         sourceEventId: source.sourceEventId ? String(source.sourceEventId) : undefined,
         readAt: source.readAt ? String(source.readAt) : null,
         createdAt: String(source.createdAt ?? new Date().toISOString()),
@@ -96,8 +96,12 @@ const NotificationCenter = () => {
             return;
         }
 
-        const release = subscribe('/user/queue/notifications', prependNotification);
-        return release;
+        const releaseQueue = subscribe('/user/queue/notifications', prependNotification);
+        const releaseTopic = subscribe(`/topic/notifications/users/${user.id}`, prependNotification);
+        return () => {
+            releaseQueue();
+            releaseTopic();
+        };
     }, [isConnected, prependNotification, subscribe, user]);
 
     useEffect(() => {

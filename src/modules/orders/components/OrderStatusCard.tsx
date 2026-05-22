@@ -103,7 +103,13 @@ const OrderStatusCard: React.FC<OrderStatusCardProps> = ({
                 )}
             </div>
 
-            <ol className="order-status-steps">
+            <ol
+                className={[
+                    'order-status-steps',
+                    `order-status-steps-rank-${rank}`,
+                    isDisputed ? 'order-status-steps-disputed' : '',
+                ].filter(Boolean).join(' ')}
+            >
                 {FULFILLMENT_STEPS.map((step, index) => {
                     const isFinal = step.key === 'DONE';
                     const stepRank = isFinal ? 3 : index;

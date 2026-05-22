@@ -120,13 +120,14 @@ const WalletPage: React.FC = () => {
     const [withdrawAccountNumber, setWithdrawAccountNumber] = useState<string>('');
     const [pendingPayment, setPendingPayment] = useState<PaymentIntent | null>(null);
     const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawalRequestState | null>(null);
-    const { showBalance, setShowBalance } = useWalletUI();
+    const { showBalance, setShowBalance, setWalletSnapshot } = useWalletUI();
     const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw'>('overview');
     const fetchWallet = useCallback(async () => {
         setLoading(true);
         setError(null);
         if (!user) {
             setWallet(null);
+            setWalletSnapshot(null);
             setHistory([]);
             setUnpaidPayments([]);
             setLoading(false);
@@ -140,7 +141,12 @@ const WalletPage: React.FC = () => {
                 return;
             }
             const data = await response.json();
-            setWallet(data.wallet ?? data);
+            const nextWallet = data.wallet ?? data;
+            setWallet(nextWallet);
+            setWalletSnapshot({
+                activeBalance: nextWallet?.activeBalance ?? null,
+                heldBalance: nextWallet?.heldBalance ?? null,
+            });
             setHistory(data.history ?? []);
             setUnpaidPayments(data.unpaidPayments ?? []);
         } catch (err: unknown) {
@@ -149,7 +155,7 @@ const WalletPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [authenticatedFetch, user, walletRole]);
+    }, [authenticatedFetch, user, walletRole, setWalletSnapshot]);
 
     useEffect(() => {
         if (isSellerUser(user) && activeTab === 'deposit') {
@@ -172,7 +178,7 @@ const WalletPage: React.FC = () => {
             return;
         }
 
-        const release = subscribe('/user/queue/notifications', (payload) => {
+        const handleWalletEvent = (payload: unknown) => {
             const event = payload as { type?: string; payload?: { type?: string } };
             const type = String(event.payload?.type ?? event.type ?? '').toUpperCase();
             if (
@@ -183,8 +189,13 @@ const WalletPage: React.FC = () => {
             ) {
                 void fetchWallet();
             }
-        });
-        return release;
+        };
+        const releaseQueue = subscribe('/user/queue/notifications', handleWalletEvent);
+        const releaseTopic = subscribe(`/topic/notifications/users/${user.id}`, handleWalletEvent);
+        return () => {
+            releaseQueue();
+            releaseTopic();
+        };
     }, [fetchWallet, isConnected, subscribe, user]);
 
     useEffect(() => {

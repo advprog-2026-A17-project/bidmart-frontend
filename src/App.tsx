@@ -45,12 +45,12 @@ const Navbar = () => {
     const displayName = user?.displayName?.trim() || user?.email;
     const [sessionRemainingSeconds, setSessionRemainingSeconds] = useState<number | null>(null);
 
-    const [walletBalance, setWalletBalance] = useState<number | null>(null);
-    const { showBalance, setShowBalance } = useWalletUI();
+    const { showBalance, setShowBalance, walletSnapshot, setWalletSnapshot } = useWalletUI();
+    const walletBalance = walletSnapshot?.activeBalance ?? null;
 
     useEffect(() => {
         if (!user || isAdmin) {
-            setTimeout(() => setWalletBalance(null), 0);
+            setWalletSnapshot(null);
             return;
         }
 
@@ -65,10 +65,14 @@ const Navbar = () => {
                 if (response.ok) {
                     const data = await response.json();
                     if (active) {
-                        setWalletBalance(data.wallet?.activeBalance ?? data.activeBalance ?? null);
+                        const wallet = data.wallet ?? data;
+                        setWalletSnapshot({
+                            activeBalance: wallet?.activeBalance ?? null,
+                            heldBalance: wallet?.heldBalance ?? null,
+                        });
                     }
                 } else if (response.status === 404 || response.status === 500) {
-                    if (active) setWalletBalance(null);
+                    if (active) setWalletSnapshot(null);
                 }
             } catch (err) {
                 console.error('Failed to fetch wallet for navbar:', err);
@@ -78,7 +82,7 @@ const Navbar = () => {
         void fetchWallet();
 
         if (isConnected) {
-            const release = subscribe('/user/queue/notifications', (payload) => {
+            const handleWalletEvent = (payload: unknown) => {
                 const event = payload as { type?: string; payload?: { type?: string } };
                 const type = String(event.payload?.type ?? event.type ?? '').toUpperCase();
                 if (
@@ -89,17 +93,20 @@ const Navbar = () => {
                 ) {
                     void fetchWallet();
                 }
-            });
+            };
+            const releaseQueue = subscribe('/user/queue/notifications', handleWalletEvent);
+            const releaseTopic = subscribe(`/topic/notifications/users/${user.id}`, handleWalletEvent);
             return () => {
                 active = false;
-                release();
+                releaseQueue();
+                releaseTopic();
             };
         }
 
         return () => {
             active = false;
         };
-    }, [user, isAdmin, authenticatedFetch, isConnected, subscribe]);
+    }, [user, isAdmin, authenticatedFetch, isConnected, subscribe, setWalletSnapshot]);
 
     useEffect(() => {
         if (!sessionExpiresAt || !user) {
