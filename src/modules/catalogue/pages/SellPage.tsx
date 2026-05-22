@@ -96,6 +96,16 @@ const toDateTimeLocalValue = (date: Date): string => {
     return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 };
 
+/** Convert datetime-local input (local wall time) to UTC ISO for the catalogue API. */
+const toAuctionEndTimeIso = (value: string): string | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const localWall = trimmed.length === 16 ? `${trimmed}:00` : trimmed;
+    const parsed = new Date(localWall);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toISOString();
+};
+
 const toListingAmount = (value: string): number => toRupiahAmount(value);
 const fromListingAmount = (value?: number | null): string => normalizeRupiahInput(value);
 const toErrorMessage = (err: unknown): string =>
@@ -453,11 +463,12 @@ const SellPage: React.FC = () => {
             category: selectedCategory?.name ?? form.category,
             ...(selectedCategory ? { categoryEntity: { id: selectedCategory.id } } : {}),
             condition: form.condition,
+            status: 'DRAFT',
             sellerId: user?.id,
             startingPrice: toListingAmount(form.startingBid),
             reservePrice: toListingAmount(form.reservePrice || form.startingBid),
             minimumIncrement: toListingAmount(form.minimumIncrement || '1'),
-            endTime: form.endTime ? (form.endTime.length === 16 ? form.endTime + ':00Z' : form.endTime) : null,
+            endTime: toAuctionEndTimeIso(form.endTime),
             imageUrl: form.imageUrl.trim() || form.images[0] || null,
         };
     };

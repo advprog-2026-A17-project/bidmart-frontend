@@ -327,20 +327,42 @@ const WalletPage: React.FC = () => {
         };
     }, [pendingPayment, syncPendingPayment]);
 
-    const transactionRows = useMemo(() => [
-        ...unpaidPayments.map((payment) => ({
-            kind: 'payment' as const,
-            id: payment.paymentId,
-            timestamp: timestampMs(payment.createdAt),
-            payment,
-        })),
-        ...history.map((transaction) => ({
-            kind: 'transaction' as const,
-            id: transaction.id,
-            timestamp: timestampMs(transaction.timestamp),
-            transaction,
-        })),
-    ].sort((a, b) => b.timestamp - a.timestamp), [history, unpaidPayments]);
+    const transactionRows = useMemo(() => {
+        const settledTopUpIds = new Set(
+            history
+                .filter((entry) => entry.type === 'TOP_UP' && entry.correlationId)
+                .map((entry) => String(entry.correlationId))
+        );
+        const visibleUnpaid = unpaidPayments.filter(
+            (payment) => !settledTopUpIds.has(String(payment.paymentId))
+        );
+        const seenTopUp = new Set<string>();
+        const visibleHistory = history.filter((entry) => {
+            if (entry.type !== 'TOP_UP' || !entry.correlationId) {
+                return true;
+            }
+            const key = String(entry.correlationId);
+            if (seenTopUp.has(key)) {
+                return false;
+            }
+            seenTopUp.add(key);
+            return true;
+        });
+        return [
+            ...visibleUnpaid.map((payment) => ({
+                kind: 'payment' as const,
+                id: payment.paymentId,
+                timestamp: timestampMs(payment.createdAt),
+                payment,
+            })),
+            ...visibleHistory.map((transaction) => ({
+                kind: 'transaction' as const,
+                id: transaction.id,
+                timestamp: timestampMs(transaction.timestamp),
+                transaction,
+            })),
+        ].sort((a, b) => b.timestamp - a.timestamp);
+    }, [history, unpaidPayments]);
 
     const handleWithdraw = async () => {
         const amount = toRupiahAmount(withdrawAmount);
