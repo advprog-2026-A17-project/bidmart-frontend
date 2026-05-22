@@ -185,6 +185,11 @@ const SELLER_STUDIO_VIEW_STORAGE_KEY = 'seller_studio_active_view';
 const isStudioView = (value: string | null): value is StudioView =>
     value === 'dashboard' || value === 'listing-create' || value === 'listing-manage';
 
+const isBidRealtimeEvent = (event: AuctionRealtimeEvent): boolean => {
+    const eventType = (event.type ?? '').toLowerCase();
+    return eventType.includes('bid-placed') || eventType.includes('outbid');
+};
+
 const SellPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
@@ -326,14 +331,20 @@ const SellPage: React.FC = () => {
         if (listingId && patch) {
             setListings((previous) => previous.map((listing) => (
                 String(listing.id) === String(listingId)
-                    ? { ...listing, ...patch }
+                    ? {
+                        ...listing,
+                        ...patch,
+                        hasBids: patch.hasBids ?? listing.hasBids,
+                    }
                     : listing
             )));
             setSellerAuctions((previous) => previous.map((auction) => (
                 String(auction.listingId) === String(listingId)
                     ? {
                         ...auction,
-                        currentHighestBid: patch.currentPrice ?? auction.currentHighestBid,
+                        currentHighestBid: patch.hasBids === true
+                            ? patch.currentPrice ?? auction.currentHighestBid ?? auction.startingPrice
+                            : patch.currentPrice ?? auction.currentHighestBid,
                         endTime: patch.endTime ?? auction.endTime,
                         status: patch.status ?? auction.status,
                     }
@@ -341,9 +352,11 @@ const SellPage: React.FC = () => {
             )));
         }
 
-        window.setTimeout(() => {
-            void refreshStudio();
-        }, 500);
+        if (!isBidRealtimeEvent(event)) {
+            window.setTimeout(() => {
+                void refreshStudio();
+            }, 500);
+        }
     }, [refreshStudio]);
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
 

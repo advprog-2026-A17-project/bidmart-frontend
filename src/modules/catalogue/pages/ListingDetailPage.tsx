@@ -24,7 +24,7 @@ import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
 import { fetchPublicSellerProfile, type PublicSellerProfile } from '../../auth/utils/auth-api';
 import { fetchPublicUserProfiles } from '../../auth/utils/public-profiles';
 import { ProfileAvatarWithFallback } from '../../../components/ProfileAvatar';
-import { centsToAmount, toIsoFromUnixSeconds } from '../../../utils/auction-units';
+import { centsToAmount, centsToAmountFromUnknown, toIsoFromUnixSeconds } from '../../../utils/auction-units';
 
 type ListingDetail = {
     id: string;
@@ -77,6 +77,50 @@ const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
 
 const bidAmountFromItem = (bid: BidHistoryItem): number =>
     bid.bidAmount ?? (typeof bid.bid_amount_cents === 'number' ? bid.bid_amount_cents / 100 : 0);
+
+const toRealtimeBidTime = (value: unknown): string | undefined => {
+    if (typeof value === 'string' && value.trim()) {
+        return value;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return toIsoFromUnixSeconds(value);
+    }
+    return undefined;
+};
+
+const bidHistoryItemFromRealtimeEvent = (event: AuctionRealtimeEvent): BidHistoryItem | null => {
+    const eventType = (event.type ?? '').toLowerCase();
+    if (!eventType.includes('bid-placed')) {
+        return null;
+    }
+
+    const payload = (event.payload ?? {}) as Record<string, unknown>;
+    const amount = centsToAmountFromUnknown(payload.amountCents ?? payload.currentPrice ?? payload.finalPrice);
+    if (amount == null) {
+        return null;
+    }
+
+    const bidId = payload.bidId;
+    const bidderId = payload.bidderId;
+    const bidTime = toRealtimeBidTime(payload.bidTime) ?? toRealtimeBidTime(payload.placedAt);
+
+    return {
+        id: typeof bidId === 'string' && bidId.trim()
+            ? bidId
+            : `${event.auctionId ?? event.listingId ?? 'auction'}-${String(bidderId ?? 'bidder')}-${bidTime ?? Date.now()}`,
+        bidderId: typeof bidderId === 'string' ? bidderId : undefined,
+        bidAmount: amount,
+        bidTime,
+    };
+};
+
+const mergeRealtimeBidHistory = (
+    currentBids: BidHistoryItem[],
+    realtimeBid: BidHistoryItem,
+): BidHistoryItem[] => [
+    realtimeBid,
+    ...currentBids.filter((bid) => bid.id !== realtimeBid.id),
+];
 
 const toIsoDate = (value?: string | null): string | null => {
     if (!value) return null;
@@ -181,6 +225,7 @@ const ListingDetailPage: React.FC = () => {
 
             const endTime = payload.endTime ?? toIsoFromUnixSeconds(payload.end_time);
             const startTime = payload.startTime ?? toIsoFromUnixSeconds(payload.start_time);
+            const snapshotHasBid = payload.currentHighestBid != null || payload.current_highest_bid_cents != null;
             const currentPrice = payload.currentHighestBid ?? centsToAmount(payload.current_highest_bid_cents);
             const startingPrice = payload.startingPrice ?? centsToAmount(payload.starting_price_cents);
             const reservePrice = payload.reservePrice ?? centsToAmount(payload.reserve_price_cents);
@@ -194,7 +239,7 @@ const ListingDetailPage: React.FC = () => {
                 startingPrice,
                 reservePrice,
                 minimumIncrement,
-                hasBids: currentPrice != null && startingPrice != null ? currentPrice > startingPrice : undefined,
+                hasBids: snapshotHasBid,
             };
         } catch {
             return null;
@@ -279,6 +324,10 @@ const ListingDetailPage: React.FC = () => {
                 nowMs
             );
             setBidInput(normalizeRupiahInput(meta.minNextBid));
+        }
+        const realtimeBid = bidHistoryItemFromRealtimeEvent(event);
+        if (realtimeBid) {
+            setBids((previous) => mergeRealtimeBidHistory(previous, realtimeBid));
         }
         void fetchBids();
     }, [fetchBids, listing, listingId, nowMs]);
