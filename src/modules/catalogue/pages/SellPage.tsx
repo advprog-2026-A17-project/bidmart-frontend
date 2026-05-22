@@ -199,11 +199,11 @@ const SellPage: React.FC = () => {
     const [editingListingStatus, setEditingListingStatus] = useState<string | null>(null);
     const nowMs = useNowTick();
 
-    const fetchSellerListings = useCallback(async () => {
+    const fetchSellerListings = useCallback(async (): Promise<ListingRecord[]> => {
         if (!user || !isSeller) {
             setListings([]);
             setLoading(false);
-            return;
+            return [];
         }
 
         try {
@@ -213,16 +213,19 @@ const SellPage: React.FC = () => {
                 throw new Error(`Listing lookup failed with status ${response.status}`);
             }
             const payload: unknown = await response.json();
-            setListings(parseListingsResponse(payload));
+            const parsed = parseListingsResponse(payload);
+            setListings(parsed);
+            return parsed;
         } catch (err: unknown) {
             setError(toErrorMessage(err));
             setListings([]);
+            return [];
         } finally {
             setLoading(false);
         }
     }, [authenticatedFetch, isSeller, user]);
 
-    const fetchSellerAuctions = useCallback(async () => {
+    const fetchSellerAuctions = useCallback(async (sourceListings: ListingRecord[]) => {
         if (!user || !isSeller) {
             setSellerAuctions([]);
             setAnalyticsLoading(false);
@@ -233,7 +236,7 @@ const SellPage: React.FC = () => {
             setAnalyticsLoading(true);
             setAnalyticsError(null);
             setSellerAuctions(
-                listings
+                sourceListings
                     .filter((listing) => String(listing.sellerId) === user.id)
                     .map((listing) => catalogueListingToAuction(listing as unknown as CatalogueListing))
             );
@@ -243,11 +246,12 @@ const SellPage: React.FC = () => {
         } finally {
             setAnalyticsLoading(false);
         }
-    }, [isSeller, listings, user]);
+    }, [isSeller, user]);
 
     const refreshStudio = useCallback(async () => {
-        await fetchSellerListings();
-    }, [fetchSellerListings]);
+        const refreshedListings = await fetchSellerListings();
+        await fetchSellerAuctions(refreshedListings);
+    }, [fetchSellerAuctions, fetchSellerListings]);
 
     useEffect(() => {
         refreshStudio();
@@ -293,8 +297,8 @@ const SellPage: React.FC = () => {
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
 
     useEffect(() => {
-        void fetchSellerAuctions();
-    }, [fetchSellerAuctions]);
+        void fetchSellerAuctions(listings);
+    }, [fetchSellerAuctions, listings]);
 
     const existingListingIds = useMemo(
         () => new Set(listings.map((listing) => String(listing.id))),
@@ -795,7 +799,7 @@ const SellPage: React.FC = () => {
                         <h1>{navGroups.flatMap((group) => group.items).find((item) => item.id === activeView)?.label}</h1>
                         <p>Manage listing-auctions in a single workflow aligned with the platform specification.</p>
                     </div>
-                    <button type="button" className="secondary-button" onClick={refreshStudio}>
+                    <button type="button" className="secondary-button" disabled={loading || analyticsLoading} onClick={() => void refreshStudio()}>
                         <span className="material-symbols-outlined" aria-hidden="true">refresh</span>
                         Refresh
                     </button>

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { readApiError, gatewayUrl } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
-import { isSellerUser, primaryRole } from '../../../context/primaryRole';
+import { isSellerUser } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { useWalletUI } from '../../../context/WalletUIContext';
 import { useNotificationsWebSocket } from '../../../context/useNotificationsWebSocket';
@@ -91,7 +91,7 @@ const walletDisplayName = (email?: string): string => {
 
 const WalletPage: React.FC = () => {
     const { user } = useAuth();
-    const role = primaryRole(user);
+    const walletRole = 'BUYER';
     const authenticatedFetch = useAuthenticatedFetch();
     const { isConnected, subscribe } = useNotificationsWebSocket();
     const location = useLocation();
@@ -124,7 +124,7 @@ const WalletPage: React.FC = () => {
             return;
         }
         try {
-            const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${role}`));
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${walletRole}`));
             if (!response.ok) {
                 setError(await readApiError(response, 'Wallet lookup failed'));
                 return;
@@ -139,7 +139,7 @@ const WalletPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [role, authenticatedFetch, user]);
+    }, [authenticatedFetch, user]);
 
     const showSuccess = useCallback((msg: string) => {
         setSuccess(msg);
@@ -265,7 +265,7 @@ const WalletPage: React.FC = () => {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amount, paymentMethod, role }),
+                    body: JSON.stringify({ amount, paymentMethod, role: walletRole }),
                 }
             );
             if (!response.ok) {
@@ -366,7 +366,7 @@ const WalletPage: React.FC = () => {
                         amount,
                         bankCode: withdrawBankCode,
                         accountNumber: normalizedAccountNumber,
-                        role,
+                        role: walletRole,
                     }),
                 }
             );
