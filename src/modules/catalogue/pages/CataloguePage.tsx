@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiUrl } from '../../../config/api';
 import { CATALOGUE_LISTINGS_SEARCH_PATH } from '../api/endpoints';
 import { CATALOGUE_CATEGORIES_TREE_PATH } from '../api/endpoints';
@@ -7,6 +7,10 @@ import { formatMoney, normalizeMoneyInput } from '../../../utils/money';
 import { useNowTick } from '../../../hooks/useNowTick';
 import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
 import { flattenCategoryTree, type CategoryNode, type CategoryOption } from '../utils/categories';
+import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
+import type { AuctionRealtimeEvent } from '../../auction/hooks/useAuctionRealtime';
+import { buildCatalogueItemPatchFromRealtimeEvent } from '../../auction/utils/auction-realtime-patch';
+import PageToast from '../../../components/PageToast';
 
 interface CatalogueItem {
     id: number | string;
@@ -25,8 +29,10 @@ const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE']);
 interface SearchParams {
     keyword: string;
     category: string;
+    categoryId: string;
     minPrice: string;
     maxPrice: string;
+    endBefore: string;
 }
 
 const CataloguePage: React.FC = () => {
@@ -36,14 +42,18 @@ const CataloguePage: React.FC = () => {
     const [searchParams, setSearchParams] = useState<SearchParams>({
         keyword: '',
         category: '',
+        categoryId: '',
         minPrice: '',
         maxPrice: '',
+        endBefore: '',
     });
     const [appliedParams, setAppliedParams] = useState<SearchParams>({
         keyword: '',
         category: '',
+        categoryId: '',
         minPrice: '',
         maxPrice: '',
+        endBefore: '',
     });
     const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
     const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
@@ -64,9 +74,14 @@ const CataloguePage: React.FC = () => {
         setError(null);
         const query = new URLSearchParams();
         if (params.keyword) query.append('keyword', params.keyword);
-        if (params.category) query.append('category', params.category);
+        if (params.categoryId) {
+            query.append('categoryId', params.categoryId);
+        } else if (params.category) {
+            query.append('category', params.category);
+        }
         if (params.minPrice) query.append('minPrice', params.minPrice);
         if (params.maxPrice) query.append('maxPrice', params.maxPrice);
+        if (params.endBefore) query.append('endBefore', new Date(params.endBefore).toISOString());
 
         const url = apiUrl(`${CATALOGUE_LISTINGS_SEARCH_PATH}${query.toString() ? '?' + query.toString() : ''}`);
 
@@ -90,6 +105,21 @@ const CataloguePage: React.FC = () => {
     useEffect(() => {
         fetchItems(appliedParams);
     }, [appliedParams, fetchItems]);
+
+    const handleRealtimeEvent = useCallback((event: AuctionRealtimeEvent) => {
+        const update = buildCatalogueItemPatchFromRealtimeEvent(event);
+        if (!update) {
+            return;
+        }
+        setItems((previous) => previous.map((item) => (
+            String(item.id) === update.listingId
+                ? { ...item, ...update.patch }
+                : item
+        )));
+    }, []);
+
+    const auctionRealtimeTopics = useMemo(() => ['/topic/auctions'], []);
+    useAuctionRealtime(auctionRealtimeTopics, handleRealtimeEvent);
 
     useEffect(() => {
         let cancelled = false;
@@ -119,7 +149,7 @@ const CataloguePage: React.FC = () => {
     };
 
     const handleReset = () => {
-        const empty: SearchParams = { keyword: '', category: '', minPrice: '', maxPrice: '' };
+        const empty: SearchParams = { keyword: '', category: '', categoryId: '', minPrice: '', maxPrice: '', endBefore: '' };
         setSearchParams(empty);
         setAppliedParams(empty);
     };
@@ -203,10 +233,6 @@ const CataloguePage: React.FC = () => {
                             <span className="material-symbols-outlined" aria-hidden="true">sensors</span>
                             View Live Lots
                         </a>
-                        <Link to="/seller-studio" className="secondary-button">
-                            <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
-                            Start Selling
-                        </Link>
                     </div>
                 </div>
                 <div className="market-hero-panel" aria-label="Marketplace summary">
@@ -241,12 +267,21 @@ const CataloguePage: React.FC = () => {
                         <span>Category</span>
                         <select
                             className="form-input"
-                            value={searchParams.category}
-                            onChange={(e) => setSearchParams((p) => ({ ...p, category: e.target.value }))}
+                            value={searchParams.categoryId || searchParams.category}
+                            onChange={(e) => {
+                                const selected = categoryOptions.find(
+                                    (category) => String(category.id) === e.target.value
+                                );
+                                setSearchParams((previous) => ({
+                                    ...previous,
+                                    category: selected?.name ?? e.target.value,
+                                    categoryId: selected ? String(selected.id) : '',
+                                }));
+                            }}
                         >
                             <option value="">All categories</option>
                             {categoryOptions.map((category) => (
-                                <option key={`${category.id}-${category.label}`} value={category.name}>
+                                <option key={`${category.id}-${category.label}`} value={String(category.id)}>
                                     {category.label}
                                 </option>
                             ))}
@@ -277,6 +312,15 @@ const CataloguePage: React.FC = () => {
                         />
                     </label>
                     <label className="field">
+                        <span>Ending Before</span>
+                        <input
+                            className="form-input"
+                            type="datetime-local"
+                            value={searchParams.endBefore}
+                            onChange={(e) => setSearchParams((p) => ({ ...p, endBefore: e.target.value }))}
+                        />
+                    </label>
+                    <label className="field">
                         <span>Sort</span>
                         <select className="form-input" value={sortBy} onChange={(e) => setSortBy(e.target.value as 'recent' | 'price-asc' | 'price-desc')}>
                             <option value="recent">Ending Soon</option>
@@ -295,7 +339,7 @@ const CataloguePage: React.FC = () => {
                 </form>
             </div>
 
-            {error && <div className="toast-error">{error}</div>}
+            <PageToast error={error} />
 
             {loading ? (
                 catalogueSkeleton

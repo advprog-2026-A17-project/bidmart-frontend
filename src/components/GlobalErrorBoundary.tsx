@@ -38,7 +38,7 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
                     <p className="text-muted">
                         Refresh the page or return to the auction catalogue.
                     </p>
-                    <div className="toast-error">{this.state.message}</div>
+                    <div className="inline-alert-error">{this.state.message}</div>
                     <button className="primary-button" type="button" onClick={() => window.location.assign('/')}>
                         Back to Catalogue
                     </button>

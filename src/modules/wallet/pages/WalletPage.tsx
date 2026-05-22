@@ -3,10 +3,12 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { readApiError, gatewayUrl } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
+import { isSellerUser } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { useWalletUI } from '../../../context/WalletUIContext';
-import { useWebSocket } from '../../../hooks/useWebSocket';
-import { normalizeMoneyInput, toAmountCents } from '../../../utils/money';
+import { useNotificationsWebSocket } from '../../../context/useNotificationsWebSocket';
+import PageToast from '../../../components/PageToast';
+import { normalizeMoneyInput, toRupiahAmount } from '../../../utils/money';
 import {
     formatCents,
     paymentExpiryMs,
@@ -34,7 +36,7 @@ interface WalletTransaction {
 
 interface WithdrawalRequestState {
     withdrawalId: string;
-    amountCents: number;
+    amount: number;
     status: string;
     bankCode?: string | null;
     accountNumber?: string | null;
@@ -88,9 +90,10 @@ const walletDisplayName = (email?: string): string => {
 };
 
 const WalletPage: React.FC = () => {
-    const { user, activeRole } = useAuth();
+    const { user } = useAuth();
+    const walletRole = 'BUYER';
     const authenticatedFetch = useAuthenticatedFetch();
-    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
+    const { isConnected, subscribe } = useNotificationsWebSocket();
     const location = useLocation();
     const navigate = useNavigate();
     const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -100,7 +103,6 @@ const WalletPage: React.FC = () => {
     const [actionLoading, setActionLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
-    const [walletNotFound, setWalletNotFound] = useState<boolean>(false);
     const [topUpAmount, setTopUpAmount] = useState<string>('');
     const [paymentMethod, setPaymentMethod] = useState<string>('bca_va');
     const [withdrawAmount, setWithdrawAmount] = useState<string>('');
@@ -110,12 +112,9 @@ const WalletPage: React.FC = () => {
     const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawalRequestState | null>(null);
     const { showBalance, setShowBalance } = useWalletUI();
     const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw'>('overview');
-    const [acceptWalletTerms, setAcceptWalletTerms] = useState(false);
-
     const fetchWallet = useCallback(async () => {
         setLoading(true);
         setError(null);
-        setWalletNotFound(false);
         if (!user) {
             setWallet(null);
             setHistory([]);
@@ -125,11 +124,7 @@ const WalletPage: React.FC = () => {
             return;
         }
         try {
-            const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${activeRole}`));
-            if (response.status === 404 || response.status === 500) {
-                setWalletNotFound(true);
-                return;
-            }
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/wallet/${user.id}/detail?role=${walletRole}`));
             if (!response.ok) {
                 setError(await readApiError(response, 'Wallet lookup failed'));
                 return;
@@ -144,30 +139,7 @@ const WalletPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [activeRole, authenticatedFetch, user]);
-
-    const createWallet = async () => {
-        setActionLoading(true);
-        setError(null);
-        if (!user) return;
-        try {
-            const response = await authenticatedFetch(gatewayUrl('/api/v1/wallet/add'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: user.id, role: activeRole }),
-            });
-            if (!response.ok) {
-                setError(`Failed to create wallet: HTTP ${response.status}`);
-                return;
-            }
-            showSuccess('Wallet created successfully!');
-            await fetchWallet();
-        } catch (err: unknown) {
-            setError(`Create wallet failed: ${toErrorMessage(err)}`);
-        } finally {
-            setActionLoading(false);
-        }
-    };
+    }, [authenticatedFetch, user]);
 
     const showSuccess = useCallback((msg: string) => {
         setSuccess(msg);
@@ -184,8 +156,7 @@ const WalletPage: React.FC = () => {
             return;
         }
 
-        const destination = '/user/queue/notifications';
-        subscribe(destination, (payload) => {
+        const release = subscribe('/user/queue/notifications', (payload) => {
             const event = payload as { type?: string; payload?: { type?: string } };
             const type = String(event.payload?.type ?? event.type ?? '').toUpperCase();
             if (
@@ -197,8 +168,8 @@ const WalletPage: React.FC = () => {
                 void fetchWallet();
             }
         });
-        return () => unsubscribe(destination);
-    }, [fetchWallet, isConnected, subscribe, unsubscribe, user]);
+        return release;
+    }, [fetchWallet, isConnected, subscribe, user]);
 
     useEffect(() => {
         if (!user) return;
@@ -280,8 +251,8 @@ const WalletPage: React.FC = () => {
     );
 
     const handleTopUp = async () => {
-        const amountCents = toAmountCents(topUpAmount);
-        if (!amountCents || amountCents <= 0) {
+        const amount = toRupiahAmount(topUpAmount);
+        if (!amount || amount <= 0) {
             setError('Please enter a valid top-up amount.');
             return;
         }
@@ -294,7 +265,7 @@ const WalletPage: React.FC = () => {
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amountCents, paymentMethod, role: activeRole }),
+                    body: JSON.stringify({ amount, paymentMethod, role: walletRole }),
                 }
             );
             if (!response.ok) {
@@ -306,7 +277,7 @@ const WalletPage: React.FC = () => {
             const paymentWithLocalExpiry = { ...payment, expiresAt: new Date(expiresAt).toISOString() };
             setPendingPayment(paymentWithLocalExpiry);
             setTopUpAmount('');
-            showSuccess(`Payment created for ${formatCents(paymentWithLocalExpiry.amountCents)}.`);
+            showSuccess(`Payment created for ${formatCents(paymentWithLocalExpiry.amount)}.`);
             navigate(`/wallet/payments/${payment.paymentId}`);
         } catch (err: unknown) {
             setError(`Top-up failed: ${toErrorMessage(err)}`);
@@ -372,8 +343,8 @@ const WalletPage: React.FC = () => {
     ].sort((a, b) => b.timestamp - a.timestamp), [history, unpaidPayments]);
 
     const handleWithdraw = async () => {
-        const amountCents = toAmountCents(withdrawAmount);
-        if (!amountCents || amountCents <= 0) {
+        const amount = toRupiahAmount(withdrawAmount);
+        if (!amount || amount <= 0) {
             setError('Please enter a valid withdrawal amount.');
             return;
         }
@@ -392,10 +363,10 @@ const WalletPage: React.FC = () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        amountCents,
+                        amount,
                         bankCode: withdrawBankCode,
                         accountNumber: normalizedAccountNumber,
-                        role: activeRole,
+                        role: walletRole,
                     }),
                 }
             );
@@ -407,7 +378,7 @@ const WalletPage: React.FC = () => {
             setPendingWithdrawal(withdrawal);
             setWithdrawAmount('');
             setWithdrawAccountNumber('');
-            showSuccess(`Withdrawal requested for ${formatCents(withdrawal.amountCents)}.`);
+            showSuccess(`Withdrawal requested for ${formatCents(withdrawal.amount)}.`);
             await fetchWallet();
         } catch (err: unknown) {
             setError(`Withdrawal failed: ${toErrorMessage(err)}`);
@@ -451,28 +422,15 @@ const WalletPage: React.FC = () => {
                 </span>
             </section>
 
-            {error && <div className="toast-error">{error}</div>}
-            {success && <div className="toast-success">{success}</div>}
+            <PageToast error={error} success={success} />
 
             {loading ? (
                 walletSkeleton
-            ) : walletNotFound ? (
+            ) : !wallet ? (
                 <div className="panel center-content">
-                    <p className="text-muted">Your wallet is not active yet.</p>
-                    <label className="terms-check">
-                        <input
-                            type="checkbox"
-                            checked={acceptWalletTerms}
-                            onChange={(event) => setAcceptWalletTerms(event.target.checked)}
-                        />
-                        <span>I agree to use BidMart Wallet only for bidding, top-up, and withdrawal activity.</span>
-                    </label>
-                    <button
-                        className="primary-button"
-                        onClick={createWallet}
-                        disabled={actionLoading || !acceptWalletTerms}
-                    >
-                        {actionLoading ? 'Creating...' : 'Activate Wallet'}
+                    <p className="text-muted">Unable to load your wallet. Please refresh or try again shortly.</p>
+                    <button className="primary-button" type="button" onClick={() => void fetchWallet()} disabled={actionLoading}>
+                        Retry
                     </button>
                 </div>
             ) : (
@@ -497,7 +455,11 @@ const WalletPage: React.FC = () => {
                                 <span className="material-symbols-outlined metric-icon" aria-hidden="true">lock</span>
                             </div>
                             <strong>{showBalance ? formatCents(wallet?.heldBalance) : '••••••'}</strong>
-                            <small>Reserved for active bids</small>
+                            <small>
+                                {isSellerUser(user)
+                                    ? 'Pending sale proceeds (released after buyer confirms order)'
+                                    : 'Reserved for active bids'}
+                            </small>
                         </div>
                         <div className="wallet-summary-card">
                             <div className="wallet-summary-top">
@@ -510,7 +472,7 @@ const WalletPage: React.FC = () => {
                     </div>
 
                     <div className="wallet-actions">
-                        {activeRole !== 'SELLER' && (
+                        {!isSellerUser(user) && (
                             <button className={activeTab === 'deposit' ? 'primary-button' : 'secondary-button'} onClick={() => setActiveTab('deposit')}>
                                 <span className="material-symbols-outlined" aria-hidden="true">add_card</span>
                                 Add Funds
@@ -526,7 +488,7 @@ const WalletPage: React.FC = () => {
                         </button>
                     </div>
 
-                    {activeTab === 'deposit' && activeRole !== 'SELLER' && (
+                    {activeTab === 'deposit' && !isSellerUser(user) && (
                         <div className="panel section-stack">
                             <h3>Add Funds</h3>
                             <label className="field">
@@ -610,7 +572,7 @@ const WalletPage: React.FC = () => {
                             {pendingWithdrawal && (
                                 <div className="summary-box payment-status-card">
                                     <div>Withdrawal ref: {pendingWithdrawal.withdrawalId.slice(0, 8).toUpperCase()}</div>
-                                    <div>Amount: {formatCents(pendingWithdrawal.amountCents)}</div>
+                                    <div>Amount: {formatCents(pendingWithdrawal.amount)}</div>
                                     {pendingWithdrawal.accountName && <div>Account name: {pendingWithdrawal.accountName}</div>}
                                     {pendingWithdrawal.payoutReference && <div>Payout ref: {pendingWithdrawal.payoutReference}</div>}
                                     <div>Status: {pendingWithdrawal.status}</div>
@@ -649,7 +611,7 @@ const WalletPage: React.FC = () => {
                                                         </span>
                                                     </div>
                                                     <span className="transaction-amount">
-                                                        {showBalance ? formatCents(row.payment.amountCents) : '••••••'}
+                                                        {showBalance ? formatCents(row.payment.amount) : '••••••'}
                                                     </span>
                                                 </Link>
                                             );

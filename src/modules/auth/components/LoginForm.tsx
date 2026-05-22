@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/useAuth';
 import { requestLogin, requestResendVerification } from '../utils/auth-api';
+import { resolvePostLoginPath } from '../utils/post-auth-navigation';
 import GoogleLoginButton from './GoogleLoginButton';
 import TwoFactorForm from './TwoFactorForm';
+import PasswordField from '../../../components/PasswordField';
+import PageToast from '../../../components/PageToast';
 
 export const LOGIN_VERIFY_ENDPOINT = '/api/v1/auth/2fa/login-verify';
 
@@ -55,7 +58,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                 return;
             }
             login(result.payload);
-            navigate('/');
+            navigate(await resolvePostLoginPath(result.payload.accessToken));
         } catch (err: unknown) {
             setError('Failed to connect to Auth Service via API Gateway.');
             console.error(err);
@@ -73,6 +76,9 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
             if (result.kind === 'success') {
                 setResendSuccess(true);
                 setError(null);
+            } else if (result.kind === 'cooldown') {
+                setError(result.message);
+                setResendSuccess(false);
             } else {
                 setError(result.message);
             }
@@ -94,8 +100,13 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
 
     return (
         <form onSubmit={handleLogin} className="auth-form">
+            <PageToast
+                success={resendSuccess
+                    ? 'Verification email sent! Please check your inbox and spam folder.'
+                    : null}
+            />
             {error && (
-                <div className="toast-error">
+                <div className="inline-alert-error">
                     {error}
                     {unverifiedEmail && !resendSuccess && (
                         <div style={{ marginTop: '8px' }}>
@@ -112,11 +123,6 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                     )}
                 </div>
             )}
-            {resendSuccess && (
-                <div className="toast-success">
-                    ✅ Verification email sent! Please check your inbox and spam folder.
-                </div>
-            )}
             
             <label className="field">
                 <span>Email Address</span>
@@ -129,21 +135,15 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                     onChange={(e) => setEmail(e.target.value)}
                 />
             </label>
-            <label className="field">
-                <span>Password</span>
-                <div className="password-row">
-                    <input
-                        className="form-input"
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="••••••••"
-                        value={password}
-                        required
-                        onChange={(e) => setPassword(e.target.value)}
-                    />
-                    <button type="button" className="secondary-button" onClick={() => setShowPassword((v) => !v)}>
-                        {showPassword ? 'Hide' : 'Show'}
-                    </button>
-                </div>
+            <PasswordField
+                label="Password"
+                value={password}
+                onChange={setPassword}
+                required
+                visible={showPassword}
+                onVisibleChange={setShowPassword}
+            />
+            <div className="field">
                 <div className="field-footer">
                     <button
                         type="button"
@@ -153,7 +153,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                         Forgot password?
                     </button>
                 </div>
-            </label>
+            </div>
             <button className="primary-button auth-primary-action" type="submit" disabled={loading || oauthBusy}>
                 {loading ? 'Logging in...' : 'Log In'}
             </button>
@@ -166,6 +166,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchTab, onForgotPassword }) 
                         onError={(message) => setError(message)}
                         onClearError={() => setError(null)}
                         onBusyChange={setOauthBusy}
+                        onTwoFactorChallenge={(token) => setTwoFactorChallenge(token)}
                     />
                 </>
             )}

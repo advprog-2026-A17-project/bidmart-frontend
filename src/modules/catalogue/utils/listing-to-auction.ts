@@ -29,6 +29,16 @@ export interface CatalogueListing {
 
 export const activeListingStatuses = new Set(['ACTIVE', 'EXTENDED']);
 
+export const endedListingStatuses = new Set(['CLOSED', 'WON', 'UNSOLD', 'CANCELLED']);
+
+export const isEndedListing = (status?: string | null): boolean =>
+    endedListingStatuses.has((status ?? '').toUpperCase());
+
+export const shouldLoadBidHistory = (status?: string | null): boolean => {
+    const normalized = (status ?? '').toUpperCase();
+    return activeListingStatuses.has(normalized) || endedListingStatuses.has(normalized);
+};
+
 export const catalogueListingToAuction = (listing: CatalogueListing): Auction => {
     const startingPrice = Number(listing.startingPrice ?? 0);
     const currentPrice = listing.currentPrice == null ? null : Number(listing.currentPrice);
