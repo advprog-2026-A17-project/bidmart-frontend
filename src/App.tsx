@@ -36,7 +36,7 @@ import ResetPasswordPage from './modules/auth/pages/ResetPasswordPage';
 const Navbar = () => {
     const { user, logout, sessionExpiresAt } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
-    const { isConnected, subscribe, unsubscribe } = useNotificationsWebSocket();
+    const { isConnected, subscribe } = useNotificationsWebSocket();
     const role = primaryRole(user);
     const isAdmin = role === 'ADMIN';
     const isSeller = isSellerUser(user);
@@ -75,8 +75,7 @@ const Navbar = () => {
         void fetchWallet();
 
         if (isConnected) {
-            const destination = '/user/queue/notifications';
-            subscribe(destination, (payload) => {
+            const release = subscribe('/user/queue/notifications', (payload) => {
                 const event = payload as { type?: string; payload?: { type?: string } };
                 const type = String(event.payload?.type ?? event.type ?? '').toUpperCase();
                 if (
@@ -90,14 +89,14 @@ const Navbar = () => {
             });
             return () => {
                 active = false;
-                unsubscribe(destination);
+                release();
             };
         }
 
         return () => {
             active = false;
         };
-    }, [user, role, authenticatedFetch, isConnected, subscribe, unsubscribe]);
+    }, [user, role, authenticatedFetch, isConnected, subscribe]);
 
     useEffect(() => {
         if (!sessionExpiresAt || !user) {

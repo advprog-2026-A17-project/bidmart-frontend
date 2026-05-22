@@ -93,7 +93,7 @@ const WalletPage: React.FC = () => {
     const { user } = useAuth();
     const role = primaryRole(user);
     const authenticatedFetch = useAuthenticatedFetch();
-    const { isConnected, subscribe, unsubscribe } = useNotificationsWebSocket();
+    const { isConnected, subscribe } = useNotificationsWebSocket();
     const location = useLocation();
     const navigate = useNavigate();
     const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -156,8 +156,7 @@ const WalletPage: React.FC = () => {
             return;
         }
 
-        const destination = '/user/queue/notifications';
-        subscribe(destination, (payload) => {
+        const release = subscribe('/user/queue/notifications', (payload) => {
             const event = payload as { type?: string; payload?: { type?: string } };
             const type = String(event.payload?.type ?? event.type ?? '').toUpperCase();
             if (
@@ -169,8 +168,8 @@ const WalletPage: React.FC = () => {
                 void fetchWallet();
             }
         });
-        return () => unsubscribe(destination);
-    }, [fetchWallet, isConnected, subscribe, unsubscribe, user]);
+        return release;
+    }, [fetchWallet, isConnected, subscribe, user]);
 
     useEffect(() => {
         if (!user) return;

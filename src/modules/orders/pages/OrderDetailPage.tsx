@@ -5,6 +5,7 @@ import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { isSellerUser } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { useNotificationRealtime } from '../../../hooks/useNotificationRealtime';
 import { formatMoney } from '../../../utils/money';
 import OrderStatusCard from '../components/OrderStatusCard';
 import PageToast from '../../../components/PageToast';
@@ -104,6 +105,10 @@ const OrderDetailPage: React.FC = () => {
     useEffect(() => {
         void fetchOrder();
     }, [fetchOrder]);
+
+    useNotificationRealtime(user?.id, () => {
+        void fetchOrder();
+    }, { orderTypesOnly: true });
 
     const openDispute = async () => {
         if (!order) return;

@@ -37,7 +37,7 @@ const notificationFromPayload = (payload: unknown): BidmartNotification => {
 const NotificationCenter = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
-    const { isConnected, subscribe, unsubscribe } = useNotificationsWebSocket();
+    const { isConnected, subscribe } = useNotificationsWebSocket();
     const [storedNotifications, setStoredNotifications] = useState<BidmartNotification[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -96,10 +96,9 @@ const NotificationCenter = () => {
             return;
         }
 
-        const destination = '/user/queue/notifications';
-        subscribe(destination, prependNotification);
-        return () => unsubscribe(destination);
-    }, [isConnected, prependNotification, subscribe, unsubscribe, user]);
+        const release = subscribe('/user/queue/notifications', prependNotification);
+        return release;
+    }, [isConnected, prependNotification, subscribe, user]);
 
     useEffect(() => {
         if (!isOpen) {

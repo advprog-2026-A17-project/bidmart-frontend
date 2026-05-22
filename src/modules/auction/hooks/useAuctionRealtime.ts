@@ -16,7 +16,7 @@ export const useAuctionRealtime = (
     destinations: string[],
     onEvent: (event: AuctionRealtimeEvent) => void
 ) => {
-    const { isConnected, subscribe, unsubscribe } = useNotificationsWebSocket();
+    const { isConnected, subscribe } = useNotificationsWebSocket();
     const onEventRef = useRef(onEvent);
 
     useEffect(() => {
@@ -35,14 +35,12 @@ export const useAuctionRealtime = (
             onEventRef.current(payload as AuctionRealtimeEvent);
         };
 
-        stableDestinations.forEach((destination) => {
-            subscribe(destination, wrappedHandler);
-        });
+        const releases = stableDestinations.map((destination) => subscribe(destination, wrappedHandler));
 
         return () => {
-            stableDestinations.forEach((destination) => unsubscribe(destination));
+            releases.forEach((release) => release());
         };
-    }, [topicKey, stableDestinations, isConnected, subscribe, unsubscribe]);
+    }, [topicKey, stableDestinations, isConnected, subscribe]);
 
     return { isConnected };
 };

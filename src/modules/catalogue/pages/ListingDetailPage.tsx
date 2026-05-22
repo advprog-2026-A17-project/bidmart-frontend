@@ -394,6 +394,29 @@ const ListingDetailPage: React.FC = () => {
         }
     };
 
+    const closeAuction = async () => {
+        if (!listingId || !isSeller) {
+            return;
+        }
+        if (!window.confirm('Close this auction now? Bidders will no longer be able to place bids.')) {
+            return;
+        }
+
+        try {
+            const response = await authenticatedFetch(apiUrl(biddingListingPath(listingId, '/close')), {
+                method: 'POST',
+            });
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Auction close failed'));
+            }
+            setError(null);
+            await fetchListing({ silent: true });
+            await fetchBids();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Auction close failed.');
+        }
+    };
+
     const sellerDisplayName = sellerProfile?.displayName?.trim() || 'Seller';
 
     const endedPanel = () => {
@@ -629,9 +652,11 @@ const ListingDetailPage: React.FC = () => {
                             <p className="eyebrow">Seller view</p>
                             <h2>Your auction is live</h2>
                             <p className="text-muted">
-                                Sellers cannot bid on their own listings. The auction will close automatically when the timer ends,
-                                and the winner/order flow is handled through auction events.
+                                Sellers cannot bid on their own listings. You can close the auction early or wait for the timer to end.
                             </p>
+                            <button type="button" className="secondary-button" onClick={() => { closeAuction().catch(() => undefined); }}>
+                                Close auction now
+                            </button>
                         </aside>
                     ) : (
                         endedPanel()
