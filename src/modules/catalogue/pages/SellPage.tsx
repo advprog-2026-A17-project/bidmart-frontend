@@ -220,7 +220,7 @@ const SellPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [isSeller, user]);
+    }, [authenticatedFetch, isSeller, user]);
 
     const fetchSellerAuctions = useCallback(async () => {
         if (!user || !isSeller) {
