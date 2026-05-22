@@ -96,3 +96,10 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.sources=src
+            -Dsonar.tests=.
+            -Dsonar.test.inclusions=*.contract.test.mjs
+            -Dsonar.exclusions=dist/**,node_modules/**,coverage/**,artifacts/**,e2e/**,public/**
+            -Dsonar.test.exclusions=e2e/**,public/**
