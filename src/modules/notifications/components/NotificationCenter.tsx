@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
-import { useWebSocket } from '../../../hooks/useWebSocket';
+import { useNotificationsWebSocket } from '../../../context/useNotificationsWebSocket';
 
 interface BidmartNotification {
     id: string;
@@ -37,7 +37,7 @@ const notificationFromPayload = (payload: unknown): BidmartNotification => {
 const NotificationCenter = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
-    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
+    const { isConnected, subscribe } = useNotificationsWebSocket();
     const [storedNotifications, setStoredNotifications] = useState<BidmartNotification[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -96,10 +96,9 @@ const NotificationCenter = () => {
             return;
         }
 
-        const destination = '/user/queue/notifications';
-        subscribe(destination, prependNotification);
-        return () => unsubscribe(destination);
-    }, [isConnected, prependNotification, subscribe, unsubscribe, user]);
+        const release = subscribe('/user/queue/notifications', prependNotification);
+        return release;
+    }, [isConnected, prependNotification, subscribe, user]);
 
     useEffect(() => {
         if (!isOpen) {

@@ -21,34 +21,28 @@ export interface AuthLoginResult {
 
 export interface AuthContextType {
     user: AuthUser | null;
-    accessToken: string | null;
-    refreshToken: string | null;
     tokenId: string | null;
     sessionExpiresAt: number | null;
-    activeRole: 'BUYER' | 'SELLER' | null;
     login: (payload: AuthLoginResult) => void;
     logout: () => void;
-    switchRole: (role: 'BUYER' | 'SELLER') => void;
     updateUserProfile: (profile: {
         displayName?: string | null;
         avatarUrl?: string | null;
         shippingAddress?: string | null;
     }) => void;
     refreshAccessToken: () => Promise<string | null>;
+    maybeRefreshSession: () => void;
     authenticatedFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }
 
 export const AuthContext = createContext<AuthContextType>({
     user: null,
-    accessToken: null,
-    refreshToken: null,
     tokenId: null,
     sessionExpiresAt: null,
-    activeRole: null,
     login: () => {},
     logout: () => {},
-    switchRole: () => {},
     updateUserProfile: () => {},
     refreshAccessToken: async () => null,
+    maybeRefreshSession: () => {},
     authenticatedFetch: async (input, init) => fetch(input, init),
 });

@@ -3,16 +3,20 @@ import { AuthContext, type AuthLoginResult, type AuthUser } from './auth-context
 import { apiUrl } from '../config/api';
 import { useSessionRevocation } from '../hooks/useSessionRevocation';
 import { getPersistentItem, setPersistentItem, removePersistentItem } from '../utils/storage';
+import { parseStoredJson } from '../utils/safe-storage-json';
+import { readJwtNumericClaim, readJwtStringClaim } from '../utils/jwt-claims';
 
 const API_PATH_PREFIX = '/api/v1/';
-type AccountRole = 'BUYER' | 'SELLER';
-const SESSION_REFRESH_MIN_INTERVAL_MS = 60000;
+/** Refresh access token when this much lifetime remains (sliding session, ~10 min of 15 min TTL). */
+const REFRESH_BEFORE_EXPIRY_MS = 10 * 60 * 1000;
+const SESSION_EXPIRY_UPDATE_THRESHOLD_MS = 5000;
 const DEFAULT_SESSION_WINDOW_SECONDS = 900;
+const AUTH_REFRESH_PATH = '/api/v1/auth/refresh';
 
 const trustedApiPath = (input: RequestInfo | URL): string => {
     const rawUrl = input instanceof Request ? input.url : input.toString();
     const parsedUrl = new URL(rawUrl, globalThis.location.origin);
-    
+
     const expectedBackendOrigin = new URL(apiUrl('/'), globalThis.location.origin).origin;
 
     const isSameOrigin = parsedUrl.origin === globalThis.location.origin;
@@ -25,57 +29,77 @@ const trustedApiPath = (input: RequestInfo | URL): string => {
     if (isSameOrigin && parsedUrl.pathname.startsWith(API_PATH_PREFIX)) {
         return new URL(parsedUrl.pathname + parsedUrl.search, expectedBackendOrigin).toString();
     }
-    
+
     return parsedUrl.toString();
 };
 
-const extractTokenIdFromJwt = (token: string | null): string | null => {
-    if (!token) return null;
-    try {
-        const parts = token.split('.');
-        if (parts.length !== 3) return null;
+const extractTokenIdFromJwt = (token: string | null): string | null =>
+    readJwtStringClaim(token, 'tokenId');
 
-        const base64Url = parts[1];
-        let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-
-        while (base64.length % 4 !== 0) {
-            base64 += '=';
-        }
-
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-
-        const payload = JSON.parse(jsonPayload);
-        return payload.tokenId || null;
-    } catch {
-        return null;
-    }
+const getAccessTokenExpiresAtMs = (token: string | null): number | null => {
+    const exp = readJwtNumericClaim(token, 'exp');
+    return exp == null ? null : exp * 1000;
 };
 
-const hasRole = (user: AuthUser | null, role: AccountRole): boolean =>
-    user?.roles?.some((item) => item.name === role) ?? false;
-
-const resolveActiveRole = (user: AuthUser | null, preferred: string | null): AccountRole | null => {
-    if (!user) return null;
-    if ((preferred === 'BUYER' || preferred === 'SELLER') && hasRole(user, preferred)) {
-        return preferred;
+const sessionExpiryChangedMeaningfully = (
+    previous: number | null,
+    next: number | null,
+): boolean => {
+    if (previous === next) {
+        return false;
     }
-    if (hasRole(user, 'BUYER')) return 'BUYER';
-    if (hasRole(user, 'SELLER')) return 'SELLER';
-    return null;
+    if (next === null) {
+        return previous !== null;
+    }
+    if (previous === null) {
+        return true;
+    }
+    if (next > previous) {
+        return true;
+    }
+    return previous - next >= SESSION_EXPIRY_UPDATE_THRESHOLD_MS;
+};
+
+const usersEqual = (left: AuthUser | null, right: AuthUser | null): boolean => {
+    if (left === right) return true;
+    if (!left || !right) return false;
+    return left.id === right.id
+        && left.email === right.email
+        && left.enabled === right.enabled
+        && (left.displayName ?? null) === (right.displayName ?? null)
+        && (left.avatarUrl ?? null) === (right.avatarUrl ?? null)
+        && (left.shippingAddress ?? null) === (right.shippingAddress ?? null)
+        && JSON.stringify(left.roles) === JSON.stringify(right.roles);
+};
+
+const persistSession = (
+    user: AuthUser | null,
+    accessToken: string | null,
+    refreshToken: string | null,
+    sessionExpiresAt: number | null,
+) => {
+    if (user) {
+        setPersistentItem('auth_user', JSON.stringify(user));
+        setPersistentItem('access_token', accessToken || '');
+        setPersistentItem('refresh_token', refreshToken || '');
+        setPersistentItem('session_expires_at', sessionExpiresAt ? String(sessionExpiresAt) : '');
+    } else {
+        removePersistentItem('auth_user');
+        removePersistentItem('access_token');
+        removePersistentItem('refresh_token');
+        removePersistentItem('session_expires_at');
+        removePersistentItem('active_role');
+    }
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser | null>(() => {
-        const saved = getPersistentItem('auth_user');
-        return saved ? JSON.parse(saved) : null;
-    });
-    const [accessToken, setAccessToken] = useState<string | null>(() => {
-        return getPersistentItem('access_token');
-    });
-    const [refreshToken, setRefreshToken] = useState<string | null>(() => {
-        return getPersistentItem('refresh_token');
+        const raw = getPersistentItem('auth_user');
+        const saved = parseStoredJson<AuthUser>(raw);
+        if (raw && !saved) {
+            removePersistentItem('auth_user');
+        }
+        return saved;
     });
     const [tokenId, setTokenId] = useState<string | null>(() => {
         const token = getPersistentItem('access_token');
@@ -87,47 +111,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsed = Number(saved);
         return Number.isFinite(parsed) ? parsed : null;
     });
-    const [activeRole, setActiveRole] = useState<AccountRole | null>(() => {
-        const savedRole = getPersistentItem('active_role');
-        const savedUser = getPersistentItem('auth_user');
-        return resolveActiveRole(savedUser ? JSON.parse(savedUser) as AuthUser : null, savedRole);
-    });
+
+    const accessTokenRef = useRef<string | null>(getPersistentItem('access_token'));
+    const refreshTokenRef = useRef<string | null>(getPersistentItem('refresh_token'));
+    const accessTokenExpiresAtRef = useRef<number | null>(
+        getAccessTokenExpiresAtMs(getPersistentItem('access_token')),
+    );
     const sessionWindowSecondsRef = useRef(DEFAULT_SESSION_WINDOW_SECONDS);
+    const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
 
-    useEffect(() => {
-        if (user) {
-            setPersistentItem('auth_user', JSON.stringify(user));
-            setPersistentItem('access_token', accessToken || '');
-            setPersistentItem('refresh_token', refreshToken || '');
-            setPersistentItem('session_expires_at', sessionExpiresAt ? String(sessionExpiresAt) : '');
-            const nextRole = resolveActiveRole(user, activeRole);
-            if (nextRole) {
-                setPersistentItem('active_role', nextRole);
-            }
-        } else {
-            removePersistentItem('auth_user');
-            removePersistentItem('access_token');
-            removePersistentItem('refresh_token');
-            removePersistentItem('session_expires_at');
-            removePersistentItem('active_role');
+    const shouldRefreshAccessToken = useCallback(() => {
+        const expiresAt = accessTokenExpiresAtRef.current
+            ?? getAccessTokenExpiresAtMs(accessTokenRef.current);
+        if (!expiresAt) {
+            return false;
         }
-    }, [user, accessToken, refreshToken, sessionExpiresAt, activeRole]);
+        return expiresAt - Date.now() <= REFRESH_BEFORE_EXPIRY_MS;
+    }, []);
 
-    const login = useCallback((payload: AuthLoginResult) => {
+    const computeSessionExpiresAt = useCallback((payload: AuthLoginResult): number | null => {
         sessionWindowSecondsRef.current = payload.expiresIn > 0 ? payload.expiresIn : DEFAULT_SESSION_WINDOW_SECONDS;
         const accessWindowExpiresAt = Date.now() + (sessionWindowSecondsRef.current * 1000);
         const refreshWindowExpiresAt = payload.refreshExpiresAt || Number.MAX_SAFE_INTEGER;
         const nextSessionExpiresAt = Math.min(accessWindowExpiresAt, refreshWindowExpiresAt);
-
-        setUser(payload.user);
-        setAccessToken(payload.accessToken);
-        setRefreshToken(payload.refreshToken);
-        setTokenId(extractTokenIdFromJwt(payload.accessToken));
-        setSessionExpiresAt(Number.isFinite(nextSessionExpiresAt) ? nextSessionExpiresAt : null);
-        setActiveRole(resolveActiveRole(payload.user, getPersistentItem('active_role')));
+        return Number.isFinite(nextSessionExpiresAt) ? nextSessionExpiresAt : null;
     }, []);
 
+    const applySessionPayload = useCallback((payload: AuthLoginResult, options?: { silent?: boolean }) => {
+        const silent = options?.silent ?? false;
+        accessTokenRef.current = payload.accessToken;
+        refreshTokenRef.current = payload.refreshToken;
+        accessTokenExpiresAtRef.current = getAccessTokenExpiresAtMs(payload.accessToken);
+
+        const nextTokenId = extractTokenIdFromJwt(payload.accessToken);
+        const nextSessionExpiresAt = computeSessionExpiresAt(payload);
+
+        if (silent) {
+            setUser((previous) => {
+                const nextUser = usersEqual(previous, payload.user) ? previous : payload.user;
+                persistSession(nextUser, payload.accessToken, payload.refreshToken, nextSessionExpiresAt);
+                return nextUser;
+            });
+            setTokenId((previous) => (previous === nextTokenId ? previous : nextTokenId));
+            setSessionExpiresAt((previous) => (
+                sessionExpiryChangedMeaningfully(previous, nextSessionExpiresAt)
+                    ? nextSessionExpiresAt
+                    : previous
+            ));
+        } else {
+            setUser(payload.user);
+            setTokenId(nextTokenId);
+            setSessionExpiresAt(nextSessionExpiresAt);
+            removePersistentItem('active_role');
+            persistSession(payload.user, payload.accessToken, payload.refreshToken, nextSessionExpiresAt);
+        }
+    }, [computeSessionExpiresAt]);
+
+    const login = useCallback((payload: AuthLoginResult) => {
+        applySessionPayload(payload, { silent: false });
+    }, [applySessionPayload]);
+
     const logout = useCallback(async () => {
+        const refreshToken = refreshTokenRef.current;
         if (refreshToken) {
             try {
                 await fetch(apiUrl('/api/v1/auth/logout'), {
@@ -139,20 +184,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.error('Failed to invalidate session on the backend', error);
             }
         }
-        
-        removePersistentItem('auth_user');
-        removePersistentItem('access_token');
-        removePersistentItem('refresh_token');
-        removePersistentItem('session_expires_at');
-        removePersistentItem('active_role');
 
+        accessTokenRef.current = null;
+        refreshTokenRef.current = null;
+        accessTokenExpiresAtRef.current = null;
         setUser(null);
-        setAccessToken(null);
-        setRefreshToken(null);
         setTokenId(null);
         setSessionExpiresAt(null);
-        setActiveRole(null);
-    }, [refreshToken]);
+        persistSession(null, null, null, null);
+    }, []);
 
     useSessionRevocation(user, tokenId, logout);
 
@@ -163,66 +203,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const msRemaining = sessionExpiresAt - Date.now();
         if (msRemaining <= 0) {
-            setTimeout(() => logout(), 0);
+            setTimeout(() => {
+                void logout();
+            }, 0);
             return;
         }
 
         const timerId = window.setTimeout(() => {
-            logout();
+            void logout();
         }, msRemaining);
 
         return () => window.clearTimeout(timerId);
     }, [logout, sessionExpiresAt, user]);
 
     const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+        if (refreshInFlightRef.current) {
+            return refreshInFlightRef.current;
+        }
+
+        const refreshToken = refreshTokenRef.current;
         if (!refreshToken) {
             logout();
             return null;
         }
 
-        const response = await fetch(apiUrl('/api/v1/auth/refresh'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken }),
-        });
+        const refreshPromise = (async () => {
+            const response = await fetch(apiUrl('/api/v1/auth/refresh'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken }),
+            });
 
-        if (!response.ok) {
-            logout();
-            return null;
+            if (!response.ok) {
+                logout();
+                return null;
+            }
+
+            const payload = await response.json() as AuthLoginResult;
+            applySessionPayload(payload, { silent: true });
+            return payload.accessToken;
+        })();
+
+        refreshInFlightRef.current = refreshPromise;
+        try {
+            return await refreshPromise;
+        } finally {
+            refreshInFlightRef.current = null;
         }
+    }, [applySessionPayload, logout]);
 
-        const payload = await response.json() as AuthLoginResult;
-        login(payload);
-        return payload.accessToken;
-    }, [login, logout, refreshToken]);
-
-    const lastRefreshAtRef = useRef(0);
+    const maybeRefreshSession = useCallback(() => {
+        if (!user || !refreshTokenRef.current) {
+            return;
+        }
+        if (!shouldRefreshAccessToken()) {
+            return;
+        }
+        void refreshAccessToken();
+    }, [refreshAccessToken, shouldRefreshAccessToken, user]);
 
     useEffect(() => {
-        if (!user || !refreshToken) {
+        if (!user || !refreshTokenRef.current) {
+            return;
+        }
+        maybeRefreshSession();
+    }, [maybeRefreshSession, user]);
+
+    useEffect(() => {
+        if (!user || !refreshTokenRef.current) {
             return;
         }
 
-        const refreshOnActivity = () => {
-            const now = Date.now();
-            if (now - lastRefreshAtRef.current < SESSION_REFRESH_MIN_INTERVAL_MS) {
+        const onVisibilityChange = () => {
+            if (document.visibilityState !== 'visible') {
                 return;
             }
-            lastRefreshAtRef.current = now;
-            void refreshAccessToken();
+            maybeRefreshSession();
         };
 
-        const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
-        events.forEach((eventName) => {
-            window.addEventListener(eventName, refreshOnActivity, { passive: true });
-        });
-
-        return () => {
-            events.forEach((eventName) => {
-                window.removeEventListener(eventName, refreshOnActivity);
-            });
-        };
-    }, [refreshAccessToken, refreshToken, user]);
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    }, [maybeRefreshSession, user]);
 
     const authenticatedFetch = useCallback(async (input: RequestInfo | URL, init: RequestInit = {}) => {
         const requestPath = trustedApiPath(input);
@@ -235,23 +296,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return { ...init, headers };
         };
 
-        let response = await fetch(requestPath, withToken(accessToken));
-        if (response.status === 401 && refreshToken) {
+        let response = await fetch(requestPath, withToken(accessTokenRef.current));
+        if (response.status === 401 && refreshTokenRef.current) {
             const refreshedToken = await refreshAccessToken();
             if (refreshedToken) {
                 response = await fetch(requestPath, withToken(refreshedToken));
             }
         }
-        return response;
-    }, [accessToken, refreshAccessToken, refreshToken]);
 
-    const switchRole = useCallback((role: AccountRole) => {
-        if (!hasRole(user, role)) {
-            return;
+        const parsedPath = new URL(requestPath).pathname;
+        if (response.ok && !parsedPath.startsWith(AUTH_REFRESH_PATH)) {
+            maybeRefreshSession();
         }
-        setActiveRole(role);
-        setPersistentItem('active_role', role);
-    }, [user]);
+
+        return response;
+    }, [maybeRefreshSession, refreshAccessToken]);
 
     const updateUserProfile = useCallback((profile: {
         displayName?: string | null;
@@ -270,27 +329,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (unchanged) {
                 return previous;
             }
-            return {
+            const nextUser = {
                 ...previous,
                 ...profile,
             };
+            persistSession(
+                nextUser,
+                accessTokenRef.current,
+                refreshTokenRef.current,
+                sessionExpiresAt,
+            );
+            return nextUser;
         });
-    }, []);
+    }, [sessionExpiresAt]);
 
     const contextValue = useMemo(() => ({
         user,
-        accessToken,
-        refreshToken,
         tokenId,
         sessionExpiresAt,
-        activeRole,
         login,
         logout,
-        switchRole,
         updateUserProfile,
         refreshAccessToken,
+        maybeRefreshSession,
         authenticatedFetch,
-    }), [accessToken, activeRole, authenticatedFetch, login, logout, refreshAccessToken, refreshToken, sessionExpiresAt, switchRole, tokenId, updateUserProfile, user]);
+    }), [authenticatedFetch, login, logout, maybeRefreshSession, refreshAccessToken, sessionExpiresAt, tokenId, updateUserProfile, user]);
 
     return (
         <AuthContext.Provider value={contextValue}>

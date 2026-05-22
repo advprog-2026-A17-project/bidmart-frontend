@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
-import { gatewayUrl, readApiError } from '../../../config/apiClient';
+import { gatewayUrl, readApiError, readApiJson } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
+import { useCanManageListings } from '../../../hooks/useHasPermission';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
@@ -12,6 +13,7 @@ import { catalogueListingToAuction, type CatalogueListing } from '../utils/listi
 import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
 import { CATALOGUE_CATEGORIES_TREE_PATH } from '../api/endpoints';
 import { flattenCategoryTree, type CategoryNode, type CategoryOption } from '../utils/categories';
+import PageToast from '../../../components/PageToast';
 
 type StudioView = 'dashboard' | 'listing-create' | 'listing-manage';
 
@@ -61,13 +63,16 @@ type StudioNavGroup = {
 
 const CATEGORIES = [
     'Electronics',
+    'Elektronik',
+    'Fashion',
     'Furniture',
     'Collectibles',
-    'Fashion',
     'Sports',
     'Art & Antiques',
     'Home & Garden',
     'Toys & Games',
+    'Vehicles',
+    'Other',
 ];
 
 const CONDITIONS = [
@@ -80,6 +85,7 @@ const CONDITIONS = [
 
 const MAX_IMAGE_BYTES = 600 * 1024;
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
+const PUBLISHED_STATUSES = new Set(['ACTIVE', 'EXTENDED']);
 const FINAL_AUCTION_STATUSES = new Set<string>(['ENDED', 'WON', 'UNSOLD', 'CLOSED', 'CANCELLED']);
 
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
@@ -152,6 +158,12 @@ const asIsoDate = (input?: string | null): string | null => {
     return parsed.toISOString();
 };
 
+const delay = (durationMs: number): Promise<void> =>
+    new Promise((resolve) => window.setTimeout(resolve, durationMs));
+
+const isPublishedListing = (listing: ListingRecord): boolean =>
+    PUBLISHED_STATUSES.has((listing.status ?? '').toUpperCase());
+
 const SELLER_STUDIO_VIEW_STORAGE_KEY = 'seller_studio_active_view';
 
 const isStudioView = (value: string | null): value is StudioView =>
@@ -160,7 +172,8 @@ const isStudioView = (value: string | null): value is StudioView =>
 const SellPage: React.FC = () => {
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
-    const isSeller = user?.roles?.some((role) => role.name === 'SELLER') ?? false;
+    const canManageListings = useCanManageListings();
+    const isSeller = canManageListings || (user?.roles?.some((role) => role.name === 'SELLER') ?? false);
     const roleSummary = user?.roles?.map((role) => role.name).join(', ') ?? 'No active role';
     const [activeView, setActiveView] = useState<StudioView>(() => {
         try {
@@ -175,6 +188,7 @@ const SellPage: React.FC = () => {
     const [listings, setListings] = useState<ListingRecord[]>([]);
     const [sellerAuctions, setSellerAuctions] = useState<Auction[]>([]);
     const [editingListingId, setEditingListingId] = useState<string | null>(null);
+    const [submitting, setSubmitting] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -185,32 +199,33 @@ const SellPage: React.FC = () => {
     const [editingListingStatus, setEditingListingStatus] = useState<string | null>(null);
     const nowMs = useNowTick();
 
-    const fetchSellerListings = useCallback(async () => {
+    const fetchSellerListings = useCallback(async (): Promise<ListingRecord[]> => {
         if (!user || !isSeller) {
             setListings([]);
             setLoading(false);
-            return;
+            return [];
         }
 
         try {
             setLoading(true);
-            const response = await fetch(gatewayUrl('/api/v1/catalogue/listings'));
+            const response = await authenticatedFetch(gatewayUrl('/api/v1/catalogue/listings/seller'));
             if (!response.ok) {
                 throw new Error(`Listing lookup failed with status ${response.status}`);
             }
             const payload: unknown = await response.json();
-            setListings(
-                parseListingsResponse(payload).filter((listing) => String(listing.sellerId) === user.id)
-            );
+            const parsed = parseListingsResponse(payload);
+            setListings(parsed);
+            return parsed;
         } catch (err: unknown) {
             setError(toErrorMessage(err));
             setListings([]);
+            return [];
         } finally {
             setLoading(false);
         }
-    }, [isSeller, user]);
+    }, [authenticatedFetch, isSeller, user]);
 
-    const fetchSellerAuctions = useCallback(async () => {
+    const fetchSellerAuctions = useCallback(async (sourceListings: ListingRecord[]) => {
         if (!user || !isSeller) {
             setSellerAuctions([]);
             setAnalyticsLoading(false);
@@ -221,7 +236,7 @@ const SellPage: React.FC = () => {
             setAnalyticsLoading(true);
             setAnalyticsError(null);
             setSellerAuctions(
-                listings
+                sourceListings
                     .filter((listing) => String(listing.sellerId) === user.id)
                     .map((listing) => catalogueListingToAuction(listing as unknown as CatalogueListing))
             );
@@ -231,11 +246,12 @@ const SellPage: React.FC = () => {
         } finally {
             setAnalyticsLoading(false);
         }
-    }, [isSeller, listings, user]);
+    }, [isSeller, user]);
 
     const refreshStudio = useCallback(async () => {
-        await fetchSellerListings();
-    }, [fetchSellerListings]);
+        const refreshedListings = await fetchSellerListings();
+        await fetchSellerAuctions(refreshedListings);
+    }, [fetchSellerAuctions, fetchSellerListings]);
 
     useEffect(() => {
         refreshStudio();
@@ -271,15 +287,18 @@ const SellPage: React.FC = () => {
         }
     }, [activeView]);
 
-    const realtimeDestinations = useMemo(() => user ? ['/topic/listings'] : [], [user]);
+    const realtimeDestinations = useMemo(
+        () => (user?.id ? [`/topic/sellers/${user.id}/auctions`] : []),
+        [user?.id]
+    );
     const handleRealtimeEvent = useCallback(() => {
         void refreshStudio();
     }, [refreshStudio]);
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
 
     useEffect(() => {
-        void fetchSellerAuctions();
-    }, [fetchSellerAuctions]);
+        void fetchSellerAuctions(listings);
+    }, [fetchSellerAuctions, listings]);
 
     const existingListingIds = useMemo(
         () => new Set(listings.map((listing) => String(listing.id))),
@@ -370,12 +389,38 @@ const SellPage: React.FC = () => {
             throw new Error(await readApiError(response, 'Listing publish failed'));
         }
 
-        const listingResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
-        if (!listingResponse.ok) {
-            throw new Error(await readApiError(listingResponse, 'Published listing fetch failed'));
+        const publishedListing = await readApiJson<ListingRecord>(response);
+        let listing = publishedListing ?? ({ id: listingId } as ListingRecord);
+        for (let attempt = 0; attempt < 3 && !isPublishedListing(listing); attempt += 1) {
+            await delay(250);
+            const listingResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
+            if (!listingResponse.ok) {
+                throw new Error(await readApiError(listingResponse, 'Published listing fetch failed'));
+            }
+            listing = await listingResponse.json() as ListingRecord;
         }
-        const listing = await listingResponse.json() as ListingRecord;
-        await ensureBiddingSessionForListing(listing);
+        if (!isPublishedListing(listing)) {
+            throw new Error('Listing publish did not activate the listing.');
+        }
+
+        try {
+            await ensureBiddingSessionForListing(listing);
+        } catch (err: unknown) {
+            if (!toErrorMessage(err).toLowerCase().includes('listing is not active')) {
+                throw err;
+            }
+
+            await delay(500);
+            const retryResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
+            if (!retryResponse.ok) {
+                throw new Error(await readApiError(retryResponse, 'Published listing fetch failed'));
+            }
+            const retryListing = await retryResponse.json() as ListingRecord;
+            if (!isPublishedListing(retryListing)) {
+                throw err;
+            }
+            await ensureBiddingSessionForListing(retryListing);
+        }
     };
 
     const resetListingForm = () => {
@@ -395,18 +440,43 @@ const SellPage: React.FC = () => {
         });
     };
 
-    const createListingPayload = (form: ListingFormState) => ({
-        title: form.title.trim(),
+    const createListingPayload = (form: ListingFormState) => {
+        const options = categoryOptions.length > 0
+            ? categoryOptions
+            : CATEGORIES.map((category, index) => ({ id: index, name: category, label: category }));
+        const selectedCategory = options.find(
+            (option) => option.name === form.category || String(option.id) === form.category
+        );
+        return {
+            title: form.title.trim(),
+            description: form.description.trim(),
+            category: selectedCategory?.name ?? form.category,
+            ...(selectedCategory ? { categoryEntity: { id: selectedCategory.id } } : {}),
+            condition: form.condition,
+            sellerId: user?.id,
+            startingPrice: toListingAmount(form.startingBid),
+            reservePrice: toListingAmount(form.reservePrice || form.startingBid),
+            minimumIncrement: toListingAmount(form.minimumIncrement || '1'),
+            endTime: form.endTime ? (form.endTime.length === 16 ? form.endTime + ':00' : form.endTime) : null,
+            imageUrl: form.imageUrl.trim() || form.images[0] || null,
+        };
+    };
+
+    const createPublishedListingUpdatePayload = (form: ListingFormState) => ({
         description: form.description.trim(),
-        category: form.category,
-        condition: form.condition,
-        sellerId: user?.id,
-        startingPrice: toListingAmount(form.startingBid),
-        reservePrice: toListingAmount(form.reservePrice || form.startingBid),
-        minimumIncrement: toListingAmount(form.minimumIncrement || '1'),
-        endTime: form.endTime,
         imageUrl: form.imageUrl.trim() || form.images[0] || null,
     });
+
+    const validatePublishedListingEdit = (): ListingFormErrors => {
+        const errors: ListingFormErrors = {};
+        if (!listingForm.description.trim()) {
+            errors.description = 'Description is required.';
+        }
+        if (!isValidImageReference(listingForm.imageUrl)) {
+            errors.imageUrl = 'Use a valid http(s) image URL or upload an image file.';
+        }
+        return errors;
+    };
 
     const validateListingForm = (): ListingFormErrors => {
         const errors: ListingFormErrors = {};
@@ -460,12 +530,17 @@ const SellPage: React.FC = () => {
     };
 
     const saveListing = async (publishImmediate = false) => {
+        if (submitting) return;
         if (!user || !isSeller) {
-            setError('Only seller accounts can publish listings. Sign in with a SELLER role to continue.');
+            setError('Listing permissions are required to publish. Sign in with an account that can manage listings.');
             return;
         }
 
-        const validationErrors = validateListingForm();
+        const isPublishedEdit = Boolean(editingListingId)
+            && (editingListingStatus === 'ACTIVE' || editingListingStatus === 'EXTENDED');
+        const validationErrors = isPublishedEdit
+            ? validatePublishedListingEdit()
+            : validateListingForm();
         if (Object.keys(validationErrors).length > 0) {
             setListingFormErrors(validationErrors);
             setError('Resolve the highlighted listing fields before saving.');
@@ -476,15 +551,19 @@ const SellPage: React.FC = () => {
         setListingFormErrors({});
         setError(null);
         setNotice(null);
+        setSubmitting(true);
 
         try {
             const isEditing = Boolean(editingListingId);
+            const requestBody = isEditing && isPublishedEdit
+                ? createPublishedListingUpdatePayload(listingForm)
+                : createListingPayload(listingForm);
             const response = await authenticatedFetch(
                 gatewayUrl(isEditing ? `/api/v1/catalogue/listings/${editingListingId}` : '/api/v1/catalogue/listings'),
                 {
                     method: isEditing ? 'PUT' : 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(createListingPayload(listingForm)),
+                    body: JSON.stringify(requestBody),
                 }
             );
             if (!response.ok) {
@@ -495,7 +574,17 @@ const SellPage: React.FC = () => {
             const listingId = String(saved.id);
 
             if (publishImmediate) {
-                await publishCreatedListing(listingId);
+                try {
+                    await publishCreatedListing(listingId);
+                } catch (publishErr: unknown) {
+                    // Rollback: delete the orphan draft listing so it doesn't linger
+                    if (!isEditing) {
+                        try {
+                            await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`), { method: 'DELETE' });
+                        } catch { /* best-effort cleanup */ }
+                    }
+                    throw publishErr;
+                }
             }
 
             setNotice(
@@ -512,6 +601,8 @@ const SellPage: React.FC = () => {
             setActiveView('listing-manage');
         } catch (err: unknown) {
             setError(toErrorMessage(err));
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -569,6 +660,23 @@ const SellPage: React.FC = () => {
         }
     };
 
+    const deactivateListing = async (listingId: string | number) => {
+        setError(null);
+        setNotice(null);
+        try {
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/deactivate`), {
+                method: 'POST',
+            });
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Listing deactivate failed'));
+            }
+            setNotice('Listing deactivated.');
+            await refreshStudio();
+        } catch (err: unknown) {
+            setError(toErrorMessage(err));
+        }
+    };
+
     const publishDraftListing = async (listing: ListingRecord) => {
         const listingId = String(listing.id);
         const startingPrice = listing.startingPrice ?? 0;
@@ -610,17 +718,17 @@ const SellPage: React.FC = () => {
         return (
             <div className="page-wrap">
                 <section className="page-head">
-                    <h1>{isSignedOut ? 'Sell on BidMart' : 'Seller access required'}</h1>
-                    <p>{isSignedOut ? 'Create an account as a seller to publish auction listings.' : 'Buyer accounts can browse, bid, and manage wallet funds.'}</p>
+                    <h1>{isSignedOut ? 'Seller Studio' : 'Listing access required'}</h1>
+                    <p>{isSignedOut ? 'Sign in to manage listings and publish auctions on BidMart.' : 'Your account does not include listing permissions yet.'}</p>
                 </section>
 
                 <section className="panel access-panel center-content">
-                    <span className="hero-badge">{isSignedOut ? 'Public Preview' : 'Buyer Account'}</span>
-                    <h2>{isSignedOut ? 'Start with a seller account' : 'This page is for sellers'}</h2>
+                    <span className="hero-badge">{isSignedOut ? 'Public Preview' : 'Marketplace Account'}</span>
+                    <h2>{isSignedOut ? 'Sign in to continue' : 'Seller Studio is restricted'}</h2>
                     <p className="text-muted">
                         {isSignedOut
-                            ? 'Seller accounts can create listings, attach product photos, configure auction rules, and publish to the marketplace.'
-                            : 'Your current role does not allow listing creation. Use a seller account when you need to publish items.'}
+                            ? 'Seller Studio lets you create listings, attach product photos, configure auction rules, and publish to the marketplace.'
+                            : 'Complete onboarding with seller permissions or contact support if you need to publish items.'}
                     </p>
                     {user && <p className="access-role-summary">Current role: {roleSummary}</p>}
                     <div className="access-actions">
@@ -691,7 +799,7 @@ const SellPage: React.FC = () => {
                         <h1>{navGroups.flatMap((group) => group.items).find((item) => item.id === activeView)?.label}</h1>
                         <p>Manage listing-auctions in a single workflow aligned with the platform specification.</p>
                     </div>
-                    <button type="button" className="secondary-button" onClick={refreshStudio}>
+                    <button type="button" className="secondary-button" disabled={loading || analyticsLoading} onClick={() => void refreshStudio()}>
                         <span className="material-symbols-outlined" aria-hidden="true">refresh</span>
                         Refresh
                     </button>
@@ -700,9 +808,10 @@ const SellPage: React.FC = () => {
                     </span>
                 </section>
 
-                {notice && <div className="toast-success">{notice}</div>}
-                {error && <div className="toast-error">{error}</div>}
-                {analyticsError && activeView === 'dashboard' && <div className="toast-error">{analyticsError}</div>}
+                <PageToast
+                    error={error ?? (activeView === 'dashboard' ? analyticsError : null)}
+                    success={notice}
+                />
 
                 {activeView === 'dashboard' && (
                     <>
@@ -962,23 +1071,23 @@ const SellPage: React.FC = () => {
                             </label>
                             <div className="panel-footer">
                                 {!isEditingPublishedListing && (
-                                    <button type="button" className="secondary-button" onClick={() => saveListing(false)}>
-                                        Save Draft
+                                    <button type="button" className="secondary-button" disabled={submitting} onClick={() => saveListing(false)}>
+                                        {submitting ? 'Saving…' : 'Save Draft'}
                                     </button>
                                 )}
                                 {!editingListingId && (
-                                    <button type="button" className="primary-button" onClick={() => saveListing(true)}>
-                                        Create & Publish Listing
+                                    <button type="button" className="primary-button" disabled={submitting} onClick={() => saveListing(true)}>
+                                        {submitting ? 'Publishing…' : 'Create & Publish Listing'}
                                     </button>
                                 )}
                                 {editingListingId && !isEditingPublishedListing && (
-                                    <button type="button" className="primary-button" onClick={() => saveListing(true)}>
-                                        Update & Publish Listing
+                                    <button type="button" className="primary-button" disabled={submitting} onClick={() => saveListing(true)}>
+                                        {submitting ? 'Publishing…' : 'Update & Publish Listing'}
                                     </button>
                                 )}
                                 {editingListingId && isEditingPublishedListing && (
-                                    <button type="button" className="primary-button" onClick={() => saveListing(false)}>
-                                        Update Listing
+                                    <button type="button" className="primary-button" disabled={submitting} onClick={() => saveListing(false)}>
+                                        {submitting ? 'Updating…' : 'Update Listing'}
                                     </button>
                                 )}
                             </div>
@@ -1039,6 +1148,7 @@ const SellPage: React.FC = () => {
                                     const locked = listing.hasBids || finalized;
                                     const canEdit = !listing.hasBids && !finalized;
                                     const canCancel = !listing.hasBids && status !== 'WON' && status !== 'UNSOLD' && status !== 'CLOSED' && status !== 'CANCELLED';
+                                    const canDeactivate = !listing.hasBids && status === 'ACTIVE';
                                     const canDelete = !listing.hasBids && status === 'DRAFT';
                                     const canPublishDraft = status === 'DRAFT';
                                     
@@ -1084,6 +1194,11 @@ const SellPage: React.FC = () => {
                                                 {canPublishDraft && (
                                                     <button type="button" className="primary-button" onClick={() => publishDraftListing(listing)}>
                                                         Publish
+                                                    </button>
+                                                )}
+                                                {canDeactivate && (
+                                                    <button type="button" className="secondary-button" onClick={() => deactivateListing(listing.id)}>
+                                                        Deactivate
                                                     </button>
                                                 )}
                                                 {canCancel && (

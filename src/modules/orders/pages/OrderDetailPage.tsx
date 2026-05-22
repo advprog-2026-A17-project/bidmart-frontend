@@ -3,8 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
+import { isSellerUser } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { useNotificationRealtime } from '../../../hooks/useNotificationRealtime';
 import { formatMoney } from '../../../utils/money';
+import OrderStatusCard from '../components/OrderStatusCard';
+import PageToast from '../../../components/PageToast';
 
 type OrderRecord = {
     id: string;
@@ -18,6 +22,8 @@ type OrderRecord = {
     shippingStatus?: string | null;
     trackingNumber?: string | null;
     carrier?: string | null;
+    disputeReason?: string | null;
+    disputeDetails?: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -37,12 +43,10 @@ const CARRIER_OPTIONS = [
     'TIKI',
 ];
 
-const orderStatusLabel = (order: OrderRecord): string =>
-    order.shippingStatus || order.status;
-
 const OrderDetailPage: React.FC = () => {
     const { orderId } = useParams();
-    const { user, activeRole } = useAuth();
+    const { user } = useAuth();
+    const isSellerView = isSellerUser(user);
     const authenticatedFetch = useAuthenticatedFetch();
     const [order, setOrder] = useState<OrderRecord | null>(null);
     const [listing, setListing] = useState<ListingSummary | null>(null);
@@ -51,6 +55,8 @@ const OrderDetailPage: React.FC = () => {
     const [notice, setNotice] = useState<string | null>(null);
     const [selectedCarrier, setSelectedCarrier] = useState('');
     const [carrierError, setCarrierError] = useState<string | null>(null);
+    const [disputeReason, setDisputeReason] = useState('Never received');
+    const [disputeDetails, setDisputeDetails] = useState('');
 
     const isSeller = useMemo(() => user?.id && order?.sellerId === user.id, [order?.sellerId, user?.id]);
     const isBuyer = useMemo(() => user?.id && order?.buyerId === user.id, [order?.buyerId, user?.id]);
@@ -99,6 +105,36 @@ const OrderDetailPage: React.FC = () => {
     useEffect(() => {
         void fetchOrder();
     }, [fetchOrder]);
+
+    useNotificationRealtime(user?.id, () => {
+        void fetchOrder();
+    }, { orderTypesOnly: true });
+
+    const openDispute = async () => {
+        if (!order) return;
+        try {
+            setError(null);
+            setNotice(null);
+            const response = await authenticatedFetch(
+                gatewayUrl(`/api/v1/orders/${encodeURIComponent(order.id)}/dispute`),
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reason: disputeReason,
+                        details: disputeDetails,
+                    }),
+                },
+            );
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Open dispute failed'));
+            }
+            setNotice('Dispute opened. An administrator will review your case.');
+            await fetchOrder();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Unable to open dispute.');
+        }
+    };
 
     const confirmReceipt = async () => {
         if (!order) return;
@@ -175,7 +211,7 @@ const OrderDetailPage: React.FC = () => {
                     <BackButton fallback="/orders" />
                     <h1>Order Details</h1>
                 </section>
-                {error && <div className="toast-error">{error}</div>}
+                <PageToast error={error} />
                 <section className="panel center-content">
                     <span className="material-symbols-outlined section-title-icon" aria-hidden="true">receipt_long</span>
                     <h2>Order not found</h2>
@@ -191,7 +227,7 @@ const OrderDetailPage: React.FC = () => {
             <section className="page-head studio-head">
                 <div>
                     <BackButton fallback="/orders" />
-                    <p className="eyebrow">{activeRole === 'SELLER' ? 'Seller Workspace' : 'Buyer Workspace'}</p>
+                    <p className="eyebrow">{isSellerView ? 'Seller Workspace' : 'Buyer Workspace'}</p>
                     <h1>Order Details</h1>
                     <p>Monitor shipping progress and finalize delivery confirmation.</p>
                 </div>
@@ -201,12 +237,17 @@ const OrderDetailPage: React.FC = () => {
                 </Link>
             </section>
 
-            {error && <div className="toast-error">{error}</div>}
-            {notice && <div className="toast-success">{notice}</div>}
+            <PageToast error={error} success={notice} />
+
+            <OrderStatusCard
+                status={order.status}
+                role={isSeller ? 'seller' : 'buyer'}
+                trackingNumber={order.trackingNumber}
+                carrier={order.carrier}
+            />
 
             <article className="management-card">
                 <div>
-                    <span className={`status-badge status-${order.status}`}>{orderStatusLabel(order)}</span>
                     <h3>{listing?.title || 'Won Auction'}</h3>
                     <p className="text-muted">Created {new Date(order.createdAt).toLocaleString()}</p>
                 </div>
@@ -301,6 +342,32 @@ const OrderDetailPage: React.FC = () => {
                     <button type="button" className="primary-button" onClick={confirmReceipt}>
                         Confirm Receipt
                     </button>
+                </section>
+            )}
+
+            {isBuyer && order.status === 'SHIPPED' && (
+                <section className="panel section-stack" style={{ marginTop: '1.5rem' }}>
+                    <h2>Open Dispute</h2>
+                    <p className="text-muted">Report delivery issues before confirming receipt.</p>
+                    <label>
+                        Reason
+                        <input value={disputeReason} onChange={(event) => setDisputeReason(event.target.value)} />
+                    </label>
+                    <label>
+                        Details
+                        <textarea value={disputeDetails} onChange={(event) => setDisputeDetails(event.target.value)} />
+                    </label>
+                    <button type="button" className="danger-button" onClick={openDispute}>
+                        Open Dispute
+                    </button>
+                </section>
+            )}
+
+            {order.status === 'DISPUTED' && (
+                <section className="panel section-stack" style={{ marginTop: '1.5rem' }}>
+                    <h2>Dispute in review</h2>
+                    <p className="text-muted">{order.disputeReason || 'Dispute opened'}</p>
+                    {order.disputeDetails && <p>{order.disputeDetails}</p>}
                 </section>
             )}
         </div>

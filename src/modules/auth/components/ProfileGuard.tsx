@@ -3,29 +3,18 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type GuardStatus = 'idle' | 'loading' | 'complete' | 'incomplete' | 'error';
 
-type UserProfileResponse = {
-    displayName?: string | null;
-    shippingAddress?: string | null;
+type OnboardingStatus = {
+    profileCompleted?: boolean;
+    needsPassword?: boolean;
+    needsRole?: boolean;
 };
 
-const UNGUARDED_ROUTES = new Set(['/login', '/verify-email', '/profile', '/command/profile']);
-
-const isPublicMarketplaceRoute = (pathname: string): boolean =>
-    pathname === '/'
-    || pathname === '/marketplace'
-    || pathname === '/auctions'
-    || pathname.startsWith('/auctions/')
-    || pathname === '/active-auctions'
-    || pathname.startsWith('/active-auctions/')
-    || pathname.startsWith('/listings/');
-
-const isGuardedRoute = (pathname: string): boolean =>
-    !UNGUARDED_ROUTES.has(pathname) && !isPublicMarketplaceRoute(pathname);
-
-const isBlank = (value?: string | null): boolean => !value || value.trim() === '';
+/** Routes reachable before onboarding is complete (profile is not included). */
+const PRE_ONBOARDING_ROUTES = new Set(['/login', '/verify-email', '/reset-password', '/onboarding']);
 
 const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user } = useAuth();
@@ -35,18 +24,24 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     const [status, setStatus] = useState<GuardStatus>('idle');
     const [error, setError] = useState<string | null>(null);
     const [retryTick, setRetryTick] = useState(0);
+    const userId = user?.id;
+    const isAdmin = user?.roles?.some((role) => role.name === 'ADMIN') ?? false;
 
-    const shouldGuard = useMemo(
-        () => {
-            const isAdmin = user?.roles?.some((role) => role.name === 'ADMIN') ?? false;
-            if (!user || isAdmin) return false;
-            return isGuardedRoute(location.pathname);
-        },
-        [user, location.pathname]
-    );
+    const shouldGuard = useMemo(() => {
+        if (!userId) {
+            return false;
+        }
+        if (isAdmin) {
+            return false;
+        }
+        if (PRE_ONBOARDING_ROUTES.has(location.pathname)) {
+            return false;
+        }
+        return true;
+    }, [isAdmin, location.pathname, userId]);
 
     useEffect(() => {
-        if (!shouldGuard || !user) {
+        if (!shouldGuard || !userId) {
             setStatus('idle');
             setError(null);
             return;
@@ -58,22 +53,29 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
             setStatus('loading');
             setError(null);
             try {
-                const response = await authenticatedFetch(
-                    gatewayUrl('/api/v1/auth/profile')
-                );
-
-                if (!response.ok) {
-                    throw new Error(await readApiError(response, 'Profile lookup failed'));
+                let response: Response | null = null;
+                for (let attempt = 0; attempt <= 2; attempt += 1) {
+                    response = await authenticatedFetch(gatewayUrl('/api/v1/auth/onboarding'));
+                    if (response.ok || ![502, 503, 504].includes(response.status) || attempt === 2) {
+                        break;
+                    }
+                    await sleep(400 * (attempt + 1));
                 }
 
-                const payload = await response.json() as UserProfileResponse;
-                const isComplete = !isBlank(payload.displayName) && !isBlank(payload.shippingAddress);
+                if (!response || !response.ok) {
+                    throw new Error(await readApiError(response ?? new Response(null, { status: 503 }), 'Onboarding lookup failed'));
+                }
+
+                const payload = await response.json() as OnboardingStatus;
+                const needsOnboarding = payload.profileCompleted === false
+                    || payload.needsPassword === true
+                    || payload.needsRole === true;
 
                 if (!active) return;
 
-                if (!isComplete) {
+                if (needsOnboarding) {
                     setStatus('incomplete');
-                    navigate('/profile', { replace: true, state: { from: location.pathname } });
+                    navigate('/onboarding', { replace: true, state: { from: location.pathname } });
                     return;
                 }
 
@@ -90,7 +92,9 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         return () => {
             active = false;
         };
-    }, [authenticatedFetch, location.pathname, navigate, retryTick, shouldGuard, user]);
+    // Re-run only when the signed-in user changes, not on every profile field update
+    // (updateUserProfile mutates `user` and would remount children, dismissing toasts).
+    }, [authenticatedFetch, location.pathname, navigate, retryTick, shouldGuard, userId]);
 
     if (!shouldGuard) {
         return <>{children}</>;
