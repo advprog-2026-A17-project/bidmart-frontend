@@ -371,6 +371,18 @@ const SellPage: React.FC = () => {
         }
     };
 
+    const rollbackPublishedListing = async (listingId: string) => {
+        try {
+            await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/cancel`), {
+                method: 'POST',
+            });
+        } catch {
+            try {
+                await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`), { method: 'DELETE' });
+            } catch { /* best-effort cleanup */ }
+        }
+    };
+
     const ensureBiddingSessionForListing = async (listing: ListingRecord) => {
         const response = await authenticatedFetch(gatewayUrl('/api/v1/listings'), {
             method: 'POST',
@@ -414,22 +426,27 @@ const SellPage: React.FC = () => {
         }
 
         try {
-            await ensureBiddingSessionForListing(listing);
-        } catch (err: unknown) {
-            if (!toErrorMessage(err).toLowerCase().includes('listing is not active')) {
-                throw err;
-            }
+            try {
+                await ensureBiddingSessionForListing(listing);
+            } catch (err: unknown) {
+                if (!toErrorMessage(err).toLowerCase().includes('listing is not active')) {
+                    throw err;
+                }
 
-            await delay(500);
-            const retryResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
-            if (!retryResponse.ok) {
-                throw new Error(await readApiError(retryResponse, 'Published listing fetch failed'));
+                await delay(500);
+                const retryResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`));
+                if (!retryResponse.ok) {
+                    throw new Error(await readApiError(retryResponse, 'Published listing fetch failed'));
+                }
+                const retryListing = await retryResponse.json() as ListingRecord;
+                if (!isPublishedListing(retryListing)) {
+                    throw err;
+                }
+                await ensureBiddingSessionForListing(retryListing);
             }
-            const retryListing = await retryResponse.json() as ListingRecord;
-            if (!isPublishedListing(retryListing)) {
-                throw err;
-            }
-            await ensureBiddingSessionForListing(retryListing);
+        } catch (err: unknown) {
+            await rollbackPublishedListing(listingId);
+            throw err;
         }
     };
 
@@ -588,12 +605,7 @@ const SellPage: React.FC = () => {
                 try {
                     await publishCreatedListing(listingId);
                 } catch (publishErr: unknown) {
-                    // Rollback: delete the orphan draft listing so it doesn't linger
-                    if (!isEditing) {
-                        try {
-                            await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}`), { method: 'DELETE' });
-                        } catch { /* best-effort cleanup */ }
-                    }
+                    await rollbackPublishedListing(listingId);
                     throw publishErr;
                 }
             }
