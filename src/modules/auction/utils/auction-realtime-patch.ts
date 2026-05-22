@@ -4,7 +4,8 @@ import { centsToAmountFromUnknown, toIsoFromUnixSeconds } from '../../../utils/a
 export const eventTargetsListing = (event: AuctionRealtimeEvent, listingId: string): boolean => {
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     const eventListingId = event.listingId ?? payload.listingId;
-    return !eventListingId || String(eventListingId) === listingId;
+    const eventAuctionId = event.auctionId ?? payload.auctionId;
+    return !eventListingId || String(eventListingId) === listingId || String(eventAuctionId ?? '') === listingId;
 };
 
 export const buildListingPatchFromRealtimeEvent = (
@@ -45,6 +46,9 @@ export const buildListingPatchFromRealtimeEvent = (
         hasBids: boolean;
     }> = {};
 
+    if (typeof payload.status === 'string' && payload.status.trim()) {
+        patch.status = payload.status;
+    }
     if (currentPrice != null) {
         patch.currentPrice = currentPrice;
         patch.hasBids = true;

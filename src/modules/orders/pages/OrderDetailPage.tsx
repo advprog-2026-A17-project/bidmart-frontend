@@ -147,7 +147,7 @@ const OrderDetailPage: React.FC = () => {
             if (!response.ok) {
                 throw new Error(await readApiError(response, 'Confirm receipt failed'));
             }
-            setNotice('Order receipt confirmed. Seller payout will be released after 5 minutes.');
+            setNotice('Order receipt confirmed.');
             await fetchOrder();
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Unable to confirm receipt.');
@@ -338,7 +338,7 @@ const OrderDetailPage: React.FC = () => {
             {isBuyer && order.status === 'SHIPPED' && (
                 <section className="panel section-stack" style={{ marginTop: '1.5rem' }}>
                     <h2>Confirm Receipt</h2>
-                    <p className="text-muted">Confirm when the order has arrived. This releases the seller payout after 5 minutes.</p>
+                    <p className="text-muted">Confirm when the order has arrived.</p>
                     <button type="button" className="primary-button" onClick={confirmReceipt}>
                         Confirm Receipt
                     </button>

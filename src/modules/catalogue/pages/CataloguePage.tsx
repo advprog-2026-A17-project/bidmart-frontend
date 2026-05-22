@@ -393,7 +393,6 @@ const CataloguePage: React.FC = () => {
                                 />
                                 <div className="hero-lot-overlay" />
                                 <div className="hero-lot-badges">
-                                    <span className="hero-badge">Hero Lot</span>
                                     <span className="time-badge">
                                         <span className="material-symbols-outlined" aria-hidden="true">timer</span>
                                         {renderTimeLeft(featuredItem.endTime, featuredItem.status)}

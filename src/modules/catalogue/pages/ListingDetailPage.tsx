@@ -5,6 +5,7 @@ import { apiUrl } from '../../../config/api';
 import { readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { useToast } from '../../../context/useToast';
 import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
 import PageToast from '../../../components/PageToast';
@@ -70,6 +71,20 @@ type AuctionSnapshotResponse = {
     minimum_increment_cents?: number;
 };
 
+type ProxyBidResponse = {
+    active?: boolean;
+    maxBidAmount?: number;
+    max_bid_amount_cents?: number;
+    maxBidAmountCents?: number;
+};
+
+type ProxyBidState = {
+    active: boolean;
+    maxAmount: number | null;
+    loading: boolean;
+    saving: boolean;
+};
+
 const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE', 'CLOSED', 'WON', 'UNSOLD']);
 
 const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
@@ -77,6 +92,14 @@ const bidLabel = (meta: ReturnType<typeof buildAuctionCardMeta>): string =>
 
 const bidAmountFromItem = (bid: BidHistoryItem): number =>
     bid.bidAmount ?? (typeof bid.bid_amount_cents === 'number' ? bid.bid_amount_cents / 100 : 0);
+
+const proxyMaxAmountFromResponse = (payload: ProxyBidResponse): number | null => {
+    if (typeof payload.maxBidAmount === 'number') {
+        return payload.maxBidAmount;
+    }
+    const cents = payload.maxBidAmountCents ?? payload.max_bid_amount_cents;
+    return typeof cents === 'number' ? cents / 100 : null;
+};
 
 const toRealtimeBidTime = (value: unknown): string | undefined => {
     if (typeof value === 'string' && value.trim()) {
@@ -147,12 +170,19 @@ const ListingDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const { user } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
+    const { publish } = useToast();
     const [listing, setListing] = useState<ListingDetail | null>(null);
     const [sellerProfile, setSellerProfile] = useState<PublicSellerProfile | null>(null);
     const [bids, setBids] = useState<BidHistoryItem[]>([]);
     const [bidderProfiles, setBidderProfiles] = useState<Record<string, PublicSellerProfile>>({});
     const [bidInput, setBidInput] = useState('');
     const [proxyMaxInput, setProxyMaxInput] = useState('');
+    const [proxyBid, setProxyBid] = useState<ProxyBidState>({
+        active: false,
+        maxAmount: null,
+        loading: false,
+        saving: false,
+    });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const nowMs = useNowTick();
@@ -246,6 +276,43 @@ const ListingDetailPage: React.FC = () => {
         }
     }, [listingId]);
 
+    const fetchProxyBid = useCallback(async () => {
+        if (!listingId || !user?.id) {
+            setProxyBid({ active: false, maxAmount: null, loading: false, saving: false });
+            setProxyMaxInput('');
+            return;
+        }
+
+        setProxyBid((current) => ({ ...current, loading: true }));
+        try {
+            const response = await authenticatedFetch(apiUrl(
+                biddingListingPath(listingId, `/proxy-bids/${encodeURIComponent(user.id)}`),
+            ));
+            if (response.status === 404) {
+                setProxyBid({ active: false, maxAmount: null, loading: false, saving: false });
+                setProxyMaxInput('');
+                return;
+            }
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Proxy bid lookup failed'));
+            }
+
+            const payload = await response.json() as ProxyBidResponse;
+            const maxAmount = proxyMaxAmountFromResponse(payload);
+            setProxyBid({
+                active: Boolean(payload.active ?? maxAmount != null),
+                maxAmount,
+                loading: false,
+                saving: false,
+            });
+            if (maxAmount != null) {
+                setProxyMaxInput(normalizeRupiahInput(maxAmount));
+            }
+        } catch {
+            setProxyBid((current) => ({ ...current, loading: false }));
+        }
+    }, [authenticatedFetch, listingId, user?.id]);
+
     const fetchListing = useCallback(async (options?: { silent?: boolean }) => {
         const silent = options?.silent ?? false;
         if (!listingId) {
@@ -335,16 +402,22 @@ const ListingDetailPage: React.FC = () => {
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
 
     useEffect(() => {
-        if (!listingId || isConnected) return;
+        if (!listingId) return;
         const timer = window.setInterval(() => {
             void (async () => {
                 const patch = await fetchAuctionSnapshotPatch();
                 if (!patch) return;
-                setListing((prev) => prev ? { ...prev, ...patch } : prev);
+                setListing((prev) => {
+                    if (!prev) return prev;
+                    const next = { ...prev, ...patch };
+                    const meta = buildAuctionCardMeta(catalogueListingToAuction(next as unknown as CatalogueListing));
+                    setBidInput(normalizeRupiahInput(meta.minNextBid));
+                    return next;
+                });
             })();
         }, 5000);
         return () => window.clearInterval(timer);
-    }, [fetchAuctionSnapshotPatch, isConnected, listingId]);
+    }, [fetchAuctionSnapshotPatch, listingId]);
 
     const imageSrc = useMemo(() => {
         if (!listing) return '';
@@ -375,6 +448,15 @@ const ListingDetailPage: React.FC = () => {
             PUBLIC_LISTING_STATUSES.has(listingStatus)
         )
     );
+
+    useEffect(() => {
+        if (!user?.id || !listingId || isSeller || !isLive) {
+            setProxyBid({ active: false, maxAmount: null, loading: false, saving: false });
+            setProxyMaxInput('');
+            return;
+        }
+        void fetchProxyBid();
+    }, [fetchProxyBid, isLive, isSeller, listingId, user?.id]);
 
     const placeBid = async () => {
         const amount = toRupiahAmount(bidInput);
@@ -408,6 +490,7 @@ const ListingDetailPage: React.FC = () => {
                 throw new Error(await readApiError(response, 'Bid placement failed'));
             }
             setError(null);
+            publish('Bid placed', 'success', { sourceId: 'place-bid' });
             await fetchListing({ silent: true });
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Bid placement failed.');
@@ -426,6 +509,7 @@ const ListingDetailPage: React.FC = () => {
             return;
         }
 
+        setProxyBid((current) => ({ ...current, saving: true }));
         try {
             const response = await authenticatedFetch(apiUrl(biddingListingPath(listingId, '/bids/cursor')), {
                 method: 'POST',
@@ -436,10 +520,37 @@ const ListingDetailPage: React.FC = () => {
                 throw new Error(await readApiError(response, 'Proxy bid failed'));
             }
             setError(null);
-            setProxyMaxInput('');
+            setProxyMaxInput(normalizeRupiahInput(maxAmount));
+            setProxyBid({ active: true, maxAmount, loading: false, saving: false });
+            publish('Proxy activated', 'success', { sourceId: 'proxy-bid' });
+            await fetchProxyBid();
             await fetchListing({ silent: true });
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Proxy bid failed.');
+            setProxyBid((current) => ({ ...current, saving: false }));
+        }
+    };
+
+    const deactivateProxyBid = async () => {
+        if (!listingId || !user) return;
+
+        setProxyBid((current) => ({ ...current, saving: true }));
+        try {
+            const response = await authenticatedFetch(apiUrl(
+                biddingListingPath(listingId, `/proxy-bids/${encodeURIComponent(user.id)}`),
+            ), {
+                method: 'DELETE',
+            });
+            if (!response.ok && response.status !== 404) {
+                throw new Error(await readApiError(response, 'Proxy bid deactivation failed'));
+            }
+            setError(null);
+            setProxyMaxInput('');
+            setProxyBid({ active: false, maxAmount: null, loading: false, saving: false });
+            publish('Proxy deactivated', 'success', { sourceId: 'proxy-bid' });
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Proxy bid deactivation failed.');
+            setProxyBid((current) => ({ ...current, saving: false }));
         }
     };
 
@@ -672,7 +783,18 @@ const ListingDetailPage: React.FC = () => {
                                     ))}
                                 </div>
                                 <div className="proxy-bid-section">
-                                    <p className="eyebrow">Automatic bid (proxy)</p>
+                                    <div className="proxy-bid-header">
+                                        <p className="eyebrow">Automatic bid (proxy)</p>
+                                        <span className={`proxy-bid-status ${proxyBid.active ? 'proxy-bid-status-active' : ''}`}>
+                                            {proxyBid.loading ? 'Checking' : proxyBid.active ? 'Active' : 'Inactive'}
+                                        </span>
+                                    </div>
+                                    {proxyBid.active && proxyBid.maxAmount != null && (
+                                        <div className="proxy-bid-current">
+                                            <span>Current proxy max</span>
+                                            <strong>{formatMoney(proxyBid.maxAmount)}</strong>
+                                        </div>
+                                    )}
                                     <label className="field">
                                         <span>Maximum amount (IDR)</span>
                                         <input
@@ -681,18 +803,30 @@ const ListingDetailPage: React.FC = () => {
                                             value={proxyMaxInput}
                                             step={1}
                                             min={Math.ceil(listingMeta.minNextBid)}
-                                            disabled={listingMeta.isClosed}
+                                            disabled={listingMeta.isClosed || proxyBid.saving}
                                             onChange={(event) => setProxyMaxInput(normalizeRupiahInput(event.target.value))}
                                         />
                                     </label>
-                                    <button
-                                        type="button"
-                                        className="secondary-button"
-                                        onClick={placeProxyBid}
-                                        disabled={listingMeta.isClosed || !user || !proxyMaxInput}
-                                    >
-                                        Set proxy bid
-                                    </button>
+                                    <div className="proxy-bid-actions">
+                                        <button
+                                            type="button"
+                                            className="secondary-button"
+                                            onClick={placeProxyBid}
+                                            disabled={listingMeta.isClosed || !user || !proxyMaxInput || proxyBid.saving}
+                                        >
+                                            {proxyBid.active ? 'Update proxy bid' : 'Activate proxy bid'}
+                                        </button>
+                                        {proxyBid.active && (
+                                            <button
+                                                type="button"
+                                                className="danger-button proxy-bid-off"
+                                                onClick={deactivateProxyBid}
+                                                disabled={listingMeta.isClosed || proxyBid.saving}
+                                            >
+                                                Turn off
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </aside>

@@ -184,13 +184,15 @@ const OrdersPage: React.FC = () => {
                         <small>{isSellerView ? 'Orders to fulfill' : 'Won auction orders'}</small>
                     </div>
                 </div>
-                <div className="studio-kpi-card">
-                    <span className="material-symbols-outlined" aria-hidden="true">payments</span>
-                    <div>
-                        <strong>{loading ? '--' : formatMoney(totalValue)}</strong>
-                        <small>Total final value</small>
+                {isSellerView && (
+                    <div className="studio-kpi-card">
+                        <span className="material-symbols-outlined" aria-hidden="true">payments</span>
+                        <div>
+                            <strong>{loading ? '--' : formatMoney(totalValue)}</strong>
+                            <small>Total expected receivable</small>
+                        </div>
                     </div>
-                </div>
+                )}
             </section>
 
             {loading ? (
@@ -200,7 +202,7 @@ const OrdersPage: React.FC = () => {
                     <span className="skeleton-button" />
                 </div>
             ) : orders.length > 0 ? (
-                <div className="management-list">
+                <div className="management-list orders-list">
                     {orders.map((order) => {
                         const listing = listingsById[order.listingId];
                         const isBuyer = user?.id === order.buyerId;

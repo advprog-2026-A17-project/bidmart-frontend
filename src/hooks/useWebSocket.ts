@@ -3,6 +3,7 @@ import SockJS from 'sockjs-client';
 import { Client } from '@stomp/stompjs';
 import type { IFrame, StompSubscription } from '@stomp/stompjs';
 import { apiUrl } from '../config/api';
+import { getPersistentItem } from '../utils/storage';
 
 type MessageListener = (message: unknown) => void;
 
@@ -10,7 +11,7 @@ type MessageListener = (message: unknown) => void;
  * WebSocket hook with multicast listeners per STOMP destination.
  * Each subscribe() returns an unsubscribe function so multiple components can share one destination.
  */
-export const useWebSocket = (socketPath = '/ws') => {
+export const useWebSocket = (socketPath = '/ws', connectionKey?: string | null) => {
     const clientRef = useRef<Client | null>(null);
     const stompSubscriptionsRef = useRef<Map<string, StompSubscription>>(new Map());
     const listenersRef = useRef<Map<string, Set<MessageListener>>>(new Map());
@@ -69,9 +70,11 @@ export const useWebSocket = (socketPath = '/ws') => {
             try {
                 const socketUrl = apiUrl(socketPath);
                 const socket = new SockJS(socketUrl);
+                const accessToken = getPersistentItem('access_token');
 
                 const client = new Client({
                     webSocketFactory: () => socket,
+                    connectHeaders: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
                     reconnectDelay: 5000,
                     heartbeatIncoming: 25000,
                     heartbeatOutgoing: 25000,
@@ -157,6 +160,7 @@ export const useWebSocket = (socketPath = '/ws') => {
     }, [removeStompSubscription]);
 
     useEffect(() => {
+        attemptReconnectRef.current = attemptReconnect;
         connect().catch((err) => console.error('[WebSocket] Initial connection failed:', err));
 
         const stompSubscriptions = stompSubscriptionsRef.current;
@@ -164,6 +168,7 @@ export const useWebSocket = (socketPath = '/ws') => {
 
         return () => {
             console.log('[WebSocket] Deactivating client...');
+            attemptReconnectRef.current = () => {};
             stompSubscriptions.forEach((sub) => sub.unsubscribe());
             stompSubscriptions.clear();
             listeners.clear();
@@ -171,9 +176,10 @@ export const useWebSocket = (socketPath = '/ws') => {
             if (clientRef.current?.active) {
                 clientRef.current.deactivate();
             }
+            clientRef.current = null;
             setIsConnected(false);
         };
-    }, [connect]);
+    }, [attemptReconnect, connect, connectionKey]);
 
     return { isConnected, subscribe, unsubscribe };
 };
