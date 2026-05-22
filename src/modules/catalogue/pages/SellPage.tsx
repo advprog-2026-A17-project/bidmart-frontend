@@ -457,7 +457,7 @@ const SellPage: React.FC = () => {
             startingPrice: toListingAmount(form.startingBid),
             reservePrice: toListingAmount(form.reservePrice || form.startingBid),
             minimumIncrement: toListingAmount(form.minimumIncrement || '1'),
-            endTime: form.endTime ? (form.endTime.length === 16 ? form.endTime + ':00' : form.endTime) : null,
+            endTime: form.endTime ? (form.endTime.length === 16 ? form.endTime + ':00Z' : form.endTime) : null,
             imageUrl: form.imageUrl.trim() || form.images[0] || null,
         };
     };
