@@ -25,6 +25,15 @@ interface CatalogueItem {
     hasBids: boolean;
 }
 const PUBLIC_LISTING_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE']);
+const EMPTY_SEARCH_PARAMS: SearchParams = {
+    keyword: '',
+    category: '',
+    categoryId: '',
+    minPrice: '',
+    maxPrice: '',
+    endBefore: '',
+};
+const EMBEDDED_IMAGE_PLACEHOLDER = 'embedded://listing-image';
 
 interface SearchParams {
     keyword: string;
@@ -39,22 +48,8 @@ const CataloguePage: React.FC = () => {
     const [items, setItems] = useState<CatalogueItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
-    const [searchParams, setSearchParams] = useState<SearchParams>({
-        keyword: '',
-        category: '',
-        categoryId: '',
-        minPrice: '',
-        maxPrice: '',
-        endBefore: '',
-    });
-    const [appliedParams, setAppliedParams] = useState<SearchParams>({
-        keyword: '',
-        category: '',
-        categoryId: '',
-        minPrice: '',
-        maxPrice: '',
-        endBefore: '',
-    });
+    const [searchParams, setSearchParams] = useState<SearchParams>(EMPTY_SEARCH_PARAMS);
+    const [appliedParams, setAppliedParams] = useState<SearchParams>(EMPTY_SEARCH_PARAMS);
     const [sortBy, setSortBy] = useState<'recent' | 'price-asc' | 'price-desc'>('recent');
     const [categoryOptions, setCategoryOptions] = useState<CategoryOption[]>([]);
     const nowMs = useNowTick();
@@ -68,6 +63,22 @@ const CataloguePage: React.FC = () => {
         }
         return [];
     };
+
+    const hydrateEmbeddedImages = useCallback(async (catalogueItems: CatalogueItem[]): Promise<CatalogueItem[]> => {
+        return Promise.all(catalogueItems.map(async (item) => {
+            if (item.imageUrl?.trim() !== EMBEDDED_IMAGE_PLACEHOLDER) {
+                return item;
+            }
+            try {
+                const response = await fetch(apiUrl(`/api/v1/catalogue/listings/${encodeURIComponent(String(item.id))}`));
+                if (!response.ok) return item;
+                const detail = await response.json() as Partial<CatalogueItem>;
+                return { ...item, imageUrl: detail.imageUrl ?? item.imageUrl };
+            } catch {
+                return item;
+            }
+        }));
+    }, []);
 
     const fetchItems = useCallback(async (params: SearchParams) => {
         setLoading(true);
@@ -92,7 +103,7 @@ const CataloguePage: React.FC = () => {
                 return;
             }
             const data: unknown = await response.json();
-            setItems(parseCatalogueItems(data));
+            setItems(await hydrateEmbeddedImages(parseCatalogueItems(data)));
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Unknown error';
             console.error('Fetch failed:', message);
@@ -100,7 +111,7 @@ const CataloguePage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [hydrateEmbeddedImages]);
 
     useEffect(() => {
         fetchItems(appliedParams);
@@ -143,20 +154,38 @@ const CataloguePage: React.FC = () => {
         };
     }, []);
 
+    const normalizeFilterParams = (params: SearchParams): SearchParams | null => {
+        const minPrice = params.minPrice.trim() ? normalizeMoneyInput(params.minPrice) : '';
+        const maxPrice = params.maxPrice.trim() ? normalizeMoneyInput(params.maxPrice) : '';
+        if (minPrice && maxPrice && Number(minPrice) > Number(maxPrice)) {
+            setError('Min Price must be less than or equal to Max Price.');
+            return null;
+        }
+        return {
+            ...params,
+            keyword: params.keyword.trim(),
+            minPrice,
+            maxPrice,
+        };
+    };
+
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        setAppliedParams({ ...searchParams });
+        const normalized = normalizeFilterParams(searchParams);
+        if (!normalized) return;
+        setSearchParams(normalized);
+        setAppliedParams(normalized);
     };
 
     const handleReset = () => {
-        const empty: SearchParams = { keyword: '', category: '', categoryId: '', minPrice: '', maxPrice: '', endBefore: '' };
-        setSearchParams(empty);
-        setAppliedParams(empty);
+        setError(null);
+        setSortBy('recent');
+        setSearchParams(EMPTY_SEARCH_PARAMS);
+        setAppliedParams(EMPTY_SEARCH_PARAMS);
     };
 
     const renderTimeLeft = (endTime: string, status: string) => {
         const normalizedStatus = (status ?? '').toUpperCase();
-        const ACTIVE_STATUSES = new Set(['ACTIVE', 'EXTENDED', 'AVAILABLE']);
         const CLOSED_STATUSES_LOCAL = new Set(['CLOSED', 'ENDED', 'WON', 'UNSOLD']);
 
         // If backend says it's definitively closed, always show 'Ended'
@@ -167,9 +196,7 @@ const CataloguePage: React.FC = () => {
         if (!Number.isFinite(endMs)) return 'Live';
         const diff = endMs - nowMs;
 
-        // If time has passed but status is still active → awaiting settlement, show 'Live'
-        if (diff <= 0 && ACTIVE_STATUSES.has(normalizedStatus)) return 'Live';
-
+        // If time has passed, show 'Ended' even if status hasn't updated yet
         if (diff <= 0) return 'Ended';
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -179,7 +206,7 @@ const CataloguePage: React.FC = () => {
 
     const resolveImageSrc = (item: CatalogueItem) => {
         const url = item.imageUrl?.trim();
-        return url ? url : NO_IMAGE_PLACEHOLDER;
+        return url && url !== EMBEDDED_IMAGE_PLACEHOLDER ? url : NO_IMAGE_PLACEHOLDER;
     };
 
     const handleImageError = (
@@ -190,12 +217,22 @@ const CataloguePage: React.FC = () => {
         target.src = NO_IMAGE_PLACEHOLDER;
     };
 
+    const itemPrice = (item: CatalogueItem): number => (
+        Number.isFinite(item.currentPrice) ? item.currentPrice : item.startingPrice
+    );
+    const itemEndTime = (item: CatalogueItem): number => {
+        const parsed = new Date(item.endTime).getTime();
+        return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+    };
     const visibleItems = [...items]
-        .filter((item) => PUBLIC_LISTING_STATUSES.has((item.status ?? '').toUpperCase()))
+        .filter((item) => (
+            PUBLIC_LISTING_STATUSES.has((item.status ?? '').toUpperCase())
+            && itemEndTime(item) > nowMs
+        ))
         .sort((a, b) => {
-            if (sortBy === 'price-asc') return a.currentPrice - b.currentPrice;
-            if (sortBy === 'price-desc') return b.currentPrice - a.currentPrice;
-            return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
+            if (sortBy === 'price-asc') return itemPrice(a) - itemPrice(b);
+            if (sortBy === 'price-desc') return itemPrice(b) - itemPrice(a);
+            return itemEndTime(a) - itemEndTime(b);
         });
     const liveItems = visibleItems;
     const featuredItem = visibleItems[0];

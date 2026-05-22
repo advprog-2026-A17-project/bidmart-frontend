@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { readApiError, gatewayUrl } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
-import { isSellerUser } from '../../../context/primaryRole';
+import { isSellerUser, walletApiRole } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { useWalletUI } from '../../../context/WalletUIContext';
 import { useNotificationsWebSocket } from '../../../context/useNotificationsWebSocket';
@@ -88,10 +88,20 @@ const walletDisplayName = (email?: string): string => {
     const localPart = email?.split('@')[0]?.replace(/[^a-z0-9]/gi, '').slice(0, 10).toUpperCase();
     return `BM-${localPart || 'ACCOUNT'}`;
 };
+const transactionTypeLabel = (type: string): string => {
+    switch (type) {
+        case 'SELLER_ESCROW':
+            return 'SELLER HOLD';
+        case 'SELLER_ESCROW_SETTLE':
+            return 'SELLER HOLD RELEASED';
+        default:
+            return type.replaceAll('_', ' ');
+    }
+};
 
 const WalletPage: React.FC = () => {
     const { user } = useAuth();
-    const walletRole = 'BUYER';
+    const walletRole = walletApiRole(user);
     const authenticatedFetch = useAuthenticatedFetch();
     const { isConnected, subscribe } = useNotificationsWebSocket();
     const location = useLocation();
@@ -139,7 +149,13 @@ const WalletPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [authenticatedFetch, user]);
+    }, [authenticatedFetch, user, walletRole]);
+
+    useEffect(() => {
+        if (isSellerUser(user) && activeTab === 'deposit') {
+            setActiveTab('overview');
+        }
+    }, [activeTab, user]);
 
     const showSuccess = useCallback((msg: string) => {
         setSuccess(msg);
@@ -479,7 +495,7 @@ const WalletPage: React.FC = () => {
                             <strong>{showBalance ? formatCents(wallet?.heldBalance) : '••••••'}</strong>
                             <small>
                                 {isSellerUser(user)
-                                    ? 'Pending sale proceeds (released after buyer confirms order)'
+                                    ? 'Pending sale proceeds, released 5 minutes after confirmation'
                                     : 'Reserved for active bids'}
                             </small>
                         </div>
@@ -647,7 +663,7 @@ const WalletPage: React.FC = () => {
                                             <>
                                                 <div>
                                                     <span className={`transaction-type type-${tx.type}`}>
-                                                        {tx.type.replaceAll('_', ' ')}
+                                                        {transactionTypeLabel(tx.type)}
                                                     </span>
                                                     <span className="transaction-date">
                                                         {new Date(tx.timestamp).toLocaleString()}

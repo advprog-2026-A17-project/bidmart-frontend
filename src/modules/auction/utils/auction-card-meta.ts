@@ -11,15 +11,13 @@ export const buildAuctionCardMeta = (auction: Auction, nowMs = Date.now()) => {
     const currentHighest = hasBids ? auction.currentHighestBid! : auction.startingPrice;
     const minNextBid = hasBids ? currentHighest + auction.minimumIncrement : auction.startingPrice;
     const normalizedStatus = (auction.status ?? '').toUpperCase();
-    const statusLabel = normalizedStatus.charAt(0) + normalizedStatus.slice(1).toLowerCase();
     const endDate = parseAuctionDate(auction.endTime);
     const remainingMs = endDate ? endDate.getTime() - nowMs : Number.POSITIVE_INFINITY;
     const hasReachedEndTime = endDate ? remainingMs <= 0 : false;
-
-    // isClosed is determined ONLY by the backend status, NOT by time comparison.
-    // This prevents active auctions from being falsely marked as "Ended" due to
-    // clock skew or timezone differences between client and server.
-    const isClosed = CLOSED_STATUSES.has(normalizedStatus);
+    const isClosed = CLOSED_STATUSES.has(normalizedStatus) || hasReachedEndTime;
+    const statusLabel = isClosed && !CLOSED_STATUSES.has(normalizedStatus)
+        ? 'Ended'
+        : normalizedStatus.charAt(0) + normalizedStatus.slice(1).toLowerCase();
 
     const minutesLeft = Math.max(0, Math.floor(remainingMs / 60000));
     const secondsLeft = Math.max(0, Math.floor((remainingMs % 60000) / 1000));

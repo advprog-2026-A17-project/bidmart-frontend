@@ -304,7 +304,7 @@ const ListingDetailPage: React.FC = () => {
 
     const listingMeta = listing ? buildAuctionCardMeta(catalogueListingToAuction(listing as unknown as CatalogueListing), nowMs) : null;
     const listingStatus = (listing?.status ?? '').toUpperCase();
-    const isLive = listing ? activeListingStatuses.has(listingStatus) : false;
+    const isLive = listing && listingMeta ? activeListingStatuses.has(listingStatus) && !listingMeta.isClosed : false;
     const isEnded = listing ? isEndedListing(listingStatus) : false;
     const isDraft = listingStatus === 'DRAFT';
     const isSeller = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId);
@@ -312,7 +312,7 @@ const ListingDetailPage: React.FC = () => {
     const inferredWinnerId = useMemo(() => {
         if (!bids.length) return null;
         const sorted = [...bids].sort((a, b) => bidAmountFromItem(b) - bidAmountFromItem(a));
-        const top = sorted[sorted.length - 1];
+        const top = sorted[0];
         return top?.bidderId ?? top?.bidder_id ?? null;
     }, [bids]);
 

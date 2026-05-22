@@ -118,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         getAccessTokenExpiresAtMs(getPersistentItem('access_token')),
     );
     const sessionWindowSecondsRef = useRef(DEFAULT_SESSION_WINDOW_SECONDS);
-    const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
+    const refreshInFlightRef = useRef<Promise<AuthLoginResult | null> | null>(null);
 
     const shouldRefreshAccessToken = useCallback(() => {
         const expiresAt = accessTokenExpiresAtRef.current
@@ -216,7 +216,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => window.clearTimeout(timerId);
     }, [logout, sessionExpiresAt, user]);
 
-    const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+    const refreshSession = useCallback(async (): Promise<AuthLoginResult | null> => {
         if (refreshInFlightRef.current) {
             return refreshInFlightRef.current;
         }
@@ -227,7 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return null;
         }
 
-        const refreshPromise = (async () => {
+        const refreshPromise = (async (): Promise<AuthLoginResult | null> => {
             const response = await fetch(apiUrl('/api/v1/auth/refresh'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -241,7 +241,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const payload = await response.json() as AuthLoginResult;
             applySessionPayload(payload, { silent: true });
-            return payload.accessToken;
+            return payload;
         })();
 
         refreshInFlightRef.current = refreshPromise;
@@ -251,6 +251,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             refreshInFlightRef.current = null;
         }
     }, [applySessionPayload, logout]);
+
+    const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+        const payload = await refreshSession();
+        return payload?.accessToken ?? null;
+    }, [refreshSession]);
 
     const maybeRefreshSession = useCallback(() => {
         if (!user || !refreshTokenRef.current) {
@@ -350,10 +355,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         updateUserProfile,
+        refreshSession,
         refreshAccessToken,
         maybeRefreshSession,
         authenticatedFetch,
-    }), [authenticatedFetch, login, logout, maybeRefreshSession, refreshAccessToken, sessionExpiresAt, tokenId, updateUserProfile, user]);
+    }), [authenticatedFetch, login, logout, maybeRefreshSession, refreshAccessToken, refreshSession, sessionExpiresAt, tokenId, updateUserProfile, user]);
 
     return (
         <AuthContext.Provider value={contextValue}>

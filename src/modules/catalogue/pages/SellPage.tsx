@@ -7,7 +7,9 @@ import { useCanManageListings } from '../../../hooks/useHasPermission';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
 import { formatMoney, normalizeRupiahInput, toRupiahAmount } from '../../../utils/money';
 import { useAuctionRealtime } from '../../auction/hooks/useAuctionRealtime';
+import type { AuctionRealtimeEvent } from '../../auction/hooks/useAuctionRealtime';
 import { buildAuctionCardMeta, type Auction } from '../../auction/utils/auction-card-meta';
+import { buildListingPatchFromRealtimeEvent } from '../../auction/utils/auction-realtime-patch';
 import { useNowTick } from '../../../hooks/useNowTick';
 import { catalogueListingToAuction, type CatalogueListing } from '../utils/listing-to-auction';
 import { NO_IMAGE_PLACEHOLDER } from '../utils/no-image';
@@ -84,6 +86,7 @@ const CONDITIONS = [
 ];
 
 const MAX_IMAGE_BYTES = 600 * 1024;
+const EMBEDDED_IMAGE_PLACEHOLDER = 'embedded://listing-image';
 const CLOSED_STATUSES = new Set(['CLOSED', 'WON', 'UNSOLD']);
 const PUBLISHED_STATUSES = new Set(['ACTIVE', 'EXTENDED']);
 const FINAL_AUCTION_STATUSES = new Set<string>(['ENDED', 'WON', 'UNSOLD', 'CLOSED', 'CANCELLED']);
@@ -174,6 +177,9 @@ const delay = (durationMs: number): Promise<void> =>
 const isPublishedListing = (listing: ListingRecord): boolean =>
     PUBLISHED_STATUSES.has((listing.status ?? '').toUpperCase());
 
+const hasEmbeddedImagePlaceholder = (listing: ListingRecord): boolean =>
+    listing.imageUrl?.trim() === EMBEDDED_IMAGE_PLACEHOLDER;
+
 const SELLER_STUDIO_VIEW_STORAGE_KEY = 'seller_studio_active_view';
 
 const isStudioView = (value: string | null): value is StudioView =>
@@ -224,8 +230,19 @@ const SellPage: React.FC = () => {
             }
             const payload: unknown = await response.json();
             const parsed = parseListingsResponse(payload);
-            setListings(parsed);
-            return parsed;
+            const listingsWithImages = await Promise.all(parsed.map(async (listing) => {
+                if (!hasEmbeddedImagePlaceholder(listing)) return listing;
+                try {
+                    const detailResponse = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listing.id}`));
+                    if (!detailResponse.ok) return listing;
+                    const detail = await detailResponse.json() as ListingRecord;
+                    return { ...listing, imageUrl: detail.imageUrl ?? listing.imageUrl };
+                } catch {
+                    return listing;
+                }
+            }));
+            setListings(listingsWithImages);
+            return listingsWithImages;
         } catch (err: unknown) {
             setError(toErrorMessage(err));
             setListings([]);
@@ -301,8 +318,32 @@ const SellPage: React.FC = () => {
         () => (user?.id ? [`/topic/sellers/${user.id}/auctions`] : []),
         [user?.id]
     );
-    const handleRealtimeEvent = useCallback(() => {
-        void refreshStudio();
+    const handleRealtimeEvent = useCallback((event: AuctionRealtimeEvent) => {
+        const payload = (event.payload ?? {}) as Record<string, unknown>;
+        const listingId = event.listingId ?? payload.listingId;
+        const patch = buildListingPatchFromRealtimeEvent(event);
+
+        if (listingId && patch) {
+            setListings((previous) => previous.map((listing) => (
+                String(listing.id) === String(listingId)
+                    ? { ...listing, ...patch }
+                    : listing
+            )));
+            setSellerAuctions((previous) => previous.map((auction) => (
+                String(auction.listingId) === String(listingId)
+                    ? {
+                        ...auction,
+                        currentHighestBid: patch.currentPrice ?? auction.currentHighestBid,
+                        endTime: patch.endTime ?? auction.endTime,
+                        status: patch.status ?? auction.status,
+                    }
+                    : auction
+            )));
+        }
+
+        window.setTimeout(() => {
+            void refreshStudio();
+        }, 500);
     }, [refreshStudio]);
     const { isConnected } = useAuctionRealtime(realtimeDestinations, handleRealtimeEvent);
 
@@ -319,8 +360,11 @@ const SellPage: React.FC = () => {
         [existingListingIds, sellerAuctions]
     );
     const activeSellerAuctions = useMemo(
-        () => visibleSellerAuctions.filter((auction) => !CLOSED_STATUSES.has(auction.status)),
-        [visibleSellerAuctions]
+        () => visibleSellerAuctions.filter((auction) => {
+            const meta = buildAuctionCardMeta(auction, nowMs);
+            return !CLOSED_STATUSES.has((auction.status ?? '').toUpperCase()) && !meta.isClosed;
+        }),
+        [nowMs, visibleSellerAuctions]
     );
     const topSellerAuction = useMemo(
         () => [...visibleSellerAuctions].sort((a, b) => {

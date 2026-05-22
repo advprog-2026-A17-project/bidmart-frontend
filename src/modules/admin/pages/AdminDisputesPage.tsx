@@ -22,12 +22,12 @@ const AdminDisputesPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await authenticatedFetch(gatewayUrl('/api/v1/orders'));
+            const response = await authenticatedFetch(gatewayUrl('/api/v1/orders/admin/disputes'));
             if (!response.ok) {
                 throw new Error(await readApiError(response, 'Failed to load orders'));
             }
             const payload = await response.json() as OrderRecord[];
-            setOrders((Array.isArray(payload) ? payload : []).filter((order) => order.status === 'DISPUTED'));
+            setOrders(Array.isArray(payload) ? payload : []);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Unable to load disputes.');
         } finally {

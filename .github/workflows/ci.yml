@@ -103,4 +103,5 @@ jobs:
             -Dsonar.tests=.
             -Dsonar.test.inclusions=*.contract.test.mjs
             -Dsonar.exclusions=dist/**,node_modules/**,coverage/**,artifacts/**,e2e/**,public/**
+            -Dsonar.coverage.exclusions=**/*
             -Dsonar.test.exclusions=e2e/**,public/**

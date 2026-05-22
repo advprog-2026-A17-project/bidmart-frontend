@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { primaryRole } from '../../../context/primaryRole';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type GuardStatus = 'idle' | 'loading' | 'complete' | 'incomplete' | 'error';
@@ -11,13 +12,14 @@ type OnboardingStatus = {
     profileCompleted?: boolean;
     needsPassword?: boolean;
     needsRole?: boolean;
+    role?: string | null;
 };
 
 /** Routes reachable before onboarding is complete (profile is not included). */
 const PRE_ONBOARDING_ROUTES = new Set(['/login', '/verify-email', '/reset-password', '/onboarding']);
 
 const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { user } = useAuth();
+    const { user, refreshSession } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const location = useLocation();
     const navigate = useNavigate();
@@ -26,6 +28,7 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     const [retryTick, setRetryTick] = useState(0);
     const userId = user?.id;
     const isAdmin = user?.roles?.some((role) => role.name === 'ADMIN') ?? false;
+    const currentRole = primaryRole(user);
 
     const shouldGuard = useMemo(() => {
         if (!userId) {
@@ -79,6 +82,13 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
                     return;
                 }
 
+                if (
+                    (payload.role === 'BUYER' || payload.role === 'SELLER')
+                    && payload.role !== currentRole
+                ) {
+                    await refreshSession();
+                }
+
                 setStatus('complete');
             } catch (err: unknown) {
                 if (!active) return;
@@ -94,7 +104,7 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         };
     // Re-run only when the signed-in user changes, not on every profile field update
     // (updateUserProfile mutates `user` and would remount children, dismissing toasts).
-    }, [authenticatedFetch, location.pathname, navigate, retryTick, shouldGuard, userId]);
+    }, [authenticatedFetch, currentRole, location.pathname, navigate, refreshSession, retryTick, shouldGuard, userId]);
 
     if (!shouldGuard) {
         return <>{children}</>;

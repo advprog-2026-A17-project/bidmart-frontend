@@ -18,7 +18,7 @@ type OnboardingStatus = {
 };
 
 const OnboardingPage: React.FC = () => {
-    const { user, logout } = useAuth();
+    const { user, logout, refreshSession } = useAuth();
     const authenticatedFetch = useAuthenticatedFetch();
     const navigate = useNavigate();
     const [status, setStatus] = useState<OnboardingStatus | null>(null);
@@ -45,7 +45,7 @@ const OnboardingPage: React.FC = () => {
                 const payload = await response.json() as OnboardingStatus;
                 setStatus(payload);
                 if (payload.profileCompleted) {
-                    navigate(primaryRole(user) === 'SELLER' ? '/seller-studio' : '/', { replace: true });
+                    navigate(payload.role === 'SELLER' || primaryRole(user) === 'SELLER' ? '/seller-studio' : '/', { replace: true });
                     return;
                 }
                 if (payload.role === 'BUYER' || payload.role === 'SELLER') {
@@ -85,7 +85,14 @@ const OnboardingPage: React.FC = () => {
                 throw new Error(await readApiError(response, 'Failed to complete onboarding'));
             }
             await response.json() as OnboardingStatus;
-            navigate(role === 'SELLER' ? '/seller-studio' : '/', { replace: true });
+            let refreshedSession = await refreshSession();
+            if (refreshedSession && primaryRole(refreshedSession.user) !== role) {
+                refreshedSession = await refreshSession();
+            }
+            if (!refreshedSession || primaryRole(refreshedSession.user) !== role) {
+                throw new Error('Akun tersimpan, tetapi session belum bisa diperbarui. Silakan login ulang.');
+            }
+            navigate(primaryRole(refreshedSession.user) === 'SELLER' ? '/seller-studio' : '/', { replace: true });
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Unable to save onboarding.');
         } finally {
