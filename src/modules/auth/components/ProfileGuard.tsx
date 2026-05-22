@@ -24,12 +24,13 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     const [status, setStatus] = useState<GuardStatus>('idle');
     const [error, setError] = useState<string | null>(null);
     const [retryTick, setRetryTick] = useState(0);
+    const userId = user?.id;
+    const isAdmin = user?.roles?.some((role) => role.name === 'ADMIN') ?? false;
 
     const shouldGuard = useMemo(() => {
-        if (!user) {
+        if (!userId) {
             return false;
         }
-        const isAdmin = user.roles?.some((role) => role.name === 'ADMIN') ?? false;
         if (isAdmin) {
             return false;
         }
@@ -37,10 +38,10 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
             return false;
         }
         return true;
-    }, [user, location.pathname]);
+    }, [isAdmin, location.pathname, userId]);
 
     useEffect(() => {
-        if (!shouldGuard || !user) {
+        if (!shouldGuard || !userId) {
             setStatus('idle');
             setError(null);
             return;
@@ -93,7 +94,7 @@ const ProfileGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         };
     // Re-run only when the signed-in user changes, not on every profile field update
     // (updateUserProfile mutates `user` and would remount children, dismissing toasts).
-    }, [authenticatedFetch, location.pathname, navigate, retryTick, shouldGuard, user?.id]);
+    }, [authenticatedFetch, location.pathname, navigate, retryTick, shouldGuard, userId]);
 
     if (!shouldGuard) {
         return <>{children}</>;

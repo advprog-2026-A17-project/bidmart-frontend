@@ -1,25 +1,33 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../config/api';
 import { useAuth } from '../context/useAuth';
 
 export const useHasPermission = (permission: string): boolean => {
     const { user } = useAuth();
     const [allowed, setAllowed] = useState(false);
+    const userEmail = user?.email;
+    const canCheckPermission = Boolean(userEmail && permission);
+
+    const requestUrl = useMemo(() => {
+        if (!userEmail || !permission) {
+            return null;
+        }
+        const params = new URLSearchParams({
+            email: userEmail,
+            permission,
+        });
+        return apiUrl(`/api/v1/auth/permissions/check?${params.toString()}`);
+    }, [permission, userEmail]);
 
     useEffect(() => {
-        if (!user?.email || !permission) {
-            setAllowed(false);
+        if (!requestUrl) {
             return;
         }
 
         let cancelled = false;
         const check = async () => {
             try {
-                const params = new URLSearchParams({
-                    email: user.email,
-                    permission,
-                });
-                const response = await fetch(apiUrl(`/api/v1/auth/permissions/check?${params.toString()}`));
+                const response = await fetch(requestUrl);
                 if (!response.ok) {
                     if (!cancelled) setAllowed(false);
                     return;
@@ -39,9 +47,9 @@ export const useHasPermission = (permission: string): boolean => {
         return () => {
             cancelled = true;
         };
-    }, [permission, user?.email]);
+    }, [requestUrl]);
 
-    return allowed;
+    return canCheckPermission && allowed;
 };
 
 export const useCanManageListings = (): boolean => {

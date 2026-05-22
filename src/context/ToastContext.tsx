@@ -1,13 +1,12 @@
 import React, {
-    createContext,
     useCallback,
-    useContext,
     useEffect,
     useMemo,
     useRef,
     useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { ToastContext } from './toast-context';
 
 export type ToastVariant = 'error' | 'success';
 
@@ -23,14 +22,12 @@ type PublishOptions = {
     durationMs?: number;
 };
 
-type ToastContextValue = {
+export type ToastContextValue = {
     publish: (message: string, variant: ToastVariant, options?: PublishOptions) => void;
     dismiss: (id: string) => void;
     dismissBySource: (sourceId: string) => void;
     toasts: ToastItem[];
 };
-
-const ToastContext = createContext<ToastContextValue | null>(null);
 
 const DEFAULT_DURATION_MS = 5200;
 
@@ -139,11 +136,3 @@ const ToastViewport: React.FC<{
         </div>,
         document.body,
 );
-
-export const useToast = (): ToastContextValue => {
-    const context = useContext(ToastContext);
-    if (!context) {
-        throw new Error('useToast must be used within ToastProvider');
-    }
-    return context;
-};

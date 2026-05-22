@@ -1,5 +1,5 @@
 import { useEffect, useId } from 'react';
-import { useToast, type ToastVariant } from '../context/ToastContext';
+import { useToast, type ToastVariant } from '../context/useToast';
 
 type PageToastProps = {
     error?: string | null;
