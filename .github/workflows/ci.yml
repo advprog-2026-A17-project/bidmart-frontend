@@ -67,8 +67,8 @@ jobs:
       - name: Run Playwright tests
         continue-on-error: true
         env:
-          E2E_BASE_URL: ${{ vars.BIDMART_E2E_BASE_URL || 'http://localhost:5173' }}
-          E2E_GATEWAY_URL: ${{ vars.BIDMART_E2E_GATEWAY_URL || 'http://localhost:8000' }}
+          E2E_BASE_URL: ${{ vars.BIDMART_E2E_BASE_URL || 'https://bidmart-frontend.vercel.app' }}
+          E2E_GATEWAY_URL: ${{ vars.BIDMART_E2E_GATEWAY_URL || 'https://bidmart-staging.43.157.208.68.sslip.io' }}
         run: npm run test:e2e
 
       - name: Upload Playwright HTML report
