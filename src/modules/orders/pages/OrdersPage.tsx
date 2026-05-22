@@ -6,6 +6,7 @@ import { gatewayUrl, readApiError } from '../../../config/apiClient';
 import { useAuth } from '../../../context/useAuth';
 import { isSellerUser } from '../../../context/primaryRole';
 import { useAuthenticatedFetch } from '../../../context/useAuthenticatedFetch';
+import { useNotificationRealtime } from '../../../hooks/useNotificationRealtime';
 import { formatMoney } from '../../../utils/money';
 import OrderStatusCard from '../components/OrderStatusCard';
 
@@ -85,6 +86,10 @@ const OrdersPage: React.FC = () => {
     useEffect(() => {
         void fetchOrders();
     }, [fetchOrders]);
+
+    useNotificationRealtime(user?.id, () => {
+        void fetchOrders();
+    }, { orderTypesOnly: true });
 
     const totalValue = useMemo(
         () => orders.reduce((sum, order) => sum + Number(order.finalPrice || 0), 0),

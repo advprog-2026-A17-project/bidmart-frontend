@@ -656,6 +656,23 @@ const SellPage: React.FC = () => {
         }
     };
 
+    const deactivateListing = async (listingId: string | number) => {
+        setError(null);
+        setNotice(null);
+        try {
+            const response = await authenticatedFetch(gatewayUrl(`/api/v1/catalogue/listings/${listingId}/deactivate`), {
+                method: 'POST',
+            });
+            if (!response.ok) {
+                throw new Error(await readApiError(response, 'Listing deactivate failed'));
+            }
+            setNotice('Listing deactivated.');
+            await refreshStudio();
+        } catch (err: unknown) {
+            setError(toErrorMessage(err));
+        }
+    };
+
     const publishDraftListing = async (listing: ListingRecord) => {
         const listingId = String(listing.id);
         const startingPrice = listing.startingPrice ?? 0;
@@ -1127,6 +1144,7 @@ const SellPage: React.FC = () => {
                                     const locked = listing.hasBids || finalized;
                                     const canEdit = !listing.hasBids && !finalized;
                                     const canCancel = !listing.hasBids && status !== 'WON' && status !== 'UNSOLD' && status !== 'CLOSED' && status !== 'CANCELLED';
+                                    const canDeactivate = !listing.hasBids && status === 'ACTIVE';
                                     const canDelete = !listing.hasBids && status === 'DRAFT';
                                     const canPublishDraft = status === 'DRAFT';
                                     
@@ -1172,6 +1190,11 @@ const SellPage: React.FC = () => {
                                                 {canPublishDraft && (
                                                     <button type="button" className="primary-button" onClick={() => publishDraftListing(listing)}>
                                                         Publish
+                                                    </button>
+                                                )}
+                                                {canDeactivate && (
+                                                    <button type="button" className="secondary-button" onClick={() => deactivateListing(listing.id)}>
+                                                        Deactivate
                                                     </button>
                                                 )}
                                                 {canCancel && (

@@ -23,7 +23,7 @@ export const useNotificationRealtime = (
     onNotification: (payload: unknown) => void,
     options?: { orderTypesOnly?: boolean }
 ) => {
-    const { isConnected, subscribe, unsubscribe } = useWebSocket('/ws/notifications');
+    const { isConnected, subscribe } = useWebSocket('/ws/notifications');
 
     useEffect(() => {
         if (!userId || !isConnected) {
@@ -42,13 +42,13 @@ export const useNotificationRealtime = (
 
         const userQueue = '/user/queue/notifications';
         const userTopic = `/topic/notifications/users/${userId}`;
-        subscribe(userQueue, handler);
-        subscribe(userTopic, handler);
+        const releaseQueue = subscribe(userQueue, handler);
+        const releaseTopic = subscribe(userTopic, handler);
         return () => {
-            unsubscribe(userQueue);
-            unsubscribe(userTopic);
+            releaseQueue();
+            releaseTopic();
         };
-    }, [isConnected, onNotification, options?.orderTypesOnly, subscribe, unsubscribe, userId]);
+    }, [isConnected, onNotification, options?.orderTypesOnly, subscribe, userId]);
 
     return { isConnected };
 };

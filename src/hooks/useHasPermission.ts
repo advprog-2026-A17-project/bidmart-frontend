@@ -3,7 +3,7 @@ import { apiUrl } from '../config/api';
 import { useAuth } from '../context/useAuth';
 
 export const useHasPermission = (permission: string): boolean => {
-    const { user } = useAuth();
+    const { user, authenticatedFetch } = useAuth();
     const [allowed, setAllowed] = useState(false);
     const userEmail = user?.email;
     const canCheckPermission = Boolean(userEmail && permission);
@@ -27,7 +27,7 @@ export const useHasPermission = (permission: string): boolean => {
         let cancelled = false;
         const check = async () => {
             try {
-                const response = await fetch(requestUrl);
+                const response = await authenticatedFetch(requestUrl);
                 if (!response.ok) {
                     if (!cancelled) setAllowed(false);
                     return;
@@ -47,7 +47,7 @@ export const useHasPermission = (permission: string): boolean => {
         return () => {
             cancelled = true;
         };
-    }, [requestUrl]);
+    }, [authenticatedFetch, requestUrl]);
 
     return canCheckPermission && allowed;
 };
