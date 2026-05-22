@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { readApiError, gatewayUrl } from '../../../config/apiClient';
@@ -26,6 +26,7 @@ const PaymentDetailPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [remainingMs, setRemainingMs] = useState<number | null>(null);
+    const syncInFlightRef = useRef(false);
 
     const fetchPayment = useCallback(async (silent = false) => {
         if (!user || !paymentId) {
@@ -59,6 +60,10 @@ const PaymentDetailPage: React.FC = () => {
         if (!payment || payment.status !== 'PENDING') {
             return;
         }
+        if (syncInFlightRef.current) {
+            return;
+        }
+        syncInFlightRef.current = true;
         try {
             const response = await authenticatedFetch(
                 gatewayUrl(`/api/v1/wallet/midtrans/payments/${payment.paymentId}/sync`),
@@ -75,6 +80,8 @@ const PaymentDetailPage: React.FC = () => {
             }
         } catch {
             // Keep the payment instruction visible; the next polling tick can retry.
+        } finally {
+            syncInFlightRef.current = false;
         }
     }, [authenticatedFetch, navigate, payment]);
 

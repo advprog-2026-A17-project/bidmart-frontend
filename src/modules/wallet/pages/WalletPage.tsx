@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BackButton from '../../../components/BackButton';
 import { readApiError, gatewayUrl } from '../../../config/apiClient';
@@ -89,6 +89,29 @@ const walletDisplayName = (email?: string): string => {
     return `BM-${localPart || 'ACCOUNT'}`;
 };
 
+const moneyInputValidationError = (value: string, label: string, hasBadInput = false): string | null => {
+    if (hasBadInput) {
+        return `Please enter a valid ${label} amount.`;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+
+    const normalized = trimmed.replace(',', '.');
+    if (!/^\d*(?:\.\d*)?$/.test(normalized) || normalized === '.') {
+        return `Please enter a valid ${label} amount.`;
+    }
+
+    const amount = Number(normalized);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        return `${label[0].toUpperCase()}${label.slice(1)} amount must be greater than zero.`;
+    }
+
+    return null;
+};
+
 const WalletPage: React.FC = () => {
     const { user } = useAuth();
     const walletRole = 'BUYER';
@@ -104,12 +127,15 @@ const WalletPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [topUpAmount, setTopUpAmount] = useState<string>('');
+    const [topUpAmountError, setTopUpAmountError] = useState<string | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<string>('bca_va');
     const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+    const [withdrawAmountError, setWithdrawAmountError] = useState<string | null>(null);
     const [withdrawBankCode, setWithdrawBankCode] = useState<string>('bca');
     const [withdrawAccountNumber, setWithdrawAccountNumber] = useState<string>('');
     const [pendingPayment, setPendingPayment] = useState<PaymentIntent | null>(null);
     const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawalRequestState | null>(null);
+    const syncInFlightRef = useRef(false);
     const { showBalance, setShowBalance } = useWalletUI();
     const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw'>('overview');
     const fetchWallet = useCallback(async () => {
@@ -146,6 +172,32 @@ const WalletPage: React.FC = () => {
         setError(null);
         setTimeout(() => setSuccess(null), 3000);
     }, []);
+
+    const handleTopUpAmountChange = (value: string, hasBadInput: boolean) => {
+        setTopUpAmount(value);
+        setTopUpAmountError(moneyInputValidationError(value, 'top-up', hasBadInput));
+    };
+
+    const handleTopUpAmountBlur = (hasBadInput: boolean) => {
+        const validationError = moneyInputValidationError(topUpAmount, 'top-up', hasBadInput);
+        setTopUpAmountError(validationError);
+        if (!validationError) {
+            setTopUpAmount((value) => value ? normalizeMoneyInput(value) : '');
+        }
+    };
+
+    const handleWithdrawAmountChange = (value: string, hasBadInput: boolean) => {
+        setWithdrawAmount(value);
+        setWithdrawAmountError(moneyInputValidationError(value, 'withdrawal', hasBadInput));
+    };
+
+    const handleWithdrawAmountBlur = (hasBadInput: boolean) => {
+        const validationError = moneyInputValidationError(withdrawAmount, 'withdrawal', hasBadInput);
+        setWithdrawAmountError(validationError);
+        if (!validationError) {
+            setWithdrawAmount((value) => value ? normalizeMoneyInput(value) : '');
+        }
+    };
 
     useEffect(() => {
         fetchWallet();
@@ -251,9 +303,17 @@ const WalletPage: React.FC = () => {
     );
 
     const handleTopUp = async () => {
+        const validationError = moneyInputValidationError(topUpAmount, 'top-up');
+        if (validationError) {
+            setTopUpAmountError(validationError);
+            setError(validationError);
+            return;
+        }
         const amount = toRupiahAmount(topUpAmount);
         if (!amount || amount <= 0) {
-            setError('Please enter a valid top-up amount.');
+            const emptyAmountError = 'Please enter a valid top-up amount.';
+            setTopUpAmountError(emptyAmountError);
+            setError(emptyAmountError);
             return;
         }
         setActionLoading(true);
@@ -277,6 +337,7 @@ const WalletPage: React.FC = () => {
             const paymentWithLocalExpiry = { ...payment, expiresAt: new Date(expiresAt).toISOString() };
             setPendingPayment(paymentWithLocalExpiry);
             setTopUpAmount('');
+            setTopUpAmountError(null);
             showSuccess(`Payment created for ${formatCents(paymentWithLocalExpiry.amount)}.`);
             navigate(`/wallet/payments/${payment.paymentId}`);
         } catch (err: unknown) {
@@ -288,6 +349,8 @@ const WalletPage: React.FC = () => {
 
     const syncPendingPayment = useCallback(async (silent = false) => {
         if (!pendingPayment) return;
+        if (syncInFlightRef.current) return;
+        syncInFlightRef.current = true;
         if (!silent) setActionLoading(true);
         setError(null);
         try {
@@ -306,6 +369,7 @@ const WalletPage: React.FC = () => {
         } catch (err: unknown) {
             setError(`Payment sync failed: ${toErrorMessage(err)}`);
         } finally {
+            syncInFlightRef.current = false;
             if (!silent) setActionLoading(false);
         }
     }, [authenticatedFetch, fetchWallet, pendingPayment, showSuccess]);
@@ -343,9 +407,17 @@ const WalletPage: React.FC = () => {
     ].sort((a, b) => b.timestamp - a.timestamp), [history, unpaidPayments]);
 
     const handleWithdraw = async () => {
+        const validationError = moneyInputValidationError(withdrawAmount, 'withdrawal');
+        if (validationError) {
+            setWithdrawAmountError(validationError);
+            setError(validationError);
+            return;
+        }
         const amount = toRupiahAmount(withdrawAmount);
         if (!amount || amount <= 0) {
-            setError('Please enter a valid withdrawal amount.');
+            const emptyAmountError = 'Please enter a valid withdrawal amount.';
+            setWithdrawAmountError(emptyAmountError);
+            setError(emptyAmountError);
             return;
         }
         const normalizedAccountNumber = withdrawAccountNumber.replace(/[\s-]/g, '');
@@ -377,6 +449,7 @@ const WalletPage: React.FC = () => {
             const withdrawal = await response.json() as WithdrawalRequestState;
             setPendingWithdrawal(withdrawal);
             setWithdrawAmount('');
+            setWithdrawAmountError(null);
             setWithdrawAccountNumber('');
             showSuccess(`Withdrawal requested for ${formatCents(withdrawal.amount)}.`);
             await fetchWallet();
@@ -494,15 +567,18 @@ const WalletPage: React.FC = () => {
                             <label className="field">
                                 Amount
                                 <input
-                                    className="form-input"
+                                    className={`form-input ${topUpAmountError ? 'form-input-error' : ''}`}
                                     type="number"
                                     placeholder="Amount"
                                     value={topUpAmount}
                                     min={0}
                                     step="0.01"
-                                    onChange={(e) => setTopUpAmount(e.target.value)}
-                                    onBlur={() => setTopUpAmount((value) => value ? normalizeMoneyInput(value) : '')}
+                                    aria-invalid={Boolean(topUpAmountError)}
+                                    aria-describedby={topUpAmountError ? 'top-up-amount-error' : undefined}
+                                    onChange={(e) => handleTopUpAmountChange(e.target.value, e.currentTarget.validity.badInput)}
+                                    onBlur={(e) => handleTopUpAmountBlur(e.currentTarget.validity.badInput)}
                                 />
+                                {topUpAmountError && <span id="top-up-amount-error" className="field-error">{topUpAmountError}</span>}
                             </label>
                             <label className="field">
                                 Payment Method
@@ -531,15 +607,18 @@ const WalletPage: React.FC = () => {
                             <label className="field">
                                 Amount
                                 <input
-                                    className="form-input"
+                                    className={`form-input ${withdrawAmountError ? 'form-input-error' : ''}`}
                                     type="number"
                                     placeholder="Amount"
                                     value={withdrawAmount}
                                     min={0}
                                     step="0.01"
-                                    onChange={(e) => setWithdrawAmount(e.target.value)}
-                                    onBlur={() => setWithdrawAmount((value) => value ? normalizeMoneyInput(value) : '')}
+                                    aria-invalid={Boolean(withdrawAmountError)}
+                                    aria-describedby={withdrawAmountError ? 'withdraw-amount-error' : undefined}
+                                    onChange={(e) => handleWithdrawAmountChange(e.target.value, e.currentTarget.validity.badInput)}
+                                    onBlur={(e) => handleWithdrawAmountBlur(e.currentTarget.validity.badInput)}
                                 />
+                                {withdrawAmountError && <span id="withdraw-amount-error" className="field-error">{withdrawAmountError}</span>}
                             </label>
                             <label className="field">
                                 Destination Bank
