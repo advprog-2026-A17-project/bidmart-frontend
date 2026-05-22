@@ -2,7 +2,9 @@ name: Continuous Integration
 
 on:
   push:
+    branches: [staging, main]
   pull_request:
+    branches: [staging, main]
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
